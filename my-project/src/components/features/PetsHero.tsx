@@ -156,7 +156,7 @@ export const PetsHero = ({
                 style={orbitStyle(index, orbitPets.length)}
               >
                 <div
-                  className="h-full w-full animate-[pets-hero-float_11s_ease-in-out_infinite]"
+                  className="h-full w-full animate-pets-hero-float"
                   style={{ animationDelay: `${index * -1.4}s` }}
                 >
                   <Link

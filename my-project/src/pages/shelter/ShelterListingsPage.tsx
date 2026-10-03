@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import type { FormEvent } from 'react';
+import { toast } from 'react-toastify';
 import { DetailsModal, RecordCard, SectionHeader, SlideOver, TableCard } from '@/components/shared';
 import { PetStatusBadge, VisibilityBadge } from '@/components/ui/StatusBadge';
 import {
@@ -25,7 +26,13 @@ import {
   TableRow,
 } from '@/components/ui/Table';
 import { Input, Textarea, Select, Label } from '@/components/ui/Form';
+import {
+  ValidatedInput,
+  focusFirstError,
+  isBlank,
+} from '@/components/shared';
 import { Button } from '@/components/ui/button';
+import { useAuth } from '@/hooks/useAuth';
 import { usePets, useShelters } from '@/hooks/useData';
 import { petService } from '@/services/api';
 import type { AgeGroup, Pet, PetStatus, PetVisibility } from '@/types';
@@ -80,6 +87,7 @@ const MEDICAL_PRESETS = [
 ];
 
 export const ShelterListingsPage = () => {
+  const { user } = useAuth();
   const { pets, setPets } = usePets();
   const { shelters } = useShelters();
   const [slideOpen, setSlideOpen] = useState(false);
@@ -88,6 +96,11 @@ export const ShelterListingsPage = () => {
   const [query, setQuery] = useState('');
   const [visibilityFilter, setVisibilityFilter] = useState<'all' | PetVisibility>('all');
   const [page, setPage] = useState(1);
+  const [listingErrors, setListingErrors] = useState<{
+    name?: string;
+    breed?: string;
+    shelterId?: string;
+  }>({});
   const [form, setForm] = useState({
     name: '',
     species: 'dog',
@@ -118,18 +131,28 @@ export const ShelterListingsPage = () => {
     apartmentFriendly: false,
   });
 
+  // Every shelter staff belongs to exactly one shelter. The table, the
+  // create form, and all guards below use this id so a pet recorded by one
+  // shelter never appears in another shelter's inventory.
+  // Falls back to the first shelter only when the session carries no
+  // assignment yet (demo preview without login).
+  const myShelterId = user?.shelterId ?? shelters[0]?.id ?? null;
+  const myShelter = shelters.find((s) => s.id === myShelterId) ?? null;
+  const isLockedToShelter = Boolean(user?.shelterId);
+
   const filteredPets = useMemo(() => {
     const search = query.trim().toLowerCase();
     return pets.filter((pet) => {
+      const matchesShelter = !myShelterId || pet.shelterId === myShelterId;
       const matchesVisibility =
         visibilityFilter === 'all' || pet.visibility === visibilityFilter;
       const matchesSearch =
         search === '' ||
         pet.name.toLowerCase().includes(search) ||
         pet.breed.toLowerCase().includes(search);
-      return matchesVisibility && matchesSearch;
+      return matchesShelter && matchesVisibility && matchesSearch;
     });
-  }, [pets, visibilityFilter, query]);
+  }, [pets, visibilityFilter, query, myShelterId]);
 
   const totalPages = Math.max(1, Math.ceil(filteredPets.length / PAGE_SIZE));
   const currentPage = Math.min(page, totalPages);
@@ -137,8 +160,19 @@ export const ShelterListingsPage = () => {
   const pagedPets = filteredPets.slice(startIndex, startIndex + PAGE_SIZE);
 
   const remove = async (id: string) => {
-    await petService.remove(id);
-    setPets((prev) => prev.filter((p) => p.id !== id));
+    const target = pets.find((p) => p.id === id);
+    // Guard: never touch another shelter's listing.
+    if (target && myShelterId && target.shelterId !== myShelterId) {
+      toast.error('This listing belongs to another shelter.');
+      return;
+    }
+    try {
+      await petService.remove(id);
+      setPets((prev) => prev.filter((p) => p.id !== id));
+      toast.success(target ? `${target.name} removed.` : 'Listing removed.');
+    } catch {
+      toast.error('Failed to remove listing. Please try again.');
+    }
   };
 
   const resetForm = () =>
@@ -175,10 +209,18 @@ export const ShelterListingsPage = () => {
   const openAdd = () => {
     setEditingPet(null);
     resetForm();
+    // New pets are always recorded under the staff's own shelter.
+    if (myShelterId) setForm((prev) => ({ ...prev, shelterId: myShelterId }));
+    setListingErrors({});
     setSlideOpen(true);
   };
 
   const openEdit = (pet: Pet) => {
+    // Guard: staff can only edit their own shelter's listings.
+    if (myShelterId && pet.shelterId !== myShelterId) {
+      toast.error('This listing belongs to another shelter.');
+      return;
+    }
     setEditingPet(pet);
     setDetailsPet(null);
     setForm({
@@ -310,6 +352,20 @@ export const ShelterListingsPage = () => {
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
+    const listingErrors: { name?: string; breed?: string; shelterId?: string } = {};
+    if (isBlank(form.name)) listingErrors.name = 'Please enter the pet name.';
+    if (isBlank(form.breed)) listingErrors.breed = 'Please enter the breed.';
+    // Staff locked to a shelter never need the dropdown; everyone else falls
+    // back to the first shelter, so only flag a missing shelter when there is
+    // no shelter context at all.
+    if (!isLockedToShelter && !editingPet && isBlank(form.shelterId) && !myShelterId)
+      listingErrors.shelterId = 'Please select a shelter.';
+    setListingErrors(listingErrors);
+    if (Object.keys(listingErrors).length > 0) {
+      toast.warning('Please fix the highlighted fields.');
+      focusFirstError();
+      return;
+    }
     const temperament = form.temperament
       .split(',')
       .map((t) => t.trim())
@@ -327,8 +383,11 @@ export const ShelterListingsPage = () => {
     const gallery = photoUrls.length > 0 ? photoUrls : [FALLBACK_PHOTO];
     const rawAge = Number(form.ageYears);
     const ageYears = Number.isNaN(rawAge) ? 1 : Math.max(0, rawAge);
-    const shelterId =
-      form.shelterId || shelters[0]?.id || editingPet?.shelterId || 's1';
+    // Locked staff always record under their own shelter — the dropdown
+    // value is ignored. Unlocked preview keeps the chosen / first shelter.
+    const shelterId = isLockedToShelter
+      ? (myShelterId ?? form.shelterId ?? editingPet?.shelterId ?? 's1')
+      : (form.shelterId || myShelterId || editingPet?.shelterId || 's1');
     if (editingPet) {
       const updated = await petService.update(editingPet.id, {
         name: form.name,
@@ -361,6 +420,7 @@ export const ShelterListingsPage = () => {
         apartmentFriendly: form.apartmentFriendly,
       });
       if (updated) setPets((prev) => prev.map((p) => (p.id === updated.id ? updated : p)));
+      toast.success(`${form.name || 'Pet'} updated successfully!`);
       closeSlide();
       return;
     }
@@ -395,6 +455,7 @@ export const ShelterListingsPage = () => {
       apartmentFriendly: form.apartmentFriendly,
     });
     setPets((prev) => [created, ...prev]);
+    toast.success(`${created.name} listed successfully!`);
     closeSlide();
     resetForm();
   };
@@ -480,7 +541,11 @@ export const ShelterListingsPage = () => {
     <div className="w-full px-4 py-6 sm:px-6">
       <SectionHeader
         title="Pet listings"
-        subtitle="Manage your public listings and private inventory."
+        subtitle={
+          myShelter
+            ? `Showing inventory for ${myShelter.name} only.`
+            : 'Manage your public listings and private inventory.'
+        }
       />
 
       <div className="mt-6 space-y-4">
@@ -492,7 +557,11 @@ export const ShelterListingsPage = () => {
           toolbar={searchFilter}
           isEmpty={filteredPets.length === 0}
           emptyTitle="No listings found"
-          emptyDescription="Try a different search or visibility filter, or add a new pet."
+          emptyDescription={
+            myShelter
+              ? `No pets recorded under ${myShelter.name} yet. Add your first listing.`
+              : 'Try a different search or visibility filter, or add a new pet.'
+          }
           footer={pagination}
           contentClassName="px-0"
         >
@@ -648,14 +717,18 @@ export const ShelterListingsPage = () => {
           </div>
         }
       >
-        <form id="pet-form" onSubmit={handleSubmit} className="grid gap-3">
+        <form id="pet-form" onSubmit={handleSubmit} noValidate className="grid gap-3">
           <div>
-            <Label>Name</Label>
-            <Input
+            <Label htmlFor="pet-name">Name</Label>
+            <ValidatedInput
+              id="pet-name"
               value={form.name}
-              onChange={(e) => setForm({ ...form, name: e.target.value })}
+              onChange={(e) => {
+                setForm({ ...form, name: e.target.value });
+                setListingErrors((p) => ({ ...p, name: undefined }));
+              }}
               placeholder="e.g. Buddy"
-              required
+              error={listingErrors.name}
             />
           </div>
           <div className="grid grid-cols-2 gap-3">
@@ -685,12 +758,16 @@ export const ShelterListingsPage = () => {
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <Label>Breed</Label>
-              <Input
+              <Label htmlFor="pet-breed">Breed</Label>
+              <ValidatedInput
+                id="pet-breed"
                 value={form.breed}
-                onChange={(e) => setForm({ ...form, breed: e.target.value })}
+                onChange={(e) => {
+                  setForm({ ...form, breed: e.target.value });
+                  setListingErrors((p) => ({ ...p, breed: undefined }));
+                }}
                 placeholder="e.g. Aspin"
-                required
+                error={listingErrors.breed}
               />
             </div>
             <div>
@@ -741,16 +818,37 @@ export const ShelterListingsPage = () => {
             </div>
           </div>
           <div>
-            <Label>Shelter</Label>
-            <Select
-              value={form.shelterId}
-              onChange={(e) => setForm({ ...form, shelterId: e.target.value })}
-              options={[
-                { value: '', label: 'Select shelter…' },
-                ...shelters.map((s) => ({ value: s.id, label: s.name })),
-              ]}
-              required
-            />
+            <Label htmlFor="pet-shelter">Shelter</Label>
+            {isLockedToShelter ? (
+              <p
+                id="pet-shelter"
+                className="flex h-9 items-center rounded-lg border border-input bg-muted px-3 py-2 text-sm text-muted-foreground"
+              >
+                {myShelter?.name ?? 'Your shelter'} — new pets are recorded here
+              </p>
+            ) : (
+              <>
+                <Select
+                  id="pet-shelter"
+                  value={form.shelterId}
+                  onChange={(e) => {
+                    setForm({ ...form, shelterId: e.target.value });
+                    setListingErrors((p) => ({ ...p, shelterId: undefined }));
+                  }}
+                  options={[
+                    { value: '', label: 'Select shelter…' },
+                    ...shelters.map((s) => ({ value: s.id, label: s.name })),
+                  ]}
+                  aria-invalid={Boolean(listingErrors.shelterId)}
+                  className={listingErrors.shelterId ? 'border-destructive focus-visible:border-destructive focus-visible:ring-destructive/40' : undefined}
+                />
+                {listingErrors.shelterId && (
+                  <p role="alert" className="mt-1 text-[13px] text-destructive">
+                    {listingErrors.shelterId}
+                  </p>
+                )}
+              </>
+            )}
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>

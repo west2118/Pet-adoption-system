@@ -1,16 +1,23 @@
 import { Check, Clock, Mail, MapPin, Phone, ShieldCheck } from 'lucide-react';
 import { useEffect, useState } from 'react';
+import { toast } from 'react-toastify';
 import { SectionHeader } from '@/components/shared';
+import { ValidatedInput, ValidatedTextarea, focusFirstError, isBlank, isEmail } from '@/components/shared';
 import { Badge } from '@/components/ui/Badge';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/Card';
 import { EmptyState } from '@/components/ui/Feedback';
-import { Input, Textarea, Label } from '@/components/ui/Form';
+import { Textarea, Label } from '@/components/ui/Form';
 import { Button } from '@/components/ui/button';
+import { useAuth } from '@/hooks/useAuth';
 import { useShelters } from '@/hooks/useData';
 
 export const ShelterProfilePage = () => {
+  const { user } = useAuth();
   const { shelters, loading } = useShelters();
-  const shelter = shelters[0];
+  // Staff always edit their own shelter's profile — never another shelter's.
+  const shelter =
+    (user?.shelterId ? shelters.find((s) => s.id === user.shelterId) : undefined) ??
+    shelters[0];
 
   const [form, setForm] = useState({
     name: '',
@@ -24,6 +31,7 @@ export const ShelterProfilePage = () => {
     logoUrl: '',
   });
   const [saved, setSaved] = useState(false);
+  const [fieldErrors, setFieldErrors] = useState<Partial<Record<keyof typeof form, string>>>({});
 
   useEffect(() => {
     if (shelter) {
@@ -44,12 +52,28 @@ export const ShelterProfilePage = () => {
 
   const set = (key: keyof typeof form, value: string) => {
     setForm((prev) => ({ ...prev, [key]: value }));
+    setFieldErrors((prev) => ({ ...prev, [key]: undefined }));
     setSaved(false);
   };
 
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
+    const next: typeof fieldErrors = {};
+    if (isBlank(form.name)) next.name = 'Please enter the shelter name.';
+    if (isBlank(form.location)) next.location = 'Please enter the city / location.';
+    if (isBlank(form.address)) next.address = 'Please enter the street address.';
+    if (!isEmail(form.email)) next.email = 'Enter a valid contact email.';
+    if (isBlank(form.phone)) next.phone = 'Please enter a phone number.';
+    if (isBlank(form.operatingHours)) next.operatingHours = 'Please enter operating hours.';
+    if (isBlank(form.description)) next.description = 'Please describe the shelter.';
+    setFieldErrors(next);
+    if (Object.keys(next).length > 0) {
+      toast.warning('Please fix the highlighted fields.');
+      focusFirstError();
+      return;
+    }
     setSaved(true);
+    toast.success('Shelter profile saved successfully!');
   };
 
   return (
@@ -117,7 +141,7 @@ export const ShelterProfilePage = () => {
               </CardContent>
             </Card>
 
-            <form onSubmit={handleSave} className="space-y-4">
+            <form onSubmit={handleSave} noValidate className="space-y-4">
               {/* Organization */}
               <Card>
                 <CardHeader>
@@ -127,23 +151,24 @@ export const ShelterProfilePage = () => {
                 <CardContent className="grid gap-3 sm:grid-cols-2">
                   <div>
                     <Label htmlFor="profile-name">Shelter name</Label>
-                    <Input id="profile-name" value={form.name} onChange={(e) => set('name', e.target.value)} />
+                    <ValidatedInput id="profile-name" value={form.name} onChange={(e) => set('name', e.target.value)} error={fieldErrors.name} />
                   </div>
                   <div>
                     <Label htmlFor="profile-location">City / location</Label>
-                    <Input id="profile-location" value={form.location} onChange={(e) => set('location', e.target.value)} />
+                    <ValidatedInput id="profile-location" value={form.location} onChange={(e) => set('location', e.target.value)} error={fieldErrors.location} />
                   </div>
                   <div className="sm:col-span-2">
                     <Label htmlFor="profile-address">Street address</Label>
-                    <Input id="profile-address" value={form.address} onChange={(e) => set('address', e.target.value)} />
+                    <ValidatedInput id="profile-address" value={form.address} onChange={(e) => set('address', e.target.value)} error={fieldErrors.address} />
                   </div>
                   <div className="sm:col-span-2">
                     <Label htmlFor="profile-logo">Logo / photo URL</Label>
-                    <Input
+                    <ValidatedInput
                       id="profile-logo"
                       value={form.logoUrl}
                       onChange={(e) => set('logoUrl', e.target.value)}
                       placeholder="https://…"
+                      error={fieldErrors.logoUrl}
                     />
                   </div>
                 </CardContent>
@@ -158,15 +183,15 @@ export const ShelterProfilePage = () => {
                 <CardContent className="grid gap-3 sm:grid-cols-2">
                   <div>
                     <Label htmlFor="profile-email">Contact email</Label>
-                    <Input id="profile-email" type="email" value={form.email} onChange={(e) => set('email', e.target.value)} />
+                    <ValidatedInput id="profile-email" type="email" value={form.email} onChange={(e) => set('email', e.target.value)} error={fieldErrors.email} />
                   </div>
                   <div>
                     <Label htmlFor="profile-phone">Phone</Label>
-                    <Input id="profile-phone" value={form.phone} onChange={(e) => set('phone', e.target.value)} />
+                    <ValidatedInput id="profile-phone" value={form.phone} onChange={(e) => set('phone', e.target.value)} error={fieldErrors.phone} />
                   </div>
                   <div className="sm:col-span-2">
                     <Label htmlFor="profile-hours">Operating hours</Label>
-                    <Input id="profile-hours" value={form.operatingHours} onChange={(e) => set('operatingHours', e.target.value)} />
+                    <ValidatedInput id="profile-hours" value={form.operatingHours} onChange={(e) => set('operatingHours', e.target.value)} error={fieldErrors.operatingHours} />
                   </div>
                 </CardContent>
               </Card>
@@ -180,7 +205,7 @@ export const ShelterProfilePage = () => {
                 <CardContent className="grid gap-3">
                   <div>
                     <Label htmlFor="profile-desc">About your shelter</Label>
-                    <Textarea id="profile-desc" value={form.description} onChange={(e) => set('description', e.target.value)} />
+                    <ValidatedTextarea id="profile-desc" value={form.description} onChange={(e) => set('description', e.target.value)} error={fieldErrors.description} />
                   </div>
                   <div>
                     <Label htmlFor="profile-policy">Adoption policy</Label>

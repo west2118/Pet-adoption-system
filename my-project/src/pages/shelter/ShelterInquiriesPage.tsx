@@ -8,6 +8,7 @@ import {
   Search,
 } from 'lucide-react';
 import { useMemo, useState } from 'react';
+import { toast } from 'react-toastify';
 import { DetailsModal, RecordCard, SectionHeader, TableCard } from '@/components/shared';
 import {
   Table,
@@ -20,7 +21,8 @@ import {
 import { Input, Textarea, Label } from '@/components/ui/Form';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/Badge';
-import { usePets } from '@/hooks/useData';
+import { useAuth } from '@/hooks/useAuth';
+import { usePets, useShelters } from '@/hooks/useData';
 import { mockInquiries } from '@/data/mockData';
 import { formatDate } from '@/utils/formatters';
 
@@ -33,7 +35,9 @@ const STATUS_FILTER_OPTIONS = [
 const PAGE_SIZE = 8;
 
 export const ShelterInquiriesPage = () => {
+  const { user } = useAuth();
   const { pets } = usePets();
+  const { shelters } = useShelters();
   const [query, setQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'open' | 'resolved'>('all');
   const [page, setPage] = useState(1);
@@ -44,13 +48,19 @@ export const ShelterInquiriesPage = () => {
 
   const petOf = (petId: string) => pets.find((p) => p.id === petId);
 
+  // Only inquiries about this shelter's own pets — other shelters' pets
+  // (and their messages) are never listed here.
+  const myShelterId = user?.shelterId ?? shelters[0]?.id ?? null;
+
   const filteredInquiries = useMemo(() => {
     const search = query.trim().toLowerCase();
     return mockInquiries.filter((inquiry) => {
+      const pet = pets.find((p) => p.id === inquiry.petId);
+      if (myShelterId && pet?.shelterId !== myShelterId) return false;
       const isResolved = resolved.has(inquiry.id);
       const matchesStatus =
         statusFilter === 'all' || (statusFilter === 'resolved') === isResolved;
-      const petName = pets.find((p) => p.id === inquiry.petId)?.name ?? '';
+      const petName = pet?.name ?? '';
       const matchesSearch =
         search === '' ||
         inquiry.fromName.toLowerCase().includes(search) ||
@@ -59,7 +69,7 @@ export const ShelterInquiriesPage = () => {
         petName.toLowerCase().includes(search);
       return matchesStatus && matchesSearch;
     });
-  }, [pets, resolved, statusFilter, query]);
+  }, [pets, resolved, statusFilter, query, myShelterId]);
 
   const totalPages = Math.max(1, Math.ceil(filteredInquiries.length / PAGE_SIZE));
   const currentPage = Math.min(page, totalPages);
@@ -73,8 +83,10 @@ export const ShelterInquiriesPage = () => {
       const next = new Set(prev);
       if (next.has(id)) {
         next.delete(id);
+        toast.info('Inquiry reopened.');
       } else {
         next.add(id);
+        toast.success('Inquiry marked as resolved!');
       }
       return next;
     });
@@ -82,9 +94,13 @@ export const ShelterInquiriesPage = () => {
 
   const sendReply = (id: string) => {
     const text = (drafts[id] ?? '').trim();
-    if (!text) return;
+    if (!text) {
+      toast.warning('Please write a reply before sending.');
+      return;
+    }
     setReplies((prev) => ({ ...prev, [id]: text }));
     setDrafts((prev) => ({ ...prev, [id]: '' }));
+    toast.success('Reply sent to adopter!');
   };
 
   const toolbar = (

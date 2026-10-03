@@ -8,6 +8,7 @@ import {
   X,
 } from 'lucide-react';
 import { useMemo, useState } from 'react';
+import { toast } from 'react-toastify';
 import { DetailsModal, RecordCard, SectionHeader, TableCard } from '@/components/shared';
 import {
   Table,
@@ -20,7 +21,8 @@ import {
 import { Input, Select } from '@/components/ui/Form';
 import { Button } from '@/components/ui/button';
 import { ApplicationStatusBadge } from '@/components/ui/StatusBadge';
-import { useApplications, usePets } from '@/hooks/useData';
+import { useApplications, usePets, useShelters } from '@/hooks/useData';
+import { useAuth } from '@/hooks/useAuth';
 import { applicationService } from '@/services/api';
 import type { AdoptionApplication, ApplicationStatus } from '@/types';
 import { formatDate } from '@/utils/formatters';
@@ -37,18 +39,26 @@ const STATUS_FILTER_OPTIONS = [
 const PAGE_SIZE = 8;
 
 export const ShelterApplicationsPage = () => {
+  const { user } = useAuth();
   const { pets } = usePets();
+  const { shelters } = useShelters();
   const { applications, setApplications } = useApplications();
   const [query, setQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | ApplicationStatus>('all');
   const [page, setPage] = useState(1);
   const [detailsApp, setDetailsApp] = useState<AdoptionApplication | null>(null);
 
+  // Only applications for this shelter's own pets — other shelters' pets
+  // (and their applications) are never listed here.
+  const myShelterId = user?.shelterId ?? shelters[0]?.id ?? null;
+
   const filteredApplications = useMemo(() => {
     const search = query.trim().toLowerCase();
     return applications.filter((app) => {
+      const pet = pets.find((p) => p.id === app.petId);
+      if (myShelterId && pet?.shelterId !== myShelterId) return false;
       const matchesStatus = statusFilter === 'all' || app.status === statusFilter;
-      const petName = pets.find((p) => p.id === app.petId)?.name ?? '';
+      const petName = pet?.name ?? '';
       const matchesSearch =
         search === '' ||
         app.applicantName.toLowerCase().includes(search) ||
@@ -56,7 +66,7 @@ export const ShelterApplicationsPage = () => {
         petName.toLowerCase().includes(search);
       return matchesStatus && matchesSearch;
     });
-  }, [applications, pets, statusFilter, query]);
+  }, [applications, pets, statusFilter, query, myShelterId]);
 
   const totalPages = Math.max(1, Math.ceil(filteredApplications.length / PAGE_SIZE));
   const currentPage = Math.min(page, totalPages);
@@ -64,10 +74,15 @@ export const ShelterApplicationsPage = () => {
   const pagedApplications = filteredApplications.slice(startIndex, startIndex + PAGE_SIZE);
 
   const handleStatusChange = async (id: string, status: ApplicationStatus) => {
-    const updated = await applicationService.updateStatus(id, status, 'Updated by staff');
-    if (updated) {
-      setApplications((prev) => prev.map((a) => (a.id === id ? updated : a)));
-      setDetailsApp((prev) => (prev && prev.id === id ? updated : prev));
+    try {
+      const updated = await applicationService.updateStatus(id, status, 'Updated by staff');
+      if (updated) {
+        setApplications((prev) => prev.map((a) => (a.id === id ? updated : a)));
+        setDetailsApp((prev) => (prev && prev.id === id ? updated : prev));
+        toast.success(`Application ${status.toLowerCase()}!`);
+      }
+    } catch {
+      toast.error('Failed to update application status. Please try again.');
     }
   };
 

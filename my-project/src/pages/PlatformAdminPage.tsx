@@ -19,6 +19,7 @@ import {
 import { useMemo, useState } from 'react';
 import type { FormEvent } from 'react';
 import { Link } from 'react-router-dom';
+import { toast } from 'react-toastify';
 import {
   ChartCard,
   DetailsModal,
@@ -194,18 +195,26 @@ export const PlatformAdminPage = ({ initialSection = 'overview' }: PlatformAdmin
       const updated = await shelterService.update(editingShelter.id, input);
       if (updated)
         setShelters((prev) => prev.map((s) => (s.id === updated.id ? updated : s)));
+      toast.success(`${input.name} updated successfully!`);
       closeShelterSlide();
       return;
     }
     const created = await shelterService.create(input);
     setShelters((prev) => [created, ...prev]);
+    toast.success(`${created.name} added successfully!`);
     closeShelterSlide();
     resetShelterForm();
   };
 
   const removeShelter = async (id: string) => {
-    await shelterService.remove(id);
-    setShelters((prev) => prev.filter((s) => s.id !== id));
+    const target = shelters.find((s) => s.id === id);
+    try {
+      await shelterService.remove(id);
+      setShelters((prev) => prev.filter((s) => s.id !== id));
+      toast.success(target ? `${target.name} removed.` : 'Shelter removed.');
+    } catch {
+      toast.error('Failed to remove shelter. Please try again.');
+    }
   };
 
   const setShelterField = (key: keyof typeof shelterForm, value: string) =>
@@ -443,18 +452,26 @@ export const PlatformAdminPage = ({ initialSection = 'overview' }: PlatformAdmin
     if (editingUser) {
       const updated = await userService.update(editingUser.id, input);
       if (updated) setUsers((prev) => prev.map((u) => (u.id === updated.id ? updated : u)));
+      toast.success(`${input.name} updated successfully!`);
       closeUserSlide();
       return;
     }
     const created = await userService.create(input);
     setUsers((prev) => [created, ...prev]);
+    toast.success(`${created.name} added successfully!`);
     closeUserSlide();
     resetUserForm();
   };
 
   const removeUser = async (id: string) => {
-    await userService.remove(id);
-    setUsers((prev) => prev.filter((u) => u.id !== id));
+    const target = users.find((u) => u.id === id);
+    try {
+      await userService.remove(id);
+      setUsers((prev) => prev.filter((u) => u.id !== id));
+      toast.success(target ? `${target.name} removed.` : 'User removed.');
+    } catch {
+      toast.error('Failed to remove user. Please try again.');
+    }
   };
 
   const setUserField = (key: keyof typeof userForm, value: string) =>

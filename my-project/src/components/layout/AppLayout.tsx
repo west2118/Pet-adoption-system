@@ -11,9 +11,17 @@ export const ProtectedRoute = ({
 }: {
   allowedRoles?: UserRole[];
 }) => {
-  const { user } = useAuth();
+  const { user, initializing } = useAuth();
+
+  // Wait for the session check so a refresh doesn't bounce a logged-in user.
+  if (initializing) return null;
 
   if (!user) return <Navigate to="/login" replace />;
+
+  // Shelter accounts awaiting approval cannot enter the portal.
+  if (user.accountStatus && user.accountStatus !== 'approved') {
+    return <Navigate to="/onboarding/shelter/pending" replace />;
+  }
 
   if (allowedRoles && !allowedRoles.includes(user.role)) {
     return (

@@ -267,7 +267,7 @@ export const HomePage = () => {
 
       {/* ------------------------------------------------------- TRUST MARQUEE */}
       <section className="relative overflow-hidden border-y border-foreground/10 py-6">
-        <div className="flex w-max animate-[landing-marquee_38s_linear_infinite] items-center gap-12">
+        <div className="flex w-max animate-landing-marquee items-center gap-12">
           {[...Array(2)].flatMap((_, copy) =>
             ['Verified rescues', 'Medical records', 'Online applications', 'Direct shelter chat', 'Visit scheduling', 'Real-time tracking'].map((item) => (
               <span

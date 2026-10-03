@@ -13,6 +13,8 @@ export type ApplicationStatus =
 
 export type UserRole = 'adopter' | 'shelter_staff' | 'platform_admin';
 
+export type AccountStatus = 'pending' | 'approved' | 'rejected' | 'suspended';
+
 export type PetVisibility = 'public' | 'private';
 
 export interface Pet {
@@ -87,6 +89,30 @@ export interface User {
   role: UserRole;
   shelterId?: string;
   avatarUrl?: string;
+  /** Shelter accounts start `pending` until an admin approves them. */
+  accountStatus?: AccountStatus;
+  /** The registrant who owns (is the super admin of) the shelter. */
+  isOwner?: boolean;
+}
+
+/** A shelter onboarding submission awaiting platform-admin review. */
+export interface ShelterApplication {
+  id: string;
+  userId: string;
+  name: string;
+  location: string;
+  address: string;
+  phone: string;
+  email: string;
+  operatingHours: string;
+  description: string;
+  imageUrl: string;
+  status: AccountStatus;
+  reviewNote?: string;
+  submittedAt: string;
+  reviewedAt?: string;
+  applicantName?: string | null;
+  applicantEmail?: string | null;
 }
 
 export interface Inquiry {

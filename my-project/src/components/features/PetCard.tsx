@@ -1,5 +1,6 @@
 import { Heart, MapPin } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import { toast } from 'react-toastify';
 import type { Pet } from '@/types';
 import { cn } from '@/lib/utils';
 import { formatAge } from '@/utils/formatters';
@@ -26,6 +27,15 @@ export const PetCard = ({
   const { isFavorite, toggleFavorite } = useFavorites();
   const favorite = isFavorite(pet.id);
 
+  const handleToggleFavorite = () => {
+    toggleFavorite(pet.id);
+    if (favorite) {
+      toast.info(`${pet.name} removed from favorites.`);
+    } else {
+      toast.success(`${pet.name} saved to favorites!`);
+    }
+  };
+
   return (
     <article
       className={cn(
@@ -48,7 +58,7 @@ export const PetCard = ({
         </div>
         <button
           type="button"
-          onClick={() => toggleFavorite(pet.id)}
+          onClick={handleToggleFavorite}
           aria-label={favorite ? `Remove ${pet.name} from favorites` : `Save ${pet.name} to favorites`}
           aria-pressed={favorite}
           className={cn(

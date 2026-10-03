@@ -12,6 +12,7 @@ import {
   TrendingUp,
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import { useMemo } from 'react';
 import {
   ChartCard,
   SectionHeader,
@@ -26,12 +27,31 @@ import { PetsBySpeciesChart } from '@/components/features/charts/PetsBySpeciesCh
 import { ApplicationsByStatusChart } from '@/components/features/charts/ApplicationsByStatusChart';
 import { ListingsByStatusChart } from '@/components/features/charts/ListingsByStatusChart';
 import { Button } from '@/components/ui/button';
-import { useApplications, usePets } from '@/hooks/useData';
+import { useApplications, usePets, useShelters } from '@/hooks/useData';
+import { useAuth } from '@/hooks/useAuth';
 import { useShelterOverview } from '@/hooks/useShelterOverview';
 
 export const ShelterOverviewPage = () => {
+  const { user } = useAuth();
   const { pets, loading } = usePets();
+  const { shelters } = useShelters();
   const { applications } = useApplications();
+
+  // Stats, charts, and recent lists cover this shelter's own pets only —
+  // other shelters' records never leak into the overview.
+  const myShelterId = user?.shelterId ?? shelters[0]?.id ?? null;
+  const myPets = useMemo(
+    () => (myShelterId ? pets.filter((p) => p.shelterId === myShelterId) : pets),
+    [pets, myShelterId],
+  );
+  const myPetIds = useMemo(() => new Set(myPets.map((p) => p.id)), [myPets]);
+  const myApplications = useMemo(
+    () =>
+      myShelterId
+        ? applications.filter((a) => myPetIds.has(a.petId))
+        : applications,
+    [applications, myPetIds, myShelterId],
+  );
   const {
     stats,
     applicationsTrend,
@@ -40,7 +60,7 @@ export const ShelterOverviewPage = () => {
     listingsByStatus,
     recentApplications,
     inventory,
-  } = useShelterOverview(pets, applications);
+  } = useShelterOverview(myPets, myApplications);
 
   return (
     <div className="w-full px-4 py-6 sm:px-6">

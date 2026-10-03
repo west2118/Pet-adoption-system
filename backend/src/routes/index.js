@@ -8,6 +8,7 @@ import { shelterApplicationRoutes } from './shelterApplicationRoutes.js';
 import { inquiryRoutes } from './inquiryRoutes.js';
 import { shelterInquiryRoutes } from './shelterInquiryRoutes.js';
 import { favoriteRoutes } from './favoriteRoutes.js';
+import { shelterOnboardingRoutes } from './shelterOnboardingRoutes.js';
 import { adminRoutes } from './adminRoutes.js';
 
 export const apiRouter = Router();
@@ -25,4 +26,5 @@ apiRouter.use('/shelter/applications', shelterApplicationRoutes);
 apiRouter.use('/inquiries', inquiryRoutes);
 apiRouter.use('/shelter/inquiries', shelterInquiryRoutes);
 apiRouter.use('/favorites', favoriteRoutes);
+apiRouter.use('/shelter-onboarding', shelterOnboardingRoutes);
 apiRouter.use('/admin', adminRoutes);

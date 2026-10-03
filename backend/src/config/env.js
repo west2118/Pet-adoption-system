@@ -14,6 +14,9 @@ const envSchema = z.object({
   JWT_SECRET: z.string().min(16, 'JWT_SECRET must be at least 16 characters'),
   JWT_EXPIRES_IN: z.string().default('7d'),
   ALLOWED_ORIGINS: z.string().default('http://localhost:5173'),
+  RESEND_API_KEY: z.string().optional(),
+  MAIL_FROM: z.string().default('Paws&Homes <onboarding@resend.dev>'),
+  APP_URL: z.string().default('http://localhost:5173'),
 });
 
 export const env = envSchema.parse(process.env);

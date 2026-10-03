@@ -120,12 +120,21 @@ export const Navbar = () => {
               <LogOut className="size-3.5" /> Logout
             </Button>
           ) : (
-            <Button
-              onClick={() => navigate('/login')}
-              className="h-9 rounded-full px-5"
-            >
-              Sign in
-            </Button>
+            <>
+              <Button
+                variant="outline"
+                onClick={() => navigate('/signup')}
+                className="h-9 rounded-full border-border bg-transparent px-5 hover:bg-muted"
+              >
+                Sign up
+              </Button>
+              <Button
+                onClick={() => navigate('/login')}
+                className="h-9 rounded-full px-5"
+              >
+                Sign in
+              </Button>
+            </>
           )}
         </div>
 
@@ -184,12 +193,24 @@ export const Navbar = () => {
                   <LogOut className="size-4" /> Logout
                 </Button>
               ) : (
-                <Button
-                  onClick={() => navigate('/login')}
-                  className="h-11 flex-1 rounded-full"
-                >
-                  Sign in
-                </Button>
+                <>
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      navigate('/signup');
+                      setOpen(false);
+                    }}
+                    className="h-11 flex-1 rounded-full border-border bg-transparent"
+                  >
+                    Sign up
+                  </Button>
+                  <Button
+                    onClick={() => navigate('/login')}
+                    className="h-11 flex-1 rounded-full"
+                  >
+                    Sign in
+                  </Button>
+                </>
               )}
             </div>
           </nav>

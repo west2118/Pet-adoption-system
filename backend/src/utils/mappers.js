@@ -55,10 +55,34 @@ export const mapUser = (row) => {
     name: row.name,
     email: row.email,
     role: row.role,
+    accountStatus: row.account_status ?? 'approved',
+    isOwner: Boolean(row.is_owner),
   };
   if (row.shelter_id) user.shelterId = row.shelter_id;
   if (row.avatar_url) user.avatarUrl = row.avatar_url;
   return user;
+};
+
+export const mapShelterApplication = (row) => {
+  if (!row) return null;
+  return {
+    id: row.id,
+    userId: row.user_id,
+    applicantName: row.applicant_name ?? null,
+    applicantEmail: row.applicant_email ?? null,
+    name: row.name,
+    location: row.location,
+    address: row.address,
+    phone: row.phone,
+    email: row.email,
+    operatingHours: row.operating_hours,
+    description: row.description,
+    imageUrl: row.image_url ?? '',
+    status: row.status,
+    reviewNote: row.review_note ?? undefined,
+    submittedAt: row.submitted_at,
+    reviewedAt: row.reviewed_at ?? undefined,
+  };
 };
 
 export const mapApplication = (row, history = []) => {

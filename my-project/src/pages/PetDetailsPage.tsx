@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { ArrowRight, HeartHandshake } from 'lucide-react';
 import { Link, useParams } from 'react-router-dom';
+import { toast } from 'react-toastify';
 import type { Pet, Shelter } from '@/types';
 import { Reveal } from '@/components/shared';
 import { Container } from '@/components/layout/Container';
@@ -53,6 +54,17 @@ export const PetDetailsPage = () => {
   }, [id]);
 
   const favorite = pet ? isFavorite(pet.id) : false;
+
+  const handleToggleFavorite = () => {
+    if (!pet) return;
+    const wasFavorite = favorite;
+    toggleFavorite(pet.id);
+    if (wasFavorite) {
+      toast.info(`${pet.name} removed from favorites.`);
+    } else {
+      toast.success(`${pet.name} saved to favorites!`);
+    }
+  };
 
   const shelterPetCount = useMemo(
     () => (siblings.length > 0 && pet ? siblings.length + 1 : pet ? 1 : 0),
@@ -113,7 +125,7 @@ export const PetDetailsPage = () => {
         pet={pet}
         shelter={shelter ?? undefined}
         favorite={favorite}
-        onToggleFavorite={() => toggleFavorite(pet.id)}
+        onToggleFavorite={handleToggleFavorite}
       />
 
       <div className="border-y border-border bg-background">

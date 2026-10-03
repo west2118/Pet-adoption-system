@@ -15,7 +15,7 @@ export const PetsTicker = ({ items }: PetsTickerProps) => {
 
   return (
     <div className="relative overflow-hidden border-b border-border bg-background py-5">
-      <div className="flex w-max animate-[landing-marquee_38s_linear_infinite] items-center gap-12">
+      <div className="flex w-max animate-landing-marquee items-center gap-12">
         {[...Array(2)].flatMap((_, copy) =>
           items.map((item) => (
             <span

@@ -1,4 +1,4 @@
-import { Building2, LayoutDashboard, PawPrint, Users } from 'lucide-react';
+import { Building2, ClipboardCheck, LayoutDashboard, PawPrint, Users } from 'lucide-react';
 import { PortalSidebar } from './PortalSidebar';
 
 interface AdminSidebarProps {
@@ -15,6 +15,7 @@ export const AdminSidebar = ({ mobileOpen = false, onClose }: AdminSidebarProps)
       onClose={onClose}
       links={[
         { to: '/admin', end: true, label: 'Overview', icon: LayoutDashboard },
+        { to: '/admin/shelter-applications', label: 'Shelter Applications', icon: ClipboardCheck },
         { to: '/admin/shelters', label: 'Shelters', icon: Building2 },
         { to: '/admin/pets', label: 'Pets', icon: PawPrint },
         { to: '/admin/users', label: 'Users', icon: Users },

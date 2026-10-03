@@ -2,8 +2,11 @@ import { getMe, login, signup } from '../services/authService.js';
 import { sendSuccess } from '../utils/respond.js';
 
 export const signupUser = async (req, res) => {
-  const { user, token } = await signup(req.body);
-  return sendSuccess(res, { user, token }, 'Account created successfully.', undefined, 201);
+  const result = await signup(req.body);
+  const message = result.requiresOnboarding
+    ? 'Account created. Complete your shelter details to continue.'
+    : 'Account created successfully.';
+  return sendSuccess(res, result, message, undefined, 201);
 };
 
 export const loginUser = async (req, res) => {

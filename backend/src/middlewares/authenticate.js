@@ -18,6 +18,7 @@ export const authenticate = (req, _res, next) => {
       email: decoded.email,
       role: decoded.role,
       shelterId: decoded.shelterId,
+      scope: decoded.scope,
     };
     return next();
   } catch (_err) {

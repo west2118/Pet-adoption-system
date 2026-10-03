@@ -50,6 +50,106 @@
   --font-sans: 'Instrument Sans', ui-sans-serif, system-ui, sans-serif;
   --font-display: 'Instrument Serif', ui-serif, Georgia, serif;
   --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, monospace;
+
+  --animate-pets-hero-drift: pets-hero-drift 120s linear infinite;
+  --animate-pets-hero-drift-far: pets-hero-drift-far 200s linear infinite;
+  --animate-pets-hero-float: pets-hero-float 11s ease-in-out infinite;
+  --animate-landing-sweep: landing-sweep 3s ease-in-out infinite;
+  --animate-landing-marquee: landing-marquee 38s linear infinite;
+  --animate-landing-drift: landing-drift 20s ease-in-out infinite;
+  --animate-boot-pulse: boot-pulse 1.8s ease-in-out infinite;
+  --animate-boot-rise: boot-rise 0.7s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  --animate-boot-fill: boot-fill 1.5s cubic-bezier(0.65, 0, 0.35, 1) infinite;
+
+  @keyframes pets-hero-drift {
+    from {
+      background-position: 0 0;
+    }
+    to {
+      background-position: 300px 260px;
+    }
+  }
+
+  @keyframes pets-hero-drift-far {
+    from {
+      background-position: 0 0;
+    }
+    to {
+      background-position: -190px 160px;
+    }
+  }
+
+  @keyframes pets-hero-float {
+    0%,
+    100% {
+      transform: translate3d(0, 0, 0);
+    }
+    50% {
+      transform: translate3d(0, -14px, 0);
+    }
+  }
+
+  @keyframes landing-sweep {
+    0% {
+      transform: translateX(-100%);
+    }
+    100% {
+      transform: translateX(200%);
+    }
+  }
+
+  @keyframes landing-marquee {
+    from {
+      transform: translateX(0);
+    }
+    to {
+      transform: translateX(-50%);
+    }
+  }
+
+  @keyframes landing-drift {
+    0%,
+    100% {
+      transform: translate3d(0, 0, 0) scale(1);
+    }
+    50% {
+      transform: translate3d(0, -2%, 0) scale(1.06);
+    }
+  }
+
+  @keyframes boot-pulse {
+    0%,
+    100% {
+      transform: scale(1);
+    }
+    50% {
+      transform: scale(1.06);
+    }
+  }
+
+  @keyframes boot-rise {
+    from {
+      opacity: 0;
+      transform: translateY(18px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  @keyframes boot-fill {
+    0% {
+      transform: scaleX(0);
+    }
+    55% {
+      transform: scaleX(1);
+    }
+    100% {
+      transform: scaleX(1);
+      opacity: 0;
+    }
+  }
 }
 
 :root {
@@ -223,103 +323,7 @@
   animation: pets-hero-drift-far 200s linear infinite;
 }
 
-@keyframes pets-hero-drift {
-  from {
-    background-position: 0 0;
-  }
-  to {
-    background-position: 300px 260px;
-  }
-}
 
-@keyframes pets-hero-drift-far {
-  from {
-    background-position: 0 0;
-  }
-  to {
-    background-position: -190px 160px;
-  }
-}
-
-/* Gentle per-card bob on the orbit. */
-@keyframes pets-hero-float {
-  0%,
-  100% {
-    transform: translate3d(0, 0, 0);
-  }
-  50% {
-    transform: translate3d(0, -14px, 0);
-  }
-}
-
-@keyframes landing-sweep {
-  0% {
-    transform: translateX(-100%);
-  }
-  100% {
-    transform: translateX(200%);
-  }
-}
-
-@keyframes landing-marquee {
-  from {
-    transform: translateX(0);
-  }
-  to {
-    transform: translateX(-50%);
-  }
-}
-
-@keyframes landing-drift {
-  0%,
-  100% {
-    transform: translate3d(0, 0, 0) scale(1);
-  }
-  50% {
-    transform: translate3d(0, -2%, 0) scale(1.06);
-  }
-}
-
-/*
- * Route-loader motion.
-
- * These mirror the keyframes inlined in `index.html` so the pre-React splash and the
- * React overlay animate identically — the overlay can reference them because they are
- * defined here in the bundled stylesheet.
- */
-@keyframes boot-pulse {
-  0%,
-  100% {
-    transform: scale(1);
-  }
-  50% {
-    transform: scale(1.06);
-  }
-}
-
-@keyframes boot-rise {
-  from {
-    opacity: 0;
-    transform: translateY(18px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-@keyframes boot-fill {
-  0% {
-    transform: scaleX(0);
-  }
-  55% {
-    transform: scaleX(1);
-  }
-  100% {
-    transform: scaleX(1);
-    opacity: 0;
-  }
-}
 
 @media (prefers-reduced-motion: reduce) {
   .landing-theme *,

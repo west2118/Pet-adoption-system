@@ -8,13 +8,27 @@ import {
   findUserByEmail,
   findUserById,
 } from '../repositories/userRepository.js';
-import { findShelterById } from '../repositories/shelterRepository.js';
 
 const signToken = (user) =>
   jwt.sign(
-    { id: user.id, email: user.email, role: user.role, shelterId: user.shelter_id ?? undefined },
+    {
+      id: user.id,
+      email: user.email,
+      role: user.role,
+      shelterId: user.shelter_id ?? undefined,
+      scope: 'full',
+    },
     env.JWT_SECRET,
     { expiresIn: env.JWT_EXPIRES_IN },
+  );
+
+// Short-lived, limited token issued to a pending shelter registrant so they can
+// submit onboarding details and check status. It grants no portal access.
+const signOnboardingToken = (user) =>
+  jwt.sign(
+    { id: user.id, email: user.email, role: user.role, scope: 'onboarding' },
+    env.JWT_SECRET,
+    { expiresIn: '2d' },
   );
 
 export const signup = async (input) => {
@@ -22,22 +36,31 @@ export const signup = async (input) => {
   if (existing) {
     throw new AppError('Email is already registered.', 409);
   }
-  if (input.role === 'shelter_staff') {
-    if (!input.shelterId) {
-      throw new AppError('shelterId is required for shelter staff accounts.', 400);
-    }
-    const shelter = await findShelterById(input.shelterId);
-    if (!shelter) {
-      throw new AppError('Assigned shelter not found.', 404);
-    }
-  }
+
+  const role = input.role ?? 'adopter';
   const passwordHash = await bcrypt.hash(input.password, 10);
+
+  if (role === 'shelter_staff') {
+    // Shelter staff register as pending: no shelter exists yet. They complete a
+    // separate onboarding form, then wait for platform-admin approval.
+    const row = await createUser({
+      name: input.name,
+      email: input.email,
+      passwordHash,
+      role,
+      accountStatus: 'pending',
+    });
+    const user = mapUser(row);
+    const onboardingToken = signOnboardingToken(row);
+    return { user, onboardingToken, requiresOnboarding: true };
+  }
+
   const row = await createUser({
     name: input.name,
     email: input.email,
     passwordHash,
-    role: input.role ?? 'adopter',
-    shelterId: input.shelterId ?? null,
+    role,
+    accountStatus: 'approved',
   });
   const user = mapUser(row);
   const token = signToken(row);
@@ -52,6 +75,15 @@ export const login = async (input) => {
   const ok = await bcrypt.compare(input.password, row.password_hash);
   if (!ok) {
     throw new AppError('Invalid email or password.', 401);
+  }
+  if (row.account_status === 'pending') {
+    throw new AppError(
+      'Your account is awaiting admin approval. You will be notified by email.',
+      403,
+    );
+  }
+  if (row.account_status === 'rejected' || row.account_status === 'suspended') {
+    throw new AppError('Your account is not active. Please contact support.', 403);
   }
   const user = mapUser(row);
   const token = signToken(row);

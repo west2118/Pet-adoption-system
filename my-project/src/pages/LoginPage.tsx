@@ -1,21 +1,51 @@
 import { ArrowUpRight, MapPin, Plus } from 'lucide-react';
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { toast } from 'react-toastify';
 import { Button } from '@/components/ui/button';
-import { Input, Label } from '@/components/ui/Form';
+import { Label } from '@/components/ui/Form';
+import { ValidatedInput, focusFirstError, isBlank, isEmail } from '@/components/shared';
 import { useAuth } from '@/hooks/useAuth';
+import { ApiError } from '@/lib/apiClient';
 import type { UserRole } from '@/types';
+
+const landingRouteFor = (role: UserRole) =>
+  role === 'adopter' ? '/pets' : role === 'shelter_staff' ? '/shelter' : '/admin';
 
 export const LoginPage = () => {
   const { login } = useAuth();
   const navigate = useNavigate();
   const [email, setEmail] = useState('juan@example.com');
-  const [role, setRole] = useState<UserRole>('adopter');
+  const [password, setPassword] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<{ email?: string; password?: string }>({});
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    login(email, role);
-    navigate(role === 'adopter' ? '/pets' : role === 'shelter_staff' ? '/shelter' : '/admin');
+    const next: typeof fieldErrors = {};
+    if (!isEmail(email)) next.email = 'Enter a valid email address.';
+    if (isBlank(password)) next.password = 'Please enter your password.';
+    setFieldErrors(next);
+    if (Object.keys(next).length > 0) {
+      toast.warning('Please fix the highlighted fields.');
+      focusFirstError();
+      return;
+    }
+    setError(null);
+    setSubmitting(true);
+    try {
+      const user = await login(email, password);
+      toast.success(`Welcome back, ${user.name}!`);
+      navigate(landingRouteFor(user.role), { replace: true });
+    } catch (err) {
+      const message =
+        err instanceof ApiError ? err.message : 'Unable to sign in. Please try again.';
+      setError(message);
+      toast.error(message);
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -37,19 +67,22 @@ export const LoginPage = () => {
                 </p>
               </div>
 
-              <form onSubmit={handleSubmit} className="space-y-4">
+              <form onSubmit={handleSubmit} noValidate className="space-y-4">
                 <div className="space-y-2">
                   <Label className="text-[13px] font-normal" htmlFor="login-email">
                     Email
                   </Label>
-                  <Input
+                  <ValidatedInput
                     id="login-email"
                     type="email"
                     value={email}
-                    onChange={(e) => setEmail(e.target.value)}
+                    onChange={(e) => {
+                      setEmail(e.target.value);
+                      setFieldErrors((p) => ({ ...p, email: undefined }));
+                    }}
                     placeholder="name@email.com"
+                    error={fieldErrors.email}
                     className="h-[50px] rounded-xl bg-background text-[15px]"
-                    required
                   />
                 </div>
 
@@ -57,19 +90,44 @@ export const LoginPage = () => {
                   <Label className="text-[13px] font-normal" htmlFor="login-pass">
                     Password
                   </Label>
-                  <Input
+                  <ValidatedInput
                     id="login-pass"
                     type="password"
+                    value={password}
+                    onChange={(e) => {
+                      setPassword(e.target.value);
+                      setFieldErrors((p) => ({ ...p, password: undefined }));
+                    }}
                     placeholder="••••••••"
+                    error={fieldErrors.password}
                     className="h-[50px] rounded-xl bg-background text-[15px]"
-                    required
                   />
                 </div>
 
-                <Button type="submit" className="h-[50px] w-full rounded-xl text-[15px]">
-                  Sign in
+                {error && (
+                  <p role="alert" className="text-[13px] text-destructive">
+                    {error}
+                  </p>
+                )}
+
+                <Button
+                  type="submit"
+                  disabled={submitting}
+                  className="h-[50px] w-full rounded-xl text-[15px]"
+                >
+                  {submitting ? 'Signing in…' : 'Sign in'}
                 </Button>
               </form>
+
+              <p className="text-center text-sm text-muted-foreground">
+                New to Paws&amp;Homes?{' '}
+                <Link
+                  to="/signup"
+                  className="font-medium text-foreground underline underline-offset-4"
+                >
+                  Create an account
+                </Link>
+              </p>
             </div>
           </div>
 
