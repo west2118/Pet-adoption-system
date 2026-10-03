@@ -260,19 +260,31 @@ export const PetDetailsPage = () => {
           <Reveal className="text-center">
             <HeartHandshake className="mx-auto size-8 text-primary" />
             <h2 className="mx-auto mt-6 max-w-3xl font-display text-3xl leading-tight tracking-tight md:text-5xl">
-              Ready to bring {pet.name} home?
+              {pet.status === 'Adopted'
+                ? `${pet.name} has already found a home`
+                : `Ready to bring ${pet.name} home?`}
             </h2>
             <p className="mx-auto mt-5 max-w-xl text-muted-foreground">
-              Send an adoption application online and follow every step from Submitted
-              to Adopted, all in one place.
+              {pet.status === 'Adopted'
+                ? 'You can still browse other rescues looking for a home, or send the shelter an inquiry.'
+                : 'Send an adoption application online and follow every step from Submitted to Adopted, all in one place.'}
             </p>
             <div className="mt-10 flex flex-wrap items-center justify-center gap-4">
-              <Link to={`/apply/${pet.id}`}>
-                <Button size="lg" className="h-11 rounded-full px-7 text-[15px]">
-                  Apply to adopt
-                  <ArrowRight data-slot="icon" />
-                </Button>
-              </Link>
+              {pet.status === 'Adopted' ? (
+                <Link to="/pets">
+                  <Button size="lg" className="h-11 rounded-full px-7 text-[15px]">
+                    Browse other pets
+                    <ArrowRight data-slot="icon" />
+                  </Button>
+                </Link>
+              ) : (
+                <Link to={`/apply/${pet.id}`}>
+                  <Button size="lg" className="h-11 rounded-full px-7 text-[15px]">
+                    Apply to adopt
+                    <ArrowRight data-slot="icon" />
+                  </Button>
+                </Link>
+              )}
               <Link to="/pets">
                 <Button
                   size="lg"

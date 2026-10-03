@@ -124,9 +124,13 @@ export const ApplicationCard = ({
     <article className="overflow-hidden rounded-lg border border-border bg-card transition-colors hover:border-primary/40">
       <div className="flex flex-col gap-6 p-6 sm:flex-row lg:gap-8">
         {pet && (
+          /* `sm:self-start` matters: from `sm` up the card is a row, so the default
+             `align-items: stretch` made this link as tall as the text column and the
+             `bg-muted` showed as a grey band under the photo. Below `sm` the card is a
+             column, where the link should keep stretching to the card's full width. */
           <Link
             to={`/pets/${application.petId}`}
-            className="shrink-0 overflow-hidden rounded-lg bg-muted"
+            className="shrink-0 overflow-hidden rounded-lg bg-muted sm:self-start"
           >
             <img
               src={pet.imageUrl}

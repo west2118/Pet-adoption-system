@@ -82,15 +82,26 @@ export const PetHero = ({ pet, shelter, favorite, onToggleFavorite }: PetHeroPro
 
             <Reveal delay={300} className="mt-10">
               <div className="flex flex-wrap items-center gap-3">
-                <Link to={`/apply/${pet.id}`}>
+                {/* Only wrap in a Link when adoption is actually open — a disabled
+                    button inside an anchor is still clickable. */}
+                {adopted ? (
                   <Button
                     size="lg"
-                    disabled={adopted}
-                    className="h-12 rounded-full px-7 text-sm font-medium shadow-md transition-all hover:shadow-lg"
+                    disabled
+                    className="h-12 rounded-full px-7 text-sm font-medium"
                   >
                     Apply to adopt
                   </Button>
-                </Link>
+                ) : (
+                  <Link to={`/apply/${pet.id}`}>
+                    <Button
+                      size="lg"
+                      className="h-12 rounded-full px-7 text-sm font-medium shadow-md transition-all hover:shadow-lg"
+                    >
+                      Apply to adopt
+                    </Button>
+                  </Link>
+                )}
                 <Button
                   variant="outline"
                   size="lg"
