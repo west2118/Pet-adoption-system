@@ -1,7 +1,8 @@
 import type { LucideIcon } from 'lucide-react';
 import { X } from 'lucide-react';
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import type { ReactNode } from 'react';
+import { useScrollLock } from '@/hooks/useScrollLock';
 import { cn } from '@/lib/utils';
 
 const sizeClasses = {
@@ -37,24 +38,31 @@ export const SlideOver = ({
   footer,
   size = 'md',
 }: SlideOverProps) => {
+  const overlayRef = useRef<HTMLDivElement>(null);
+
+  useScrollLock(open, overlayRef);
+
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') onClose();
     };
     document.addEventListener('keydown', onKey);
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
     return () => {
       document.removeEventListener('keydown', onKey);
-      document.body.style.overflow = prev;
     };
   }, [open, onClose]);
 
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-50" role="dialog" aria-modal="true" aria-label={title}>
+    <div
+      ref={overlayRef}
+      className="fixed inset-0 z-50"
+      role="dialog"
+      aria-modal="true"
+      aria-label={title}
+    >
       <div
         className="absolute inset-0 animate-in bg-black/40 fade-in duration-200"
         onClick={onClose}
@@ -62,7 +70,7 @@ export const SlideOver = ({
       />
       <aside
         className={cn(
-          'absolute inset-y-0 right-0 flex w-full animate-in flex-col border-l bg-card shadow-xl slide-in-from-right duration-200',
+          'absolute inset-y-0 right-0 flex h-full w-full animate-in flex-col border-l bg-card shadow-xl slide-in-from-right duration-200',
           sizeClasses[size],
         )}
       >
@@ -88,7 +96,7 @@ export const SlideOver = ({
           </button>
         </div>
 
-        <div className="min-h-0 flex-1 overflow-y-auto p-5">{children}</div>
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-5">{children}</div>
 
         {footer ? (
           <div className="sticky bottom-0 z-10 shrink-0 border-t bg-card p-4 pb-[max(1rem,env(safe-area-inset-bottom))]">

@@ -1,6 +1,5 @@
 import { Check, Clock, Mail, MapPin, Phone, ShieldCheck } from 'lucide-react';
 import { useEffect, useState } from 'react';
-import { Container } from '@/components/layout/Container';
 import { SectionHeader } from '@/components/shared';
 import { Badge } from '@/components/ui/Badge';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/Card';
@@ -54,7 +53,7 @@ export const ShelterProfilePage = () => {
   };
 
   return (
-    <Container className="py-6">
+    <div className="w-full px-4 py-6 sm:px-6">
       <SectionHeader
         title="Shelter profile"
         subtitle="Keep your identity, contact details, and public description up to date."
@@ -203,6 +202,6 @@ export const ShelterProfilePage = () => {
           </div>
         )}
       </div>
-    </Container>
+    </div>
   );
 };

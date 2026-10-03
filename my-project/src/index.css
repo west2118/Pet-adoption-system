@@ -46,6 +46,12 @@
   --color-sidebar-ring: var(--sidebar-ring);
 }
 
+@theme {
+  --font-sans: 'Instrument Sans', ui-sans-serif, system-ui, sans-serif;
+  --font-display: 'Instrument Serif', ui-serif, Georgia, serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, monospace;
+}
+
 :root {
   --radius: 0.625rem;
   --background: oklch(1 0 0);
@@ -79,6 +85,11 @@
   --sidebar-accent-foreground: oklch(0.205 0 0);
   --sidebar-border: oklch(0.922 0 0);
   --sidebar-ring: oklch(0.708 0 0);
+  /* Brand accent — global so shared chrome (navbar, footer, badges)
+     renders on every route, not just inside `.landing-theme`. */
+  --brand: oklch(0.62 0.19 42);
+  --brand-soft: oklch(0.7 0.19 45);
+  --brand-tint: oklch(0.96 0.04 55);
 }
 
 .dark {
@@ -113,6 +124,9 @@
   --sidebar-accent-foreground: oklch(0.985 0 0);
   --sidebar-border: oklch(1 0 0 / 10%);
   --sidebar-ring: oklch(0.556 0 0);
+  --brand: oklch(0.7 0.19 45);
+  --brand-soft: oklch(0.75 0.18 48);
+  --brand-tint: oklch(0.28 0.07 45);
 }
 
 @layer base {
@@ -127,5 +141,154 @@
   button:not(:disabled),
   [role='button']:not(:disabled) {
     cursor: pointer;
+  }
+}
+
+/*
+ * Marketing landing page theme.
+ *
+ * Scoped to `.landing-theme` so the editorial treatment only applies to the public
+ * marketing surface. The palette reuses the system's own default light tokens — only
+ * the accent is re-declared so the landing page can reference it directly.
+ */
+.landing-theme {
+  --background: oklch(1 0 0);
+  --foreground: oklch(0.145 0 0);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.145 0 0);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.145 0 0);
+  --primary: oklch(0.62 0.19 42);
+  --primary-foreground: oklch(0.985 0 0);
+  --secondary: oklch(0.97 0 0);
+  --secondary-foreground: oklch(0.205 0 0);
+  --muted: oklch(0.97 0 0);
+  --muted-foreground: oklch(0.556 0 0);
+  --accent: oklch(0.97 0 0);
+  --accent-foreground: oklch(0.205 0 0);
+  --border: oklch(0.922 0 0);
+  --input: oklch(0.922 0 0);
+  --ring: oklch(0.62 0.19 42);
+
+  /* Brand accent — the one saturated colour on the page. */
+  --brand: oklch(0.62 0.19 42);
+  --brand-soft: oklch(0.7 0.19 45);
+  --brand-tint: oklch(0.96 0.04 55);
+
+  background-color: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans);
+}
+
+/*
+ * Browse-pets hero — the same editorial light treatment as the landing page, with a
+ * faint drifting dot field behind the orbit of adoptable pets.
+ *
+ * Scoped to `.pets-hero` so the texture and drift stay on the hero alone.
+ */
+.pets-hero {
+  background-color: var(--background);
+  color: var(--foreground);
+}
+
+/*
+ * The dot layers are tiled radial-gradients rather than an image so they stay crisp
+ * at any resolution and cost nothing to load. Each layer drifts by exactly one tile
+ * of its own `background-size`, which makes the loop seamless. Opacities are kept
+ * low so this reads as paper grain, not confetti.
+ */
+.pets-hero-stars {
+  background-image:
+    radial-gradient(1.5px 1.5px at 12% 22%, oklch(0.145 0 0 / 30%), transparent 55%),
+    radial-gradient(1.8px 1.8px at 41% 68%, oklch(0.145 0 0 / 26%), transparent 55%),
+    radial-gradient(1.4px 1.4px at 78% 14%, oklch(0.145 0 0 / 24%), transparent 55%),
+    radial-gradient(1.6px 1.6px at 64% 84%, oklch(0.145 0 0 / 28%), transparent 55%),
+    radial-gradient(1.3px 1.3px at 90% 52%, oklch(0.145 0 0 / 22%), transparent 55%),
+    radial-gradient(1.5px 1.5px at 26% 90%, oklch(0.145 0 0 / 26%), transparent 55%),
+    radial-gradient(1.4px 1.4px at 55% 36%, oklch(0.145 0 0 / 22%), transparent 55%),
+    radial-gradient(1.7px 1.7px at 7% 58%, oklch(0.145 0 0 / 30%), transparent 55%);
+  background-size: 300px 260px;
+  animation: pets-hero-drift 120s linear infinite;
+}
+
+.pets-hero-stars-far {
+  background-image:
+    radial-gradient(1.1px 1.1px at 33% 14%, oklch(0.145 0 0 / 16%), transparent 55%),
+    radial-gradient(1px 1px at 68% 47%, oklch(0.145 0 0 / 13%), transparent 55%),
+    radial-gradient(1.2px 1.2px at 14% 76%, oklch(0.145 0 0 / 15%), transparent 55%),
+    radial-gradient(1px 1px at 86% 82%, oklch(0.145 0 0 / 12%), transparent 55%),
+    radial-gradient(1.1px 1.1px at 47% 92%, oklch(0.145 0 0 / 14%), transparent 55%),
+    radial-gradient(1px 1px at 92% 28%, oklch(0.145 0 0 / 12%), transparent 55%);
+  background-size: 190px 160px;
+  animation: pets-hero-drift-far 200s linear infinite;
+}
+
+@keyframes pets-hero-drift {
+  from {
+    background-position: 0 0;
+  }
+  to {
+    background-position: 300px 260px;
+  }
+}
+
+@keyframes pets-hero-drift-far {
+  from {
+    background-position: 0 0;
+  }
+  to {
+    background-position: -190px 160px;
+  }
+}
+
+/* Gentle per-card bob on the orbit. */
+@keyframes pets-hero-float {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0);
+  }
+  50% {
+    transform: translate3d(0, -14px, 0);
+  }
+}
+
+@keyframes landing-sweep {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(200%);
+  }
+}
+
+@keyframes landing-marquee {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-50%);
+  }
+}
+
+@keyframes landing-drift {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  50% {
+    transform: translate3d(0, -2%, 0) scale(1.06);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .landing-theme *,
+  .landing-theme *::before,
+  .landing-theme *::after,
+  .pets-hero *,
+  .pets-hero *::before,
+  .pets-hero *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
   }
 }

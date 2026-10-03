@@ -7,3 +7,6 @@ export { SectionHeader } from './SectionHeader';
 export { Breadcrumbs } from './Breadcrumbs';
 export { SlideOver } from './SlideOver';
 export { DetailsModal } from './DetailsModal';
+export { Reveal } from './Reveal';
+export { BlurText } from './BlurText';
+export { GridOverlay } from './GridOverlay';

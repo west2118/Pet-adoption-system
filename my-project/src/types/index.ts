@@ -37,6 +37,14 @@ export interface Pet {
   spayedNeutered: boolean;
   goodWithKids: boolean;
   goodWithPets: boolean;
+  microchipped?: boolean;
+  dewormed?: boolean;
+  houseTrained?: boolean;
+  goodWithStrangers?: boolean;
+  leashTrained?: boolean;
+  crateTrained?: boolean;
+  litterTrained?: boolean;
+  apartmentFriendly?: boolean;
   dateAdded: string;
 }
 

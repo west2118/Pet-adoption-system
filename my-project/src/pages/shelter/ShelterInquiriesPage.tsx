@@ -8,7 +8,6 @@ import {
   Search,
 } from 'lucide-react';
 import { useMemo, useState } from 'react';
-import { Container } from '@/components/layout/Container';
 import { DetailsModal, RecordCard, SectionHeader, TableCard } from '@/components/shared';
 import {
   Table,
@@ -172,7 +171,7 @@ export const ShelterInquiriesPage = () => {
     ) : undefined;
 
   return (
-    <Container className="py-6">
+    <div className="w-full px-4 py-6 sm:px-6">
       <SectionHeader
         title="Inquiries inbox"
         subtitle="Messages from potential adopters about your pets."
@@ -422,6 +421,6 @@ export const ShelterInquiriesPage = () => {
           </div>
         )}
       </DetailsModal>
-    </Container>
+    </div>
   );
 };

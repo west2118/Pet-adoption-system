@@ -3,6 +3,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Eye,
+  ImagePlus,
   ListPlus,
   PawPrint,
   Pencil,
@@ -13,7 +14,6 @@ import {
 } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import type { FormEvent } from 'react';
-import { Container } from '@/components/layout/Container';
 import { DetailsModal, RecordCard, SectionHeader, SlideOver, TableCard } from '@/components/shared';
 import { PetStatusBadge, VisibilityBadge } from '@/components/ui/StatusBadge';
 import {
@@ -51,6 +51,34 @@ const VISIBILITY_FILTER_OPTIONS = [
 
 const PAGE_SIZE = 8;
 
+const CARE_FLAG_OPTIONS = [
+  ['vaccinated', 'Vaccinated'],
+  ['spayedNeutered', 'Spayed / Neutered'],
+  ['microchipped', 'Microchipped'],
+  ['dewormed', 'Dewormed'],
+  ['goodWithKids', 'Good with kids'],
+  ['goodWithPets', 'Good with pets'],
+  ['goodWithStrangers', 'Good with strangers'],
+  ['houseTrained', 'House-trained'],
+  ['leashTrained', 'Leash-trained'],
+  ['crateTrained', 'Crate-trained'],
+  ['litterTrained', 'Litter-trained'],
+  ['apartmentFriendly', 'Apartment-friendly'],
+] as const;
+
+// Medical records only (vet procedures / test results).
+// Kept distinct from Care flags (status / behaviour) to avoid redundancy.
+const MEDICAL_PRESETS = [
+  'Rabies vaccine',
+  'DHPP / FVRCP vaccine',
+  'Bordetella vaccine',
+  'Heartworm test – Negative',
+  'Flea & tick prevention',
+  'Dental check',
+  'Vet health check',
+  'Blood panel done',
+];
+
 export const ShelterListingsPage = () => {
   const { pets, setPets } = usePets();
   const { shelters } = useShelters();
@@ -68,17 +96,26 @@ export const ShelterListingsPage = () => {
     ageGroup: 'adult' as AgeGroup,
     size: 'medium',
     gender: 'male',
+    shelterId: '',
     status: 'Available' as PetStatus,
     visibility: 'public' as PetVisibility,
     description: '',
     temperament: '',
-    imageUrl: '',
-    medicalHistory: '',
+    photoUrls: '',
+    medicalHistory: [''] as string[],
     behavioralNotes: '',
     vaccinated: true,
     spayedNeutered: false,
     goodWithKids: true,
     goodWithPets: true,
+    microchipped: false,
+    dewormed: false,
+    houseTrained: false,
+    goodWithStrangers: false,
+    leashTrained: false,
+    crateTrained: false,
+    litterTrained: false,
+    apartmentFriendly: false,
   });
 
   const filteredPets = useMemo(() => {
@@ -113,17 +150,26 @@ export const ShelterListingsPage = () => {
       ageGroup: 'adult',
       size: 'medium',
       gender: 'male',
+      shelterId: '',
       status: 'Available',
       visibility: 'public',
       description: '',
       temperament: '',
-      imageUrl: '',
-      medicalHistory: '',
+      photoUrls: '',
+      medicalHistory: [''],
       behavioralNotes: '',
       vaccinated: true,
       spayedNeutered: false,
       goodWithKids: true,
       goodWithPets: true,
+      microchipped: false,
+      dewormed: false,
+      houseTrained: false,
+      goodWithStrangers: false,
+      leashTrained: false,
+      crateTrained: false,
+      litterTrained: false,
+      apartmentFriendly: false,
     });
 
   const openAdd = () => {
@@ -143,17 +189,27 @@ export const ShelterListingsPage = () => {
       ageGroup: pet.ageGroup,
       size: pet.size,
       gender: pet.gender,
+      shelterId: pet.shelterId,
       status: pet.status,
       visibility: pet.visibility,
       description: pet.description,
       temperament: pet.temperament.join(', '),
-      imageUrl: pet.imageUrl,
-      medicalHistory: pet.medicalHistory.join('\n'),
+      photoUrls: (pet.gallery.length > 0 ? pet.gallery : [pet.imageUrl]).join('\n'),
+      medicalHistory:
+        pet.medicalHistory.length > 0 ? [...pet.medicalHistory] : [''],
       behavioralNotes: pet.behavioralNotes,
       vaccinated: pet.vaccinated,
       spayedNeutered: pet.spayedNeutered,
       goodWithKids: pet.goodWithKids,
       goodWithPets: pet.goodWithPets,
+      microchipped: pet.microchipped ?? false,
+      dewormed: pet.dewormed ?? false,
+      houseTrained: pet.houseTrained ?? false,
+      goodWithStrangers: pet.goodWithStrangers ?? false,
+      leashTrained: pet.leashTrained ?? false,
+      crateTrained: pet.crateTrained ?? false,
+      litterTrained: pet.litterTrained ?? false,
+      apartmentFriendly: pet.apartmentFriendly ?? false,
     });
     setSlideOpen(true);
   };
@@ -163,6 +219,95 @@ export const ShelterListingsPage = () => {
     setEditingPet(null);
   };
 
+  // Photos: preview list derived from the textarea (links or uploaded base64).
+  const photoList = useMemo(
+    () =>
+      form.photoUrls
+        .split('\n')
+        .map((u) => u.trim())
+        .filter(Boolean),
+    [form.photoUrls],
+  );
+
+  // Uploadable photos — files are read as base64 data URLs and appended to
+  // the photo list. Storage upload (Supabase) can replace this later.
+  const handlePhotoFiles = (files: FileList | null) => {
+    if (!files || files.length === 0) return;
+    const images = Array.from(files).filter((f) => f.type.startsWith('image/'));
+    if (images.length === 0) return;
+    const readers = images.map(
+      (file) =>
+        new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(String(reader.result));
+          reader.onerror = () => reject(new Error(`Could not read ${file.name}`));
+          reader.readAsDataURL(file);
+        }),
+    );
+    Promise.all(readers)
+      .then((dataUrls) => {
+        setForm((prev) => ({
+          ...prev,
+          photoUrls: [prev.photoUrls.trim(), ...dataUrls].filter(Boolean).join('\n'),
+        }));
+      })
+      .catch(() => {
+        // Keep existing photos if a file fails to read.
+      });
+  };
+
+  const removePhoto = (index: number) => {
+    setForm((prev) => ({
+      ...prev,
+      photoUrls: prev.photoUrls
+        .split('\n')
+        .map((u) => u.trim())
+        .filter(Boolean)
+        .filter((_, i) => i !== index)
+        .join('\n'),
+    }));
+  };
+
+  // Medical history: per-line inputs (not one textarea).
+  const updateMedicalRow = (index: number, value: string) => {
+    setForm((prev) => ({
+      ...prev,
+      medicalHistory: prev.medicalHistory.map((m, i) => (i === index ? value : m)),
+    }));
+  };
+
+  const addMedicalRow = () => {
+    setForm((prev) => ({ ...prev, medicalHistory: [...prev.medicalHistory, ''] }));
+  };
+
+  const removeMedicalRow = (index: number) => {
+    setForm((prev) => ({
+      ...prev,
+      medicalHistory:
+        prev.medicalHistory.length <= 1
+          ? ['']
+          : prev.medicalHistory.filter((_, i) => i !== index),
+    }));
+  };
+
+  const addMedicalPreset = (preset: string) => {
+    setForm((prev) => {
+      const trimmed = prev.medicalHistory.map((m) => m.trim()).filter(Boolean);
+      if (trimmed.includes(preset)) return prev;
+      // Fill the first empty row if there is one, otherwise append.
+      const emptyIndex = prev.medicalHistory.findIndex((m) => m.trim() === '');
+      if (emptyIndex >= 0) {
+        return {
+          ...prev,
+          medicalHistory: prev.medicalHistory.map((m, i) =>
+            i === emptyIndex ? preset : m,
+          ),
+        };
+      }
+      return { ...prev, medicalHistory: [...prev.medicalHistory, preset] };
+    });
+  };
+
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     const temperament = form.temperament
@@ -170,30 +315,50 @@ export const ShelterListingsPage = () => {
       .map((t) => t.trim())
       .filter(Boolean);
     const medicalHistory = form.medicalHistory
-      .split('\n')
       .map((m) => m.trim())
       .filter(Boolean);
+    // Gallery: one photo URL per line; the first photo is the cover adopters see first.
+    const photoUrls = form.photoUrls
+      .split('\n')
+      .map((u) => u.trim())
+      .filter(Boolean);
+    const FALLBACK_PHOTO =
+      'https://images.unsplash.com/photo-1548199973-03cce0bbc87b?auto=format&fit=crop&w=800&q=80';
+    const gallery = photoUrls.length > 0 ? photoUrls : [FALLBACK_PHOTO];
+    const rawAge = Number(form.ageYears);
+    const ageYears = Number.isNaN(rawAge) ? 1 : Math.max(0, rawAge);
+    const shelterId =
+      form.shelterId || shelters[0]?.id || editingPet?.shelterId || 's1';
     if (editingPet) {
       const updated = await petService.update(editingPet.id, {
         name: form.name,
         species: form.species as 'dog' | 'cat' | 'rabbit' | 'bird' | 'other',
         breed: form.breed || 'Mixed',
-        ageYears: Number(form.ageYears) || 1,
+        ageYears,
         ageGroup: form.ageGroup,
         size: form.size as 'small' | 'medium' | 'large',
         gender: form.gender as 'male' | 'female',
+        shelterId,
         status: form.status,
         visibility: form.visibility,
         description: form.description || editingPet.description,
         temperament: temperament.length > 0 ? temperament : editingPet.temperament,
-        imageUrl: form.imageUrl || editingPet.imageUrl,
-        gallery: form.imageUrl ? [form.imageUrl] : editingPet.gallery,
+        imageUrl: gallery[0],
+        gallery,
         medicalHistory: medicalHistory.length > 0 ? medicalHistory : editingPet.medicalHistory,
         behavioralNotes: form.behavioralNotes || editingPet.behavioralNotes,
         vaccinated: form.vaccinated,
         spayedNeutered: form.spayedNeutered,
         goodWithKids: form.goodWithKids,
         goodWithPets: form.goodWithPets,
+        microchipped: form.microchipped,
+        dewormed: form.dewormed,
+        houseTrained: form.houseTrained,
+        goodWithStrangers: form.goodWithStrangers,
+        leashTrained: form.leashTrained,
+        crateTrained: form.crateTrained,
+        litterTrained: form.litterTrained,
+        apartmentFriendly: form.apartmentFriendly,
       });
       if (updated) setPets((prev) => prev.map((p) => (p.id === updated.id ? updated : p)));
       closeSlide();
@@ -203,27 +368,31 @@ export const ShelterListingsPage = () => {
       name: form.name,
       species: form.species as 'dog' | 'cat' | 'rabbit' | 'bird' | 'other',
       breed: form.breed || 'Mixed',
-      ageYears: Number(form.ageYears) || 1,
+      ageYears,
       ageGroup: form.ageGroup,
       size: form.size as 'small' | 'medium' | 'large',
       gender: form.gender as 'male' | 'female',
       temperament: temperament.length > 0 ? temperament : ['Friendly'],
-      shelterId: 's1',
+      shelterId,
       visibility: form.visibility,
       description: form.description || 'New rescue looking for a home.',
-      medicalHistory: medicalHistory.length > 0 ? medicalHistory : ['Vet-checked'],
+      medicalHistory: medicalHistory.length > 0 ? medicalHistory : ['Vet health check'],
       behavioralNotes: form.behavioralNotes || 'Assessment in progress.',
       status: form.status,
-      imageUrl:
-        form.imageUrl ||
-        'https://images.unsplash.com/photo-1548199973-03cce0bbc87b?auto=format&fit=crop&w=800&q=80',
-      gallery: form.imageUrl
-        ? [form.imageUrl]
-        : ['https://images.unsplash.com/photo-1548199973-03cce0bbc87b?auto=format&fit=crop&w=800&q=80'],
+      imageUrl: gallery[0],
+      gallery,
       vaccinated: form.vaccinated,
       spayedNeutered: form.spayedNeutered,
       goodWithKids: form.goodWithKids,
       goodWithPets: form.goodWithPets,
+      microchipped: form.microchipped,
+      dewormed: form.dewormed,
+      houseTrained: form.houseTrained,
+      goodWithStrangers: form.goodWithStrangers,
+      leashTrained: form.leashTrained,
+      crateTrained: form.crateTrained,
+      litterTrained: form.litterTrained,
+      apartmentFriendly: form.apartmentFriendly,
     });
     setPets((prev) => [created, ...prev]);
     closeSlide();
@@ -308,7 +477,7 @@ export const ShelterListingsPage = () => {
     ) : undefined;
 
   return (
-    <Container className="py-6">
+    <div className="w-full px-4 py-6 sm:px-6">
       <SectionHeader
         title="Pet listings"
         subtitle="Manage your public listings and private inventory."
@@ -485,6 +654,7 @@ export const ShelterListingsPage = () => {
             <Input
               value={form.name}
               onChange={(e) => setForm({ ...form, name: e.target.value })}
+              placeholder="e.g. Buddy"
               required
             />
           </div>
@@ -520,6 +690,7 @@ export const ShelterListingsPage = () => {
                 value={form.breed}
                 onChange={(e) => setForm({ ...form, breed: e.target.value })}
                 placeholder="e.g. Aspin"
+                required
               />
             </div>
             <div>
@@ -569,6 +740,18 @@ export const ShelterListingsPage = () => {
               />
             </div>
           </div>
+          <div>
+            <Label>Shelter</Label>
+            <Select
+              value={form.shelterId}
+              onChange={(e) => setForm({ ...form, shelterId: e.target.value })}
+              options={[
+                { value: '', label: 'Select shelter…' },
+                ...shelters.map((s) => ({ value: s.id, label: s.name })),
+              ]}
+              required
+            />
+          </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
               <Label>Status</Label>
@@ -588,27 +771,112 @@ export const ShelterListingsPage = () => {
             </div>
           </div>
           <div>
-            <Label>Photo URL</Label>
-            <Input
-              value={form.imageUrl}
-              onChange={(e) => setForm({ ...form, imageUrl: e.target.value })}
-              placeholder="https://…"
-            />
+            <Label>Photos (first photo is the cover)</Label>
+            <div className="mt-1.5 flex flex-wrap items-center gap-2">
+              <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border px-3 py-2 text-sm font-medium transition-colors hover:bg-muted">
+                <ImagePlus className="size-4" /> Upload photos
+                <input
+                  type="file"
+                  accept="image/*"
+                  multiple
+                  className="hidden"
+                  aria-label="Upload pet photos"
+                  onChange={(e) => {
+                    handlePhotoFiles(e.target.files);
+                    e.target.value = '';
+                  }}
+                />
+              </label>
+            </div>
+            {photoList.length > 0 && (
+              <div className="mt-2 grid grid-cols-4 gap-2">
+                {photoList.map((src, i) => (
+                  <div
+                    key={`${i}-${src.slice(0, 32)}`}
+                    className="relative overflow-hidden rounded-lg border"
+                  >
+                    <img
+                      src={src}
+                      alt={`Pet photo ${i + 1}`}
+                      className="h-20 w-full object-cover"
+                    />
+                    {i === 0 && (
+                      <span className="absolute left-1 top-1 rounded bg-black/60 px-1.5 py-0.5 text-[10px] font-semibold text-white">
+                        Cover
+                      </span>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => removePhoto(i)}
+                      aria-label={`Remove photo ${i + 1}`}
+                      className="absolute right-1 top-1 flex size-6 items-center justify-center rounded-md bg-black/60 text-white transition-colors hover:bg-black/80"
+                    >
+                      <X className="size-3.5" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+            <p className="mt-2 text-xs text-muted-foreground">
+              {photoList.length === 0
+                ? 'No photos yet — upload images to add them.'
+                : `${photoList.length} photo${photoList.length > 1 ? 's' : ''} added.`}
+            </p>
           </div>
           <div>
             <Label>Description</Label>
             <Textarea
               value={form.description}
               onChange={(e) => setForm({ ...form, description: e.target.value })}
+              placeholder="e.g. A cheerful dog who loves fetch, swimming, and cuddles…"
+              required
             />
           </div>
           <div>
             <Label>Medical history (one per line)</Label>
-            <Textarea
-              value={form.medicalHistory}
-              onChange={(e) => setForm({ ...form, medicalHistory: e.target.value })}
-              placeholder={'Fully vaccinated\nDewormed'}
-            />
+            <div className="mt-1.5 flex flex-wrap gap-1.5">
+              {MEDICAL_PRESETS.map((preset) => (
+                <button
+                  key={preset}
+                  type="button"
+                  onClick={() => addMedicalPreset(preset)}
+                  className="rounded-full border px-2.5 py-1 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                >
+                  + {preset}
+                </button>
+              ))}
+            </div>
+            <div className="mt-2 space-y-2">
+              {form.medicalHistory.map((row, i) => (
+                <div key={i} className="flex items-center gap-2">
+                  <Input
+                    value={row}
+                    onChange={(e) => updateMedicalRow(i, e.target.value)}
+                    placeholder={`Record ${i + 1} — e.g. Rabies vaccine`}
+                    aria-label={`Medical record ${i + 1}`}
+                  />
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon-sm"
+                    aria-label={`Remove medical record ${i + 1}`}
+                    onClick={() => removeMedicalRow(i)}
+                    className="shrink-0 text-muted-foreground hover:text-red-600"
+                  >
+                    <X className="size-4" />
+                  </Button>
+                </div>
+              ))}
+            </div>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={addMedicalRow}
+              className="mt-2"
+            >
+              <Plus className="size-3.5" /> Add record
+            </Button>
           </div>
           <div>
             <Label>Behavioral notes</Label>
@@ -616,19 +884,13 @@ export const ShelterListingsPage = () => {
               value={form.behavioralNotes}
               onChange={(e) => setForm({ ...form, behavioralNotes: e.target.value })}
               placeholder="e.g. Good with kids, house-trained…"
+              required
             />
           </div>
           <fieldset>
             <Label>Care flags</Label>
             <div className="mt-1.5 grid grid-cols-2 gap-2">
-              {(
-                [
-                  ['vaccinated', 'Vaccinated'],
-                  ['spayedNeutered', 'Spayed / Neutered'],
-                  ['goodWithKids', 'Good with kids'],
-                  ['goodWithPets', 'Good with pets'],
-                ] as const
-              ).map(([key, label]) => (
+              {CARE_FLAG_OPTIONS.map(([key, label]) => (
                 <label
                   key={key}
                   className="flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-2 text-sm"
@@ -668,11 +930,25 @@ export const ShelterListingsPage = () => {
       >
         {detailsPet && (
           <div className="space-y-4">
-            <img
-              src={detailsPet.imageUrl}
-              alt={detailsPet.name}
-              className="h-56 w-full rounded-lg border object-cover"
-            />
+            <div>
+              <img
+                src={detailsPet.imageUrl}
+                alt={detailsPet.name}
+                className="h-56 w-full rounded-lg border object-cover"
+              />
+              {detailsPet.gallery.length > 1 && (
+                <div className="mt-2 grid grid-cols-4 gap-2">
+                  {detailsPet.gallery.map((src, i) => (
+                    <img
+                      key={`${src}-${i}`}
+                      src={src}
+                      alt={`${detailsPet.name} photo ${i + 1}`}
+                      className="h-16 w-full rounded-lg border object-cover"
+                    />
+                  ))}
+                </div>
+              )}
+            </div>
             <div className="flex flex-wrap gap-1.5">
               <PetStatusBadge status={detailsPet.status} />
               <VisibilityBadge visibility={detailsPet.visibility} />
@@ -719,6 +995,14 @@ export const ShelterListingsPage = () => {
                     ['Spayed / Neutered', detailsPet.spayedNeutered],
                     ['Good with kids', detailsPet.goodWithKids],
                     ['Good with pets', detailsPet.goodWithPets],
+                    ['Microchipped', detailsPet.microchipped ?? false],
+                    ['Dewormed', detailsPet.dewormed ?? false],
+                    ['House-trained', detailsPet.houseTrained ?? false],
+                    ['Good with strangers', detailsPet.goodWithStrangers ?? false],
+                    ['Leash-trained', detailsPet.leashTrained ?? false],
+                    ['Crate-trained', detailsPet.crateTrained ?? false],
+                    ['Litter-trained', detailsPet.litterTrained ?? false],
+                    ['Apartment-friendly', detailsPet.apartmentFriendly ?? false],
                   ] as const
                 ).map(([label, ok]) => (
                   <p key={label} className="flex items-center gap-1.5 text-muted-foreground">
@@ -747,6 +1031,6 @@ export const ShelterListingsPage = () => {
           </div>
         )}
       </DetailsModal>
-    </Container>
+    </div>
   );
 };

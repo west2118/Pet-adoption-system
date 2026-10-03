@@ -19,7 +19,6 @@ import {
 import { useMemo, useState } from 'react';
 import type { FormEvent } from 'react';
 import { Link } from 'react-router-dom';
-import { Container } from '@/components/layout/Container';
 import {
   ChartCard,
   DetailsModal,
@@ -527,7 +526,7 @@ export const PlatformAdminPage = ({ initialSection = 'overview' }: PlatformAdmin
     ) : undefined;
 
   return (
-    <Container className="py-6">
+    <div className="w-full px-4 py-6 sm:px-6">
       <SectionHeader
         title="Platform administration"
         subtitle="Developer oversight — all shelters, all users, and global metrics."
@@ -1445,6 +1444,6 @@ export const PlatformAdminPage = ({ initialSection = 'overview' }: PlatformAdmin
           </div>
         )}
       </DetailsModal>
-    </Container>
+    </div>
   );
 };

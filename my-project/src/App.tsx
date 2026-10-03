@@ -18,6 +18,7 @@ import { ShelterOverviewPage } from '@/pages/shelter/ShelterOverviewPage';
 import { ShelterListingsPage } from '@/pages/shelter/ShelterListingsPage';
 import { ShelterApplicationsPage } from '@/pages/shelter/ShelterApplicationsPage';
 import { ShelterInquiriesPage } from '@/pages/shelter/ShelterInquiriesPage';
+import { ShelterEWaiversPage } from '@/pages/shelter/ShelterEWaiversPage';
 import { ShelterProfilePage } from '@/pages/shelter/ShelterProfilePage';
 import { PlatformAdminPage } from '@/pages/PlatformAdminPage';
 import { NotFoundPage } from '@/pages/NotFoundPage';
@@ -55,6 +56,7 @@ const App = (): React.JSX.Element => {
               <Route path="shelter/listings" element={<ShelterListingsPage />} />
               <Route path="shelter/applications" element={<ShelterApplicationsPage />} />
               <Route path="shelter/inquiries" element={<ShelterInquiriesPage />} />
+              <Route path="shelter/templates/e-waivers" element={<ShelterEWaiversPage />} />
               <Route path="shelter/profile" element={<ShelterProfilePage />} />
             </Route>
             {/* </Route> */}

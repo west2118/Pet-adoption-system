@@ -10,7 +10,7 @@ export const AdminSidebar = ({ mobileOpen = false, onClose }: AdminSidebarProps)
   return (
     <PortalSidebar
       brandTitle="Platform Admin"
-      brandSubtitle="PawsConnect"
+      brandSubtitle="Paws&Homes"
       mobileOpen={mobileOpen}
       onClose={onClose}
       links={[

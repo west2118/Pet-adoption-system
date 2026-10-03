@@ -1,7 +1,11 @@
 import { useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
+import type { Pet } from '@/types';
 import { Container } from '@/components/layout/Container';
+import { Reveal } from '@/components/shared';
 import { FilterBar } from '@/components/features/FilterBar';
+import { PetsHero } from '@/components/features/PetsHero';
+import { PetsTicker } from '@/components/features/PetsTicker';
 import { PetCard } from '@/components/features/PetCard';
 import { EmptyState, LoadingGrid } from '@/components/ui/Feedback';
 import { Button } from '@/components/ui/button';
@@ -17,22 +21,27 @@ export const BrowsePetsPage = () => {
 
   const visiblePets = useMemo(() => publicPets(pets), [pets]);
 
-  const { filters, updateFilter, resetFilters, filteredPets, activeFilterCount } =
-    usePetFilter(visiblePets, shelters);
+  const { filters, updateFilter, clearFilter, resetFilters, filteredPets, activeFilterCount } =
+    usePetFilter(visiblePets, shelters, presetLocation);
 
-  // Apply ?location= preset once shelters/pets are ready
-  const effectivePets = useMemo(() => {
-    if (presetLocation !== 'all' && filters.location === 'all') {
-      const q = filters.search.trim().toLowerCase();
-      return visiblePets.filter((pet) => {
-        const loc = shelters.find((s) => s.id === pet.shelterId)?.location ?? '';
-        if (loc !== presetLocation) return false;
-        if (q && !`${pet.name} ${pet.breed}`.toLowerCase().includes(q)) return false;
-        return true;
-      });
-    }
-    return filteredPets;
-  }, [presetLocation, filters, filteredPets, visiblePets, shelters]);
+  const adoptablePets = useMemo(
+    () => visiblePets.filter((pet) => pet.status === 'Available'),
+    [visiblePets],
+  );
+  const adoptedCount = useMemo(
+    () => visiblePets.filter((pet) => pet.status === 'Adopted').length,
+    [visiblePets],
+  );
+  /** Adoptable animals lead the orbit ring; the rest fill it out behind them. */
+  const orbitPets = useMemo(() => {
+    const statusRank: Record<Pet['status'], number> = {
+      Available: 0,
+      'Pending Adoption': 1,
+      Fostered: 2,
+      Adopted: 3,
+    };
+    return [...visiblePets].sort((a, b) => statusRank[a.status] - statusRank[b.status]);
+  }, [visiblePets]);
 
   const breeds = useMemo(
     () => Array.from(new Set(visiblePets.map((p) => p.breed))).sort(),
@@ -47,61 +56,117 @@ export const BrowsePetsPage = () => {
     [visiblePets],
   );
 
-  const shelterLocation = (shelterId: string) =>
-    shelters.find((s) => s.id === shelterId)?.location;
+  const locationByShelter = useMemo(
+    () => new Map(shelters.map((s) => [s.id, s.location])),
+    [shelters],
+  );
+
+  const tickerItems = useMemo(
+    () =>
+      orbitPets.slice(0, 8).map((pet) => {
+        const location = locationByShelter.get(pet.shelterId);
+        return location ? `${pet.name} · ${location}` : pet.name;
+      }),
+    [orbitPets, locationByShelter],
+  );
+
+  /**
+   * Keying the grid on the facet selects makes React remount the cards, which
+   * replays their `Reveal` cascade whenever a filter changes. `search` is left out
+   * on purpose — re-keying on every keystroke would make typing feel like the
+   * grid is thrashing, and search results already update instantly.
+   */
+  const facetSignature = useMemo(
+    () =>
+      Object.entries(filters)
+        .filter(([key]) => key !== 'search')
+        .map(([key, value]) => `${key}:${value}`)
+        .join('|'),
+    [filters],
+  );
 
   return (
-    <Container className="py-6">
-      <div className="flex flex-wrap items-end justify-between gap-2">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">Browse pets</h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            {effectivePets.length} result{effectivePets.length === 1 ? '' : 's'}
-            {activeFilterCount > 0 ? ` · ${activeFilterCount} filter(s) active` : ''}
-          </p>
+    <div className="landing-theme">
+      <PetsHero
+        pets={orbitPets}
+        availableCount={adoptablePets.length}
+        shelterCount={shelters.length}
+        listedCount={visiblePets.length}
+        adoptedCount={adoptedCount}
+      />
+
+      <PetsTicker items={tickerItems} />
+
+      <Container className="py-10 lg:py-14">
+        <div id="pet-listings" className="scroll-mt-28">
+          <Reveal>
+            <span className="inline-flex items-center gap-3 font-mono text-sm text-muted-foreground">
+              <span className="h-px w-12 bg-[var(--brand)]" />
+              Listings
+            </span>
+
+            <h2 className="mt-6 font-display text-[clamp(2rem,4vw,3.25rem)] leading-[0.95] tracking-tight">
+              {filteredPets.length}{' '}
+              <span className="text-foreground/45">
+                {filteredPets.length === 1 ? 'pet' : 'pets'} ready to meet
+              </span>
+            </h2>
+
+            <p className="mt-3 text-sm text-muted-foreground">
+              {activeFilterCount > 0
+                ? `${activeFilterCount} filter${activeFilterCount === 1 ? '' : 's'} applied`
+                : 'Every adoptable animal across our partner shelters.'}
+            </p>
+          </Reveal>
         </div>
-      </div>
 
-      <div className="mt-5">
-        <FilterBar
-          filters={filters}
-          onChange={updateFilter}
-          onReset={resetFilters}
-          activeCount={activeFilterCount}
-          breeds={breeds}
-          locations={locations}
-          temperaments={temperaments}
-        />
-      </div>
-
-      <div className="mt-6">
-        {loading ? (
-          <LoadingGrid count={6} />
-        ) : error ? (
-          <EmptyState title="Could not load pets" description={error} />
-        ) : effectivePets.length === 0 ? (
-          <EmptyState
-            title="No pets match your filters"
-            description="Try clearing a filter or searching for a different breed."
-            icon="search"
-            action={
-              <Button variant="outline" size="sm" onClick={resetFilters}>
-                Clear all filters
-              </Button>
-            }
+        <Reveal delay={100} className="mt-8">
+          <FilterBar
+            filters={filters}
+            onChange={updateFilter}
+            onClear={clearFilter}
+            onReset={resetFilters}
+            activeCount={activeFilterCount}
+            breeds={breeds}
+            locations={locations}
+            temperaments={temperaments}
           />
-        ) : (
-          <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-            {effectivePets.map((pet) => (
-              <PetCard
-                key={pet.id}
-                pet={pet}
-                shelterLocation={shelterLocation(pet.shelterId)}
-              />
-            ))}
-          </div>
-        )}
-      </div>
-    </Container>
+        </Reveal>
+
+        <div className="mt-8">
+          {loading ? (
+            <LoadingGrid count={6} />
+          ) : error ? (
+            <EmptyState title="Could not load pets" description={error} />
+          ) : filteredPets.length === 0 ? (
+            <EmptyState
+              title="No pets match your filters"
+              description="Try clearing a filter or searching for a different breed."
+              icon="search"
+              action={
+                <Button variant="outline" size="sm" onClick={resetFilters}>
+                  Clear all filters
+                </Button>
+              }
+            />
+          ) : (
+            <div
+              key={facetSignature}
+              className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3"
+            >
+              {filteredPets.map((pet, index) => (
+                <Reveal key={pet.id} delay={Math.min(index, 8) * 70}>
+                  <PetCard
+                    pet={pet}
+                    className="h-full"
+                    shelterLocation={locationByShelter.get(pet.shelterId)}
+                  />
+                </Reveal>
+              ))}
+            </div>
+          )}
+        </div>
+      </Container>
+    </div>
   );
 };

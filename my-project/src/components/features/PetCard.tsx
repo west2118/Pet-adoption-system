@@ -13,21 +13,33 @@ interface PetCardProps {
   shelterLocation?: string;
   children?: React.ReactNode;
   showVisibility?: boolean;
+  className?: string;
 }
 
-export const PetCard = ({ pet, shelterLocation, children, showVisibility = false }: PetCardProps) => {
+export const PetCard = ({
+  pet,
+  shelterLocation,
+  children,
+  showVisibility = false,
+  className,
+}: PetCardProps) => {
   const { isFavorite, toggleFavorite } = useFavorites();
   const favorite = isFavorite(pet.id);
 
   return (
-    <article className="group overflow-hidden rounded-xl border bg-card shadow-sm transition-shadow hover:shadow-md">
-      <div className="relative">
+    <article
+      className={cn(
+        'group flex h-full flex-col overflow-hidden rounded-none border bg-card transition-colors hover:border-primary/40',
+        className,
+      )}
+    >
+      <div className="relative shrink-0">
         <Link to={`/pets/${pet.id}`}>
           <img
             src={pet.imageUrl}
             alt={pet.name}
             loading="lazy"
-            className="h-52 w-full object-cover transition-transform duration-300 group-hover:scale-[1.02]"
+            className="aspect-[4/3] w-full object-cover transition-transform duration-300 group-hover:scale-[1.02]"
           />
         </Link>
         <div className="absolute left-3 top-3 flex gap-1.5">
@@ -48,7 +60,7 @@ export const PetCard = ({ pet, shelterLocation, children, showVisibility = false
         </button>
       </div>
 
-      <div className="p-4">
+      <div className="flex flex-1 flex-col p-4">
         <div className="flex items-start justify-between gap-2">
           <div>
             <Link to={`/pets/${pet.id}`} className="hover:underline">
@@ -63,7 +75,7 @@ export const PetCard = ({ pet, shelterLocation, children, showVisibility = false
           </Badge>
         </div>
 
-        <div className="mt-2 flex flex-wrap gap-1.5">
+        <div className="mt-3 flex shrink-0 flex-wrap gap-1.5">
           <Badge variant="muted" className="capitalize">{pet.gender}</Badge>
           <Badge variant="muted" className="capitalize">{pet.size}</Badge>
           {pet.temperament.slice(0, 2).map((t) => (
@@ -78,7 +90,7 @@ export const PetCard = ({ pet, shelterLocation, children, showVisibility = false
         )}
 
         {children ?? (
-          <div className="mt-3 flex gap-2">
+          <div className="mt-auto flex gap-2 pt-3">
             <Link to={`/pets/${pet.id}`} className="flex-1">
               <Button variant="outline" size="sm" className="w-full">
                 View profile

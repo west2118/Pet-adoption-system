@@ -145,6 +145,10 @@ export const PetDetailsPage = () => {
                     Vaccinated: {pet.vaccinated ? 'Yes' : 'No'} · Spayed/Neutered:{' '}
                     {pet.spayedNeutered ? 'Yes' : 'No'}
                   </p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Microchipped: {pet.microchipped ? 'Yes' : 'No'} · Dewormed:{' '}
+                    {pet.dewormed ? 'Yes' : 'No'}
+                  </p>
                 </div>
                 <div className="rounded-lg border p-3">
                   <h4 className="text-sm font-semibold">Behavioral notes</h4>
@@ -152,6 +156,18 @@ export const PetDetailsPage = () => {
                   <p className="mt-2 text-xs text-muted-foreground">
                     Good with kids: {pet.goodWithKids ? 'Yes' : 'No'} · Good with
                     pets: {pet.goodWithPets ? 'Yes' : 'No'}
+                  </p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    House-trained: {pet.houseTrained ? 'Yes' : 'No'} · Good with
+                    strangers: {pet.goodWithStrangers ? 'Yes' : 'No'}
+                  </p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Leash-trained: {pet.leashTrained ? 'Yes' : 'No'} · Crate-trained:{' '}
+                    {pet.crateTrained ? 'Yes' : 'No'}
+                  </p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Litter-trained: {pet.litterTrained ? 'Yes' : 'No'} · Apartment-friendly:{' '}
+                    {pet.apartmentFriendly ? 'Yes' : 'No'}
                   </p>
                 </div>
               </div>

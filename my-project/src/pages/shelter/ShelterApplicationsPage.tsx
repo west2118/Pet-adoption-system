@@ -8,7 +8,6 @@ import {
   X,
 } from 'lucide-react';
 import { useMemo, useState } from 'react';
-import { Container } from '@/components/layout/Container';
 import { DetailsModal, RecordCard, SectionHeader, TableCard } from '@/components/shared';
 import {
   Table,
@@ -147,7 +146,7 @@ export const ShelterApplicationsPage = () => {
   const petOf = (petId: string) => pets.find((p) => p.id === petId);
 
   return (
-    <Container className="py-6">
+    <div className="w-full px-4 py-6 sm:px-6">
       <SectionHeader
         title="Adoption applications"
         subtitle="Review incoming requests, approve or reject, and keep staff notes."
@@ -402,6 +401,6 @@ export const ShelterApplicationsPage = () => {
           </div>
         )}
       </DetailsModal>
-    </Container>
+    </div>
   );
 };

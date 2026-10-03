@@ -1,7 +1,8 @@
 import type { LucideIcon } from 'lucide-react';
 import { X } from 'lucide-react';
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import type { ReactNode } from 'react';
+import { useScrollLock } from '@/hooks/useScrollLock';
 import { cn } from '@/lib/utils';
 
 const sizeClasses = {
@@ -34,31 +35,38 @@ export const DetailsModal = ({
   footer,
   size = 'md',
 }: DetailsModalProps) => {
+  const overlayRef = useRef<HTMLDivElement>(null);
+
+  useScrollLock(open, overlayRef);
+
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') onClose();
     };
     document.addEventListener('keydown', onKey);
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
     return () => {
       document.removeEventListener('keydown', onKey);
-      document.body.style.overflow = prev;
     };
   }, [open, onClose]);
 
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-50" role="dialog" aria-modal="true" aria-label={title}>
+    <div
+      ref={overlayRef}
+      className="fixed inset-0 z-50"
+      role="dialog"
+      aria-modal="true"
+      aria-label={title}
+    >
       <div
         className="absolute inset-0 animate-in bg-black/40 fade-in duration-200"
         onClick={onClose}
         aria-hidden="true"
       />
-      <div className="absolute inset-0 overflow-y-auto">
-        <div className="flex min-h-full items-center justify-center p-4">
+      <div className="absolute inset-0 overflow-hidden">
+        <div className="flex h-full items-center justify-center p-4">
           <div
             className={cn(
               'flex max-h-[85vh] w-full animate-in flex-col overflow-hidden rounded-xl border bg-card shadow-xl fade-in zoom-in-95 duration-200',
@@ -87,7 +95,7 @@ export const DetailsModal = ({
               </button>
             </div>
 
-            <div className="min-h-0 flex-1 overflow-y-auto p-5">{children}</div>
+            <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-5">{children}</div>
 
             {footer ? <div className="shrink-0 border-t p-4">{footer}</div> : null}
           </div>

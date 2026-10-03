@@ -15,6 +15,8 @@ const segmentLabels: Record<string, string> = {
   inquiries: 'Inquiries',
   profile: 'Profile',
   users: 'Users',
+  templates: 'Templates',
+  'e-waivers': 'E-Waivers',
   dashboard: 'Dashboard',
   login: 'Sign in',
   signup: 'Sign up',

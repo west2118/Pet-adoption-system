@@ -1,4 +1,4 @@
-import { Building2, ClipboardList, LayoutDashboard, MessageCircleQuestion, PawPrint } from 'lucide-react';
+import { Building2, ClipboardList, FileSignature, FileText, LayoutDashboard, MessageCircleQuestion, PawPrint } from 'lucide-react';
 import { PortalSidebar } from './PortalSidebar';
 
 interface ShelterSidebarProps {
@@ -10,7 +10,7 @@ export const ShelterSidebar = ({ mobileOpen = false, onClose }: ShelterSidebarPr
   return (
     <PortalSidebar
       brandTitle="Shelter Portal"
-      brandSubtitle="PawsConnect"
+      brandSubtitle="Paws&Homes"
       mobileOpen={mobileOpen}
       onClose={onClose}
       links={[
@@ -18,6 +18,13 @@ export const ShelterSidebar = ({ mobileOpen = false, onClose }: ShelterSidebarPr
         { to: '/shelter/listings', label: 'Listings', icon: PawPrint },
         { to: '/shelter/applications', label: 'Applications', icon: ClipboardList },
         { to: '/shelter/inquiries', label: 'Inquiries', icon: MessageCircleQuestion },
+        {
+          label: 'Templates',
+          icon: FileText,
+          children: [
+            { to: '/shelter/templates/e-waivers', label: 'E-Waivers', icon: FileSignature },
+          ],
+        },
         { to: '/shelter/profile', label: 'Shelter Profile', icon: Building2 },
       ]}
     />

@@ -1,11 +1,10 @@
 import { Bell, Heart, LogOut, Menu, PawPrint, X } from 'lucide-react';
-import { useState } from 'react';
-import { Link, NavLink, useNavigate } from 'react-router-dom';
+import { useEffect, useState } from 'react';
+import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { useFavorites } from '@/hooks/useFavorites';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
-import { Container } from './Container';
 
 const links = [
   { to: '/', label: 'Home' },
@@ -14,96 +13,117 @@ const links = [
   { to: '/applications', label: 'My Applications' },
 ];
 
-const activeClass = 'bg-muted text-foreground';
-const idleClass = 'text-muted-foreground hover:bg-muted hover:text-foreground';
-
 export const Navbar = () => {
-  const { user, logout, switchRole } = useAuth();
+  const { user, logout } = useAuth();
   const { favorites } = useFavorites();
   const [open, setOpen] = useState(false);
+  const [scrolled, setScrolled] = useState(
+    () => typeof window !== 'undefined' && window.scrollY > 24,
+  );
+  const location = useLocation();
   const navigate = useNavigate();
+
+  // Only the landing page gets the transparent-over-hero treatment.
+  const onLanding = location.pathname === '/';
+
+  useEffect(() => {
+    if (!onLanding) return;
+    const onScroll = () => setScrolled(window.scrollY > 24);
+    window.addEventListener('scroll', onScroll, { passive: true });
+    return () => window.removeEventListener('scroll', onScroll);
+  }, [onLanding]);
 
   const handleLogout = () => {
     logout();
     navigate('/login');
   };
 
+  const visibleLinks = links.filter((l) => l.to !== '/applications' || Boolean(user));
+
+  const shell = onLanding ? 'landing-theme' : '';
+  const solid = !onLanding || scrolled;
+
   return (
-    <header className="sticky top-0 z-40 border-b bg-background/95 backdrop-blur">
-      <Container className="flex h-16 items-center justify-between gap-4">
-        <Link to="/" className="flex items-center gap-2">
-          <span className="flex size-9 items-center justify-center rounded-xl bg-orange-500 text-white">
+    <header
+      className={cn(
+        'fixed inset-x-0 top-0 z-40 transition-all duration-500',
+        shell,
+        solid
+          ? 'border-b border-border bg-background/80 backdrop-blur-xl'
+          : 'border-b border-transparent bg-transparent',
+      )}
+    >
+      <div className="mx-auto flex h-20 w-full max-w-[1400px] items-center justify-between gap-4 px-6 lg:px-12">
+        <Link to="/" className="group flex items-center gap-2">
+          <span className="flex size-9 items-center justify-center rounded-xl bg-[var(--brand)] text-white transition-transform duration-500 group-hover:scale-105">
             <PawPrint className="size-5" />
           </span>
-          <span className="text-lg font-bold tracking-tight">
-            Paws<span className="text-orange-500">Connect</span>
+          <span className="font-display text-2xl tracking-tight">
+            Paws&Homes
           </span>
         </Link>
 
-        <nav className="hidden items-center gap-1 lg:flex">
-          {links.map((l) => (
+        <nav className="hidden items-center gap-10 lg:flex">
+          {visibleLinks.map((l) => (
             <NavLink
               key={l.to}
               to={l.to}
+              end={l.to === '/'}
               className={({ isActive }) =>
                 cn(
-                  'rounded-lg px-3 py-2 text-sm font-medium transition-colors',
-                  isActive ? activeClass : idleClass,
+                  'group relative text-sm transition-colors duration-300',
+                  isActive
+                    ? 'text-foreground'
+                    : 'text-muted-foreground hover:text-foreground',
                 )
               }
             >
               {l.label}
+              <span className="absolute -bottom-1 left-0 h-px w-0 bg-current transition-all duration-300 group-hover:w-full" />
             </NavLink>
           ))}
         </nav>
 
-        <div className="hidden items-center gap-2 lg:flex">
-          <select
-            aria-label="Switch role (demo RBAC)"
-            value={user?.role ?? 'adopter'}
-            onChange={(e) =>
-              switchRole(e.target.value as 'adopter' | 'shelter_staff' | 'platform_admin')
-            }
-            className="h-9 rounded-lg border border-input bg-background px-2 text-xs font-medium"
-          >
-            <option value="adopter">Adopter</option>
-            <option value="shelter_staff">Shelter Staff</option>
-            <option value="platform_admin">Platform Admin</option>
-          </select>
+        <div className="hidden items-center gap-3 lg:flex">
+          {user && (
+            <>
+              <Link
+                to="/favorites"
+                className="relative flex size-9 items-center justify-center rounded-full border border-border bg-background transition-colors hover:bg-muted"
+                aria-label="Favorites"
+              >
+                <Heart className="size-4" />
+                {favorites.length > 0 && (
+                  <span className="absolute -right-1 -top-1 flex size-5 items-center justify-center rounded-full bg-[var(--brand)] font-mono text-[10px] font-bold text-white">
+                    {favorites.length}
+                  </span>
+                )}
+              </Link>
 
-          <Link
-            to="/favorites"
-            className="relative flex size-9 items-center justify-center rounded-lg border hover:bg-muted"
-            aria-label="Favorites"
-          >
-            <Heart className="size-4" />
-            {favorites.length > 0 && (
-              <span className="absolute -right-1.5 -top-1.5 flex size-5 items-center justify-center rounded-full bg-orange-500 text-[10px] font-bold text-white">
-                {favorites.length}
-              </span>
-            )}
-          </Link>
-
-          <button
-            type="button"
-            className="flex size-9 items-center justify-center rounded-lg border hover:bg-muted"
-            aria-label="Notifications"
-            onClick={() => navigate('/applications')}
-          >
-            <Bell className="size-4" />
-          </button>
+              <button
+                type="button"
+                className="flex size-9 items-center justify-center rounded-full border border-border bg-background transition-colors hover:bg-muted"
+                aria-label="Notifications"
+                onClick={() => navigate('/applications')}
+              >
+                <Bell className="size-4" />
+              </button>
+            </>
+          )}
 
           {user ? (
-            <div className="flex items-center gap-2">
-              <span className="hidden text-xs text-muted-foreground xl:block">
-                {user.name}
-              </span>
-              <Button variant="outline" size="sm" onClick={handleLogout}>
-                <LogOut className="size-3.5" /> Logout
-              </Button>
-            </div>
+            <Button
+              variant="outline"
+              onClick={handleLogout}
+              className="h-9 rounded-full border-border bg-transparent px-4 hover:bg-muted hover:text-foreground"
+            >
+              <LogOut className="size-3.5" /> Logout
+            </Button>
           ) : (
-            <Button size="sm" onClick={() => navigate('/login')}>
+            <Button
+              onClick={() => navigate('/login')}
+              className="h-9 rounded-full px-5"
+            >
               Sign in
             </Button>
           )}
@@ -111,39 +131,67 @@ export const Navbar = () => {
 
         <button
           type="button"
-          className="flex size-9 items-center justify-center rounded-lg border lg:hidden"
+          className="flex size-9 items-center justify-center rounded-full border border-border bg-background lg:hidden"
           onClick={() => setOpen((v) => !v)}
           aria-label="Toggle menu"
+          aria-expanded={open}
         >
           {open ? <X className="size-5" /> : <Menu className="size-5" />}
         </button>
-      </Container>
+      </div>
 
       {open && (
-        <div className="border-t bg-background px-4 py-3 lg:hidden">
-          <nav className="flex flex-col gap-1">
-            {links.map((l) => (
+        <div
+          key={location.pathname}
+          className="border-t border-border bg-background/95 backdrop-blur-xl lg:hidden"
+        >
+          <nav className="mx-auto flex w-full max-w-[1400px] flex-col gap-1 px-6 py-4">
+            {visibleLinks.map((l) => (
               <NavLink
                 key={l.to}
                 to={l.to}
+                end={l.to === '/'}
                 onClick={() => setOpen(false)}
                 className={({ isActive }) =>
                   cn(
-                    'rounded-lg px-3 py-2 text-sm font-medium',
-                    isActive ? activeClass : idleClass,
+                    'rounded-lg px-3 py-2.5 text-sm transition-colors',
+                    isActive
+                      ? 'bg-muted text-foreground'
+                      : 'text-muted-foreground hover:text-foreground',
                   )
                 }
               >
                 {l.label}
               </NavLink>
             ))}
-            <NavLink
-              to="/favorites"
-              onClick={() => setOpen(false)}
-              className="rounded-lg px-3 py-2 text-sm font-medium text-muted-foreground hover:bg-muted"
-            >
-              Favorites ({favorites.length})
-            </NavLink>
+            {user && (
+              <NavLink
+                to="/favorites"
+                onClick={() => setOpen(false)}
+                className="rounded-lg px-3 py-2.5 text-sm text-muted-foreground transition-colors hover:text-foreground"
+              >
+                Favorites ({favorites.length})
+              </NavLink>
+            )}
+
+            <div className="mt-3 flex gap-3 border-t border-border pt-4">
+              {user ? (
+                <Button
+                  variant="outline"
+                  onClick={handleLogout}
+                  className="h-11 flex-1 rounded-full border-border bg-transparent"
+                >
+                  <LogOut className="size-4" /> Logout
+                </Button>
+              ) : (
+                <Button
+                  onClick={() => navigate('/login')}
+                  className="h-11 flex-1 rounded-full"
+                >
+                  Sign in
+                </Button>
+              )}
+            </div>
           </nav>
         </div>
       )}

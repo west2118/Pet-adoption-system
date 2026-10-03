@@ -12,7 +12,6 @@ import {
   TrendingUp,
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
-import { Container } from '@/components/layout/Container';
 import {
   ChartCard,
   SectionHeader,
@@ -44,7 +43,7 @@ export const ShelterOverviewPage = () => {
   } = useShelterOverview(pets, applications);
 
   return (
-    <Container className="py-6">
+    <div className="w-full px-4 py-6 sm:px-6">
       <SectionHeader
         title="Shelter overview"
         subtitle="A snapshot of your listings, applications, and adoption performance."
@@ -157,6 +156,6 @@ export const ShelterOverviewPage = () => {
       >
         <InventoryTable pets={inventory} />
       </TableCard>
-    </Container>
+    </div>
   );
 };
