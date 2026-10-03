@@ -1,0 +1,38 @@
+[  543757ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ http://localhost:5192/node_modules/.vite/deps/react-dom_client.js?v=407de551:15804
+[  687931ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ http://localhost:5192/node_modules/.vite/deps/react-dom_client.js?v=407de551:15804
+[  760235ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ http://localhost:5193/node_modules/.vite/deps/react-dom_client.js?v=407de551:15804
+[  800964ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ http://localhost:5193/node_modules/.vite/deps/react-dom_client.js?v=407de551:15804
+[  823161ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ http://localhost:5193/node_modules/.vite/deps/react-dom_client.js?v=407de551:15804
+[  923462ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ http://localhost:5193/node_modules/.vite/deps/react-dom_client.js?v=407de551:15804
+[  923532ms] [LOG] [dbg] effect start id= p1 @ http://localhost:5193/src/pages/PetDetailsPage.tsx?t=1791005368826:31
+[  923533ms] [LOG] [dbg] effect start id= p1 @ http://localhost:5193/src/pages/PetDetailsPage.tsx?t=1791005368826:31
+[  923689ms] [LOG] [dbg] gotById p1 @ http://localhost:5193/src/pages/PetDetailsPage.tsx?t=1791005368826:35
+[  923690ms] [LOG] [dbg] gotById p1 @ http://localhost:5193/src/pages/PetDetailsPage.tsx?t=1791005368826:35
+[  923955ms] [LOG] [dbg] shelters 3 mounted= false @ http://localhost:5193/src/pages/PetDetailsPage.tsx?t=1791005368826:37
+[  923955ms] [LOG] [dbg] shelters 3 mounted= true @ http://localhost:5193/src/pages/PetDetailsPage.tsx?t=1791005368826:37
+[  924206ms] [LOG] [dbg] allPets 9 mounted= false @ http://localhost:5193/src/pages/PetDetailsPage.tsx?t=1791005368826:39
+[  924206ms] [LOG] [dbg] allPets 9 mounted= true @ http://localhost:5193/src/pages/PetDetailsPage.tsx?t=1791005368826:39
+[  924207ms] [LOG] [dbg] setting loading false @ http://localhost:5193/src/pages/PetDetailsPage.tsx?t=1791005368826:45
+[  924246ms] [INFO] Images loaded lazily and replaced with placeholders. Load events are deferred. See https://go.microsoft.com/fwlink/?linkid=2048113 @ http://localhost:5193/pets/p1:0
+[  963873ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ http://localhost:5193/node_modules/.vite/deps/react-dom_client.js?v=407de551:15804
+[  964628ms] [INFO] Images loaded lazily and replaced with placeholders. Load events are deferred. See https://go.microsoft.com/fwlink/?linkid=2048113 @ http://localhost:5193/node_modules/.vite/deps/react-dom_client.js?v=407de551:10323
+[ 1007594ms] ReferenceError: capitalize is not defined
+    at PetHero (http://localhost:5193/src/components/features/PetHero.tsx?t=1791005470794:294:35)
+    at Object.react_stack_bottom_frame (http://localhost:5193/node_modules/.vite/deps/react-dom_client.js?v=407de551:14142:12)
+    at renderWithHooks (http://localhost:5193/node_modules/.vite/deps/react-dom_client.js?v=407de551:4400:19)
+    at updateFunctionComponent (http://localhost:5193/node_modules/.vite/deps/react-dom_client.js?v=407de551:5775:16)
+    at beginWork (http://localhost:5193/node_modules/.vite/deps/react-dom_client.js?v=407de551:6391:20)
+    at runWithFiberInDEV (http://localhost:5193/node_modules/.vite/deps/react-dom_client.js?v=407de551:944:66)
+    at performUnitOfWork (http://localhost:5193/node_modules/.vite/deps/react-dom_client.js?v=407de551:9148:92)
+    at workLoopSync (http://localhost:5193/node_modules/.vite/deps/react-dom_client.js?v=407de551:9044:37)
+    at renderRootSync (http://localhost:5193/node_modules/.vite/deps/react-dom_client.js?v=407de551:9028:6)
+    at performWorkOnRoot (http://localhost:5193/node_modules/.vite/deps/react-dom_client.js?v=407de551:8715:27)
+[ 1007597ms] [WARNING] %s
+
+%s
+ An error occurred in the <PetHero> component. Consider adding an error boundary to your tree to customize error handling behavior.
+Visit https://react.dev/link/error-boundaries to learn more about error boundaries. @ http://localhost:5193/node_modules/.vite/deps/react-dom_client.js?v=407de551:5450
+[ 1059882ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ http://localhost:5193/node_modules/.vite/deps/react-dom_client.js?v=407de551:15804
+[ 1060634ms] [INFO] Images loaded lazily and replaced with placeholders. Load events are deferred. See https://go.microsoft.com/fwlink/?linkid=2048113 @ http://localhost:5193/node_modules/.vite/deps/react-dom_client.js?v=407de551:10323
+[ 1158733ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ http://localhost:5193/node_modules/.vite/deps/react-dom_client.js?v=407de551:15804
+[ 1159474ms] [INFO] Images loaded lazily and replaced with placeholders. Load events are deferred. See https://go.microsoft.com/fwlink/?linkid=2048113 @ http://localhost:5193/node_modules/.vite/deps/react-dom_client.js?v=407de551:10323

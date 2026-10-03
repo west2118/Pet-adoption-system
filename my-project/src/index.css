@@ -280,6 +280,47 @@
   }
 }
 
+/*
+ * Route-loader motion.
+
+ * These mirror the keyframes inlined in `index.html` so the pre-React splash and the
+ * React overlay animate identically — the overlay can reference them because they are
+ * defined here in the bundled stylesheet.
+ */
+@keyframes boot-pulse {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.06);
+  }
+}
+
+@keyframes boot-rise {
+  from {
+    opacity: 0;
+    transform: translateY(18px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes boot-fill {
+  0% {
+    transform: scaleX(0);
+  }
+  55% {
+    transform: scaleX(1);
+  }
+  100% {
+    transform: scaleX(1);
+    opacity: 0;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .landing-theme *,
   .landing-theme *::before,

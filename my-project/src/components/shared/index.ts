@@ -10,3 +10,5 @@ export { DetailsModal } from './DetailsModal';
 export { Reveal } from './Reveal';
 export { BlurText } from './BlurText';
 export { GridOverlay } from './GridOverlay';
+export { RouteLoader } from './RouteLoader';
+export { ScrollToTop } from './ScrollToTop';

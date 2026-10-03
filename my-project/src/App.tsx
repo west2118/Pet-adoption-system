@@ -1,9 +1,11 @@
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
+import { useEffect } from 'react';
 // TODO: re-enable route guards later — uncomment when ready
 // import { ProtectedRoute } from '@/components/layout/AppLayout';
 import { AdminLayout } from '@/components/layout/AdminLayout';
 import { PublicLayout } from '@/components/layout/PublicLayout';
 import { ShelterLayout } from '@/components/layout/ShelterLayout';
+import { RouteLoader, ScrollToTop } from '@/components/shared';
 import { AuthProvider } from '@/hooks/useAuth';
 import { FavoritesProvider } from '@/hooks/useFavorites';
 import { HomePage } from '@/pages/HomePage';
@@ -13,6 +15,7 @@ import { AdoptionFormPage } from '@/pages/AdoptionFormPage';
 import { ApplicationsPage } from '@/pages/ApplicationsPage';
 import { FavoritesPage } from '@/pages/FavoritesPage';
 import { SheltersPage } from '@/pages/SheltersPage';
+import { ShelterPublicProfilePage } from '@/pages/ShelterPublicProfilePage';
 import { LoginPage, SignupPage } from '@/pages/AuthPages';
 import { ShelterOverviewPage } from '@/pages/shelter/ShelterOverviewPage';
 import { ShelterListingsPage } from '@/pages/shelter/ShelterListingsPage';
@@ -24,10 +27,18 @@ import { PlatformAdminPage } from '@/pages/PlatformAdminPage';
 import { NotFoundPage } from '@/pages/NotFoundPage';
 
 const App = (): React.JSX.Element => {
+  // The first paint is covered by the pre-React splash in index.html; drop it as soon
+  // as React has something to show so the two never overlap.
+  useEffect(() => {
+    document.getElementById('app-boot')?.remove();
+  }, []);
+
   return (
     <AuthProvider>
       <FavoritesProvider>
         <BrowserRouter>
+          <ScrollToTop />
+          <RouteLoader />
           <Routes>
             {/* Public side — top navbar + footer */}
             <Route element={<PublicLayout />}>
@@ -35,6 +46,7 @@ const App = (): React.JSX.Element => {
               <Route path="pets" element={<BrowsePetsPage />} />
               <Route path="pets/:id" element={<PetDetailsPage />} />
               <Route path="shelters" element={<SheltersPage />} />
+              <Route path="shelters/:id" element={<ShelterPublicProfilePage />} />
               <Route path="favorites" element={<FavoritesPage />} />
               <Route path="login" element={<LoginPage />} />
               <Route path="signup" element={<SignupPage />} />

@@ -4,6 +4,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Input, Label } from '@/components/ui/Form';
 import { useAuth } from '@/hooks/useAuth';
+import type { UserRole } from '@/types';
 
 export const LoginPage = () => {
   const { login } = useAuth();

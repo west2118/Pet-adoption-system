@@ -60,10 +60,10 @@ export const ShelterPlate = ({
 
         <div className="mt-auto pt-6">
           <Link
-            to={`/pets?location=${encodeURIComponent(shelter.location)}`}
+            to={`/shelters/${shelter.id}`}
             className="inline-flex items-center gap-1.5 text-sm font-medium text-foreground transition-colors hover:text-primary"
           >
-            View pets
+            View shelter
             <ArrowUpRight className="size-4 transition-transform duration-300 group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
           </Link>
         </div>

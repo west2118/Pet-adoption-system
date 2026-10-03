@@ -55,6 +55,10 @@ export const shelterService = {
     await delay();
     return [...sheltersStore];
   },
+  getById: async (id: string): Promise<Shelter | undefined> => {
+    await delay(150);
+    return sheltersStore.find((s) => s.id === id);
+  },
   create: async (input: Omit<Shelter, 'id' | 'totalPets'>): Promise<Shelter> => {
     await delay();
     const shelter: Shelter = {

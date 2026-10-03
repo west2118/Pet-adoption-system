@@ -34,13 +34,13 @@ export const SheltersPage = () => {
 
         <div className={`relative z-10 ${frame}`}>
           <Reveal>
-            <p className="font-mono text-[11px] uppercase tracking-[0.24em] text-muted-foreground">
+            <p className="text-center font-mono text-[11px] uppercase tracking-[0.24em] text-muted-foreground">
               PawsConnect network
             </p>
           </Reveal>
 
           <Reveal delay={80}>
-            <h1 className="mt-6 font-display text-[clamp(2.75rem,8vw,7rem)] leading-[0.9] tracking-tight">
+            <h1 className="mt-6 text-center font-display text-[clamp(2.75rem,8vw,7rem)] leading-[0.9] tracking-tight">
               <span className="block text-primary">Shelters</span>
               <span className="block">&amp; rescues</span>
             </h1>
@@ -123,35 +123,33 @@ export const SheltersPage = () => {
       </section>
 
       {/* --------------------------------------------------------------- CTA */}
-      <section className="bg-background pb-20 md:pb-28">
+      <section className="relative overflow-hidden bg-[var(--brand-tint)] py-16 md:py-24">
         <div className={frame}>
-          <Reveal>
-            <div className="relative overflow-hidden rounded-lg border border-border bg-[var(--brand-tint)] px-6 py-16 text-center md:px-12 md:py-24">
-              <HeartHandshake className="mx-auto size-8 text-primary" />
-              <h2 className="mx-auto mt-6 max-w-3xl font-display text-3xl leading-tight tracking-tight md:text-5xl">
-                Ready to meet your next companion?
-              </h2>
-              <p className="mx-auto mt-5 max-w-xl text-muted-foreground">
-                Browse adoptable pets by city, save your favourites, and send an application
-                directly to the rescue caring for them.
-              </p>
-              <div className="mt-10 flex flex-wrap items-center justify-center gap-4">
-                <Link to="/pets">
-                  <Button size="lg" className="h-11 rounded-full px-7 text-[15px]">
-                    Browse pets
-                    <ArrowRight className="size-4" />
-                  </Button>
-                </Link>
-                <Link to="/apply">
-                  <Button
-                    size="lg"
-                    variant="outline"
-                    className="h-11 rounded-full px-7 text-[15px]"
-                  >
-                    Start an application
-                  </Button>
-                </Link>
-              </div>
+          <Reveal className="text-center">
+            <HeartHandshake className="mx-auto size-8 text-primary" />
+            <h2 className="mx-auto mt-6 max-w-3xl font-display text-3xl leading-tight tracking-tight md:text-5xl">
+              Ready to meet your next companion?
+            </h2>
+            <p className="mx-auto mt-5 max-w-xl text-muted-foreground">
+              Browse adoptable pets by city, save your favourites, and send an application
+              directly to the rescue caring for them.
+            </p>
+            <div className="mt-10 flex flex-wrap items-center justify-center gap-4">
+              <Link to="/pets">
+                <Button size="lg" className="h-11 rounded-full px-7 text-[15px]">
+                  Browse pets
+                  <ArrowRight data-slot="icon" />
+                </Button>
+              </Link>
+              <Link to="/apply">
+                <Button
+                  size="lg"
+                  variant="outline"
+                  className="h-11 rounded-full px-7 text-[15px]"
+                >
+                  Start an application
+                </Button>
+              </Link>
             </div>
           </Reveal>
         </div>

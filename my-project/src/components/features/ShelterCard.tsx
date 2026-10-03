@@ -56,8 +56,8 @@ export const ShelterCard = ({
           <span className="text-xs font-medium text-muted-foreground">
             {shelter.totalPets} pets in care
           </span>
-          <Link to={`/pets?location=${encodeURIComponent(shelter.location)}`}>
-            <Button variant="outline" size="sm">View pets</Button>
+          <Link to={`/shelters/${shelter.id}`}>
+            <Button variant="outline" size="sm">View shelter</Button>
           </Link>
         </div>
       </div>

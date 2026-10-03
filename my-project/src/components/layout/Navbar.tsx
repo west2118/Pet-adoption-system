@@ -73,13 +73,13 @@ export const Navbar = () => {
                 cn(
                   'group relative text-sm transition-colors duration-300',
                   isActive
-                    ? 'text-foreground'
-                    : 'text-muted-foreground hover:text-foreground',
+                    ? 'text-primary'
+                    : 'text-muted-foreground hover:text-primary',
                 )
               }
             >
               {l.label}
-              <span className="absolute -bottom-1 left-0 h-px w-0 bg-current transition-all duration-300 group-hover:w-full" />
+              <span className="absolute -bottom-1 left-0 h-px w-0 bg-primary transition-all duration-300 group-hover:w-full" />
             </NavLink>
           ))}
         </nav>
@@ -156,8 +156,8 @@ export const Navbar = () => {
                   cn(
                     'rounded-lg px-3 py-2.5 text-sm transition-colors',
                     isActive
-                      ? 'bg-muted text-foreground'
-                      : 'text-muted-foreground hover:text-foreground',
+                      ? 'bg-muted text-primary'
+                      : 'text-muted-foreground hover:text-primary',
                   )
                 }
               >
@@ -168,7 +168,7 @@ export const Navbar = () => {
               <NavLink
                 to="/favorites"
                 onClick={() => setOpen(false)}
-                className="rounded-lg px-3 py-2.5 text-sm text-muted-foreground transition-colors hover:text-foreground"
+                className="rounded-lg px-3 py-2.5 text-sm text-muted-foreground transition-colors hover:text-primary"
               >
                 Favorites ({favorites.length})
               </NavLink>
