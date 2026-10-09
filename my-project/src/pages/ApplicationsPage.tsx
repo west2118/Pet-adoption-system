@@ -1,4 +1,4 @@
-import { ArrowRight, HeartHandshake } from 'lucide-react';
+import { ArrowRight, HeartHandshake, RefreshCw } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { BlurText, GridOverlay, Reveal } from '@/components/shared';
 import { ApplicationCard } from '@/components/features/ApplicationCard';
@@ -15,7 +15,7 @@ const SUMMARY_ORDER: ApplicationStatus[] = ['Under Review', 'Approved', 'Adopted
 
 export const ApplicationsPage = () => {
   const { user } = useAuth();
-  const { applications, loading } = useApplications(user?.id);
+  const { applications, loading, refresh } = useApplications(user?.id, 'mine');
   const { pets } = usePets();
 
   const petById = (id: string) => pets.find((p) => p.id === id);
@@ -93,13 +93,25 @@ export const ApplicationsPage = () => {
       {/* -------------------------------------------------------- TRACKER */}
       <section className="bg-background py-20 md:py-28">
         <div className={frame}>
-          <Reveal>
-            <h2 className="text-3xl font-medium tracking-tight md:text-4xl">
-              Where things stand
-            </h2>
-            <p className="mt-3 max-w-xl text-muted-foreground">
-              Each card tracks one pet from your first application through to adoption.
-            </p>
+          <Reveal className="flex flex-wrap items-end justify-between gap-4">
+            <div>
+              <h2 className="text-3xl font-medium tracking-tight md:text-4xl">
+                Where things stand
+              </h2>
+              <p className="mt-3 max-w-xl text-muted-foreground">
+                Each card tracks one pet from your first application through to adoption.
+              </p>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={refresh}
+              disabled={loading}
+              className="rounded-full"
+            >
+              <RefreshCw className="size-4" />
+              Refresh
+            </Button>
           </Reveal>
 
           <div className="mt-14">

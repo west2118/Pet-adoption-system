@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { applicationService, petService, shelterService, userService } from '@/services/api';
+import { adoptionApplicationService } from '@/services/adoptionApplicationService';
+import { tokenStore } from '@/lib/apiClient';
 import type { AdoptionApplication, Pet, Shelter, User } from '@/types';
 
 export const usePets = () => {
@@ -80,34 +82,55 @@ export const useUsers = () => {
   return { users, setUsers, loading };
 };
 
-export const useApplications = (applicantId?: string) => {
+export const useApplications = (applicantId?: string, mode?: 'mine' | 'shelter') => {
   const [applications, setApplications] = useState<AdoptionApplication[]>([]);
   const [loading, setLoading] = useState(true);
 
+  const load = useCallback(async (): Promise<AdoptionApplication[]> => {
+    const hasSession = Boolean(tokenStore.get());
+    // Backend-first when a real session exists so adopter submissions and the
+    // shelter table read the same Postgres rows. Fall back to the in-memory
+    // mocks for demo mode (no token) or when the API is unreachable.
+    if (hasSession) {
+      try {
+        if (mode === 'shelter' || !applicantId) {
+          return await adoptionApplicationService.listForShelter();
+        }
+        return await adoptionApplicationService.listMine();
+      } catch {
+        // fall through to mocks below
+      }
+    }
+    return applicantId
+      ? applicationService.listByApplicant(applicantId)
+      : applicationService.list();
+  }, [applicantId, mode]);
+
   const refresh = useCallback(async () => {
     setLoading(true);
-    const data = applicantId
-      ? await applicationService.listByApplicant(applicantId)
-      : await applicationService.list();
-    setApplications(data);
-    setLoading(false);
-  }, [applicantId]);
+    try {
+      setApplications(await load());
+    } finally {
+      setLoading(false);
+    }
+  }, [load]);
 
   useEffect(() => {
     let mounted = true;
     (async () => {
-      const data = applicantId
-        ? await applicationService.listByApplicant(applicantId)
-        : await applicationService.list();
-      if (mounted) {
-        setApplications(data);
-        setLoading(false);
+      try {
+        const data = await load();
+        if (mounted) setApplications(data);
+      } catch {
+        if (mounted) setApplications([]);
+      } finally {
+        if (mounted) setLoading(false);
       }
     })();
     return () => {
       mounted = false;
     };
-  }, [applicantId, refresh]);
+  }, [load]);
 
   return { applications, loading, refresh, setApplications };
 };

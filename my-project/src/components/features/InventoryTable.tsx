@@ -18,10 +18,12 @@ interface InventoryTableProps {
 export const InventoryTable = ({ pets }: InventoryTableProps) => {
   if (pets.length === 0) {
     return (
-      <EmptyState
-        title="No listings yet"
-        description="Pets you add will show up in your inventory here."
-      />
+      <div className="p-5 sm:p-6">
+        <EmptyState
+          title="No listings yet"
+          description="Pets you add will show up in your inventory here."
+        />
+      </div>
     );
   }
 

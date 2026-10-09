@@ -22,10 +22,12 @@ export const RecentApplicationsTable = ({
 }: RecentApplicationsTableProps) => {
   if (applications.length === 0) {
     return (
-      <EmptyState
-        title="No applications yet"
-        description="Incoming adoption requests will appear here."
-      />
+      <div className="p-5 sm:p-6">
+        <EmptyState
+          title="No applications yet"
+          description="Incoming adoption requests will appear here."
+        />
+      </div>
     );
   }
 

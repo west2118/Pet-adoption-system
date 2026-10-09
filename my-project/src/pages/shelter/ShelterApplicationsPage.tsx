@@ -24,6 +24,8 @@ import { ApplicationStatusBadge } from '@/components/ui/StatusBadge';
 import { useApplications, usePets, useShelters } from '@/hooks/useData';
 import { useAuth } from '@/hooks/useAuth';
 import { applicationService } from '@/services/api';
+import { adoptionApplicationService } from '@/services/adoptionApplicationService';
+import { tokenStore } from '@/lib/apiClient';
 import type { AdoptionApplication, ApplicationStatus } from '@/types';
 import { formatDate } from '@/utils/formatters';
 
@@ -42,7 +44,9 @@ export const ShelterApplicationsPage = () => {
   const { user } = useAuth();
   const { pets } = usePets();
   const { shelters } = useShelters();
-  const { applications, setApplications } = useApplications();
+  // Shelter mode reads GET /shelter/applications (same Postgres rows the
+  // adopter just wrote via POST /applications), with mock fallback for demo.
+  const { applications, setApplications, refresh, loading } = useApplications(undefined, 'shelter');
   const [query, setQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | ApplicationStatus>('all');
   const [page, setPage] = useState(1);
@@ -75,6 +79,23 @@ export const ShelterApplicationsPage = () => {
 
   const handleStatusChange = async (id: string, status: ApplicationStatus) => {
     try {
+      // Dynamic path: persist in Postgres so the adopter sees the new status
+      // on their Applications page immediately.
+      if (tokenStore.get()) {
+        try {
+          const updated = await adoptionApplicationService.updateStatus(
+            id,
+            status,
+            'Updated by staff',
+          );
+          setApplications((prev) => prev.map((a) => (a.id === id ? updated : a)));
+          setDetailsApp((prev) => (prev && prev.id === id ? updated : prev));
+          toast.success(`Application ${status.toLowerCase()}!`);
+          return;
+        } catch {
+          // fall through to the local mock store (demo mode / unreachable API)
+        }
+      }
       const updated = await applicationService.updateStatus(id, status, 'Updated by staff');
       if (updated) {
         setApplications((prev) => prev.map((a) => (a.id === id ? updated : a)));
@@ -165,7 +186,15 @@ export const ShelterApplicationsPage = () => {
       <SectionHeader
         title="Adoption applications"
         subtitle="Review incoming requests, approve or reject, and keep staff notes."
+        actions={
+          <Button variant="outline" size="sm" onClick={refresh} disabled={loading}>
+            Refresh
+          </Button>
+        }
       />
+      {loading && (
+        <p className="mt-4 text-sm text-muted-foreground">Loading applications…</p>
+      )}
 
       <div className="mt-6 space-y-4">
         <TableCard

@@ -17,10 +17,12 @@ interface SheltersSummaryTableProps {
 export const SheltersSummaryTable = ({ shelters }: SheltersSummaryTableProps) => {
   if (shelters.length === 0) {
     return (
-      <EmptyState
-        title="No shelters yet"
-        description="Registered partner shelters will appear here."
-      />
+      <div className="p-5 sm:p-6">
+        <EmptyState
+          title="No shelters yet"
+          description="Registered partner shelters will appear here."
+        />
+      </div>
     );
   }
 
