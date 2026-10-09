@@ -15,7 +15,7 @@ const landingRouteFor = (role: UserRole) =>
 export const LoginPage = () => {
   const { login } = useAuth();
   const navigate = useNavigate();
-  const [email, setEmail] = useState('juan@example.com');
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -28,7 +28,6 @@ export const LoginPage = () => {
     if (isBlank(password)) next.password = 'Please enter your password.';
     setFieldErrors(next);
     if (Object.keys(next).length > 0) {
-      toast.warning('Please fix the highlighted fields.');
       focusFirstError();
       return;
     }
@@ -42,7 +41,6 @@ export const LoginPage = () => {
       const message =
         err instanceof ApiError ? err.message : 'Unable to sign in. Please try again.';
       setError(message);
-      toast.error(message);
     } finally {
       setSubmitting(false);
     }

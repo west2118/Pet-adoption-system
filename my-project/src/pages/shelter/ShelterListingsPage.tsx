@@ -33,8 +33,9 @@ import {
 } from '@/components/shared';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/hooks/useAuth';
-import { usePets, useShelters } from '@/hooks/useData';
+import { useShelters, useShelterListings } from '@/hooks/useData';
 import { petService } from '@/services/api';
+import { ApiError } from '@/lib/apiClient';
 import type { AgeGroup, Pet, PetStatus, PetVisibility } from '@/types';
 import { formatAge, formatDate } from '@/utils/formatters';
 
@@ -286,10 +287,41 @@ const birthdateFromAgeYears = (ageYears: number): string => {
   return toIsoDate(d);
 };
 
+/** Labels of the care flags actually confirmed for a pet — unrecorded ones stay hidden. */
+const detailsCareFlags = (pet: Pet): string[] =>
+  (
+    [
+      ['Vaccinated', pet.vaccinated],
+      ['Spayed / Neutered', pet.spayedNeutered],
+      ['Good with kids', pet.goodWithKids],
+      ['Good with pets', pet.goodWithPets],
+      ['Microchipped', pet.microchipped ?? false],
+      ['Dewormed', pet.dewormed ?? false],
+      ['House-trained', pet.houseTrained ?? false],
+      ['Good with strangers', pet.goodWithStrangers ?? false],
+      ['Leash-trained', pet.leashTrained ?? false],
+      ['Crate-trained', pet.crateTrained ?? false],
+      ['Litter-trained', pet.litterTrained ?? false],
+      ['Apartment-friendly', pet.apartmentFriendly ?? false],
+    ] as const
+  )
+    .filter(([, ok]) => ok)
+    .map(([label]) => label);
+
 export const ShelterListingsPage = () => {
   const { user } = useAuth();
-  const { pets, setPets } = usePets();
   const { shelters } = useShelters();
+
+  // Every shelter staff belongs to exactly one shelter. The table, the
+  // create form, and all guards below use this id so a pet recorded by one
+  // shelter never appears in another shelter's inventory.
+  // Falls back to the first shelter only when the session carries no
+  // assignment yet (demo preview without login).
+  const myShelterId = user?.shelterId ?? shelters[0]?.id ?? null;
+  // Own-shelter inventory (public + private) from GET /shelter/listings —
+  // the backend scopes rows by the staff JWT, so shelters only ever see
+  // their own pets here.
+  const { pets, setPets } = useShelterListings(myShelterId);
   const [slideOpen, setSlideOpen] = useState(false);
   const [editingPet, setEditingPet] = useState<Pet | null>(null);
   const [detailsPet, setDetailsPet] = useState<Pet | null>(null);
@@ -336,12 +368,8 @@ export const ShelterListingsPage = () => {
     apartmentFriendly: false,
   });
 
-  // Every shelter staff belongs to exactly one shelter. The table, the
-  // create form, and all guards below use this id so a pet recorded by one
-  // shelter never appears in another shelter's inventory.
-  // Falls back to the first shelter only when the session carries no
-  // assignment yet (demo preview without login).
-  const myShelterId = user?.shelterId ?? shelters[0]?.id ?? null;
+  // Backend already scopes GET /shelter/listings to the staff's own
+  // shelter — this client filter is belt-and-suspenders for demo fallback.
   const myShelter = shelters.find((s) => s.id === myShelterId) ?? null;
   const isLockedToShelter = Boolean(user?.shelterId);
 
@@ -375,8 +403,8 @@ export const ShelterListingsPage = () => {
       await petService.remove(id);
       setPets((prev) => prev.filter((p) => p.id !== id));
       toast.success(target ? `${target.name} removed.` : 'Listing removed.');
-    } catch {
-      toast.error('Failed to remove listing. Please try again.');
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : 'Failed to remove listing. Please try again.');
     }
   };
 
@@ -431,7 +459,7 @@ export const ShelterListingsPage = () => {
       name: pet.name,
       species: pet.species,
       breed: pet.breed,
-      birthdate: birthdateFromAgeYears(pet.ageYears),
+      birthdate: pet.birthdate || birthdateFromAgeYears(pet.ageYears),
       size: pet.size,
       gender: pet.gender,
       shelterId: pet.shelterId,
@@ -613,23 +641,65 @@ export const ShelterListingsPage = () => {
       ? (myShelterId ?? form.shelterId ?? editingPet?.shelterId ?? 's1')
       : (form.shelterId || myShelterId || editingPet?.shelterId || 's1');
     if (editingPet) {
-      const updated = await petService.update(editingPet.id, {
+      try {
+        const updated = await petService.update(editingPet.id, {
+          name: form.name,
+          species: form.species as 'dog' | 'cat' | 'rabbit' | 'bird' | 'other',
+          breed: form.breed || 'Mixed',
+          birthdate: form.birthdate,
+          ageYears,
+          ageGroup,
+          size: form.size as 'small' | 'medium' | 'large',
+          gender: form.gender as 'male' | 'female',
+          shelterId,
+          status: form.status,
+          visibility: form.visibility,
+          description: form.description || editingPet.description,
+          temperament: temperament.length > 0 ? temperament : editingPet.temperament,
+          imageUrl: gallery[0],
+          gallery,
+          medicalHistory: medicalHistory.length > 0 ? medicalHistory : editingPet.medicalHistory,
+          behavioralNotes: behavioralNotes || editingPet.behavioralNotes,
+          vaccinated: form.vaccinated,
+          spayedNeutered: form.spayedNeutered,
+          goodWithKids: form.goodWithKids,
+          goodWithPets: form.goodWithPets,
+          microchipped: form.microchipped,
+          dewormed: form.dewormed,
+          houseTrained: form.houseTrained,
+          goodWithStrangers: form.goodWithStrangers,
+          leashTrained: form.leashTrained,
+          crateTrained: form.crateTrained,
+          litterTrained: form.litterTrained,
+          apartmentFriendly: form.apartmentFriendly,
+        });
+        if (updated) setPets((prev) => prev.map((p) => (p.id === updated.id ? updated : p)));
+        toast.success(`${form.name || 'Pet'} updated successfully!`);
+        closeSlide();
+      } catch (err) {
+        toast.error(err instanceof ApiError ? err.message : 'Failed to update listing. Please try again.');
+      }
+      return;
+    }
+    try {
+      const created = await petService.create({
         name: form.name,
         species: form.species as 'dog' | 'cat' | 'rabbit' | 'bird' | 'other',
         breed: form.breed || 'Mixed',
+        birthdate: form.birthdate,
         ageYears,
         ageGroup,
         size: form.size as 'small' | 'medium' | 'large',
         gender: form.gender as 'male' | 'female',
+        temperament: temperament.length > 0 ? temperament : ['Friendly'],
         shelterId,
-        status: form.status,
         visibility: form.visibility,
-        description: form.description || editingPet.description,
-        temperament: temperament.length > 0 ? temperament : editingPet.temperament,
+        description: form.description || 'New rescue looking for a home.',
+        medicalHistory: medicalHistory.length > 0 ? medicalHistory : ['Vet health check'],
+        behavioralNotes: behavioralNotes || 'Assessment in progress.',
+        status: form.status,
         imageUrl: gallery[0],
         gallery,
-        medicalHistory: medicalHistory.length > 0 ? medicalHistory : editingPet.medicalHistory,
-        behavioralNotes: behavioralNotes || editingPet.behavioralNotes,
         vaccinated: form.vaccinated,
         spayedNeutered: form.spayedNeutered,
         goodWithKids: form.goodWithKids,
@@ -643,45 +713,13 @@ export const ShelterListingsPage = () => {
         litterTrained: form.litterTrained,
         apartmentFriendly: form.apartmentFriendly,
       });
-      if (updated) setPets((prev) => prev.map((p) => (p.id === updated.id ? updated : p)));
-      toast.success(`${form.name || 'Pet'} updated successfully!`);
+      setPets((prev) => [created, ...prev]);
+      toast.success(`${created.name} listed successfully!`);
       closeSlide();
-      return;
+      resetForm();
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : 'Failed to create listing. Please try again.');
     }
-    const created = await petService.create({
-      name: form.name,
-      species: form.species as 'dog' | 'cat' | 'rabbit' | 'bird' | 'other',
-      breed: form.breed || 'Mixed',
-      ageYears,
-      ageGroup,
-      size: form.size as 'small' | 'medium' | 'large',
-      gender: form.gender as 'male' | 'female',
-      temperament: temperament.length > 0 ? temperament : ['Friendly'],
-      shelterId,
-      visibility: form.visibility,
-      description: form.description || 'New rescue looking for a home.',
-      medicalHistory: medicalHistory.length > 0 ? medicalHistory : ['Vet health check'],
-      behavioralNotes: behavioralNotes || 'Assessment in progress.',
-      status: form.status,
-      imageUrl: gallery[0],
-      gallery,
-      vaccinated: form.vaccinated,
-      spayedNeutered: form.spayedNeutered,
-      goodWithKids: form.goodWithKids,
-      goodWithPets: form.goodWithPets,
-      microchipped: form.microchipped,
-      dewormed: form.dewormed,
-      houseTrained: form.houseTrained,
-      goodWithStrangers: form.goodWithStrangers,
-      leashTrained: form.leashTrained,
-      crateTrained: form.crateTrained,
-      litterTrained: form.litterTrained,
-      apartmentFriendly: form.apartmentFriendly,
-    });
-    setPets((prev) => [created, ...prev]);
-    toast.success(`${created.name} listed successfully!`);
-    closeSlide();
-    resetForm();
   };
 
   const searchFilter = (
@@ -1346,33 +1384,20 @@ export const ShelterListingsPage = () => {
             </dl>
             <div>
               <h3 className="text-sm font-semibold">Care flags</h3>
-              <div className="mt-1.5 grid grid-cols-2 gap-2 text-sm">
-                {(
-                  [
-                    ['Vaccinated', detailsPet.vaccinated],
-                    ['Spayed / Neutered', detailsPet.spayedNeutered],
-                    ['Good with kids', detailsPet.goodWithKids],
-                    ['Good with pets', detailsPet.goodWithPets],
-                    ['Microchipped', detailsPet.microchipped ?? false],
-                    ['Dewormed', detailsPet.dewormed ?? false],
-                    ['House-trained', detailsPet.houseTrained ?? false],
-                    ['Good with strangers', detailsPet.goodWithStrangers ?? false],
-                    ['Leash-trained', detailsPet.leashTrained ?? false],
-                    ['Crate-trained', detailsPet.crateTrained ?? false],
-                    ['Litter-trained', detailsPet.litterTrained ?? false],
-                    ['Apartment-friendly', detailsPet.apartmentFriendly ?? false],
-                  ] as const
-                ).map(([label, ok]) => (
-                  <p key={label} className="flex items-center gap-1.5 text-muted-foreground">
-                    {ok ? (
+              {detailsCareFlags(detailsPet).length > 0 ? (
+                <div className="mt-1.5 grid grid-cols-2 gap-2 text-sm">
+                  {detailsCareFlags(detailsPet).map((label) => (
+                    <p key={label} className="flex items-center gap-1.5 text-muted-foreground">
                       <Check className="size-4 shrink-0 text-green-600" />
-                    ) : (
-                      <X className="size-4 shrink-0" />
-                    )}
-                    {label}
-                  </p>
-                ))}
-              </div>
+                      {label}
+                    </p>
+                  ))}
+                </div>
+              ) : (
+                <p className="mt-1.5 text-sm text-muted-foreground">
+                  No care flags confirmed yet.
+                </p>
+              )}
             </div>
             <div>
               <h3 className="text-sm font-semibold">Medical history</h3>

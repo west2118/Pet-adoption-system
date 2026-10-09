@@ -14,8 +14,25 @@ export const createPetSchema = z.object({
   medicalHistory: z.array(z.string()).default([]),
   behavioralNotes: z.string().default(''),
   status: z.enum(['Available', 'Pending Adoption', 'Adopted', 'Fostered']).default('Available'),
-  imageUrl: z.string().url('Invalid image URL format'),
-  gallery: z.array(z.string().url()).default([]),
+  // Staff can upload photos (base64 data URLs) or paste https links — the
+  // public catalogue just renders whatever string is stored.
+  imageUrl: z
+    .string()
+    .min(1, 'Photo is required')
+    .refine(
+      (v) => v.startsWith('data:image/') || /^https?:\/\/.+/.test(v),
+      'Photo must be an image upload or an http(s) URL',
+    ),
+  gallery: z
+    .array(
+      z
+        .string()
+        .refine(
+          (v) => v.startsWith('data:image/') || /^https?:\/\/.+/.test(v),
+          'Gallery photos must be image uploads or http(s) URLs',
+        ),
+    )
+    .default([]),
   vaccinated: z.boolean().default(false),
   spayedNeutered: z.boolean().default(false),
   goodWithKids: z.boolean().default(false),

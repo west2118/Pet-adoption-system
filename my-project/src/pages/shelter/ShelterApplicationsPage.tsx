@@ -4,10 +4,12 @@ import {
   ChevronRight,
   ClipboardList,
   Eye,
+  Printer,
   Search,
   X,
 } from 'lucide-react';
 import { useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import { DetailsModal, RecordCard, SectionHeader, TableCard } from '@/components/shared';
 import {
@@ -181,6 +183,24 @@ export const ShelterApplicationsPage = () => {
 
   const petOf = (petId: string) => pets.find((p) => p.id === petId);
 
+  /** E-waivers are only printable once the pet is being handed over. */
+  const canPrintWaiver = (app: AdoptionApplication) =>
+    app.status === 'Approved' || app.status === 'Adopted';
+
+  const waiverAction = (app: AdoptionApplication, label: string) =>
+    canPrintWaiver(app) ? (
+      <Link to={`/shelter/applications/${app.id}/waiver`}>
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          className="text-muted-foreground"
+          aria-label={label}
+        >
+          <Printer className="size-4" />
+        </Button>
+      </Link>
+    ) : null;
+
   return (
     <div className="w-full px-4 py-6 sm:px-6">
       <SectionHeader
@@ -283,6 +303,7 @@ export const ShelterApplicationsPage = () => {
                           >
                             <X className="size-4" />
                           </Button>
+                          {waiverAction(app, `Print e-waiver for ${app.applicantName}`)}
                         </div>
                       </TableCell>
                     </TableRow>
@@ -333,6 +354,7 @@ export const ShelterApplicationsPage = () => {
                       >
                         <X className="size-4" />
                       </Button>
+                      {waiverAction(app, `Print e-waiver for ${app.applicantName}`)}
                     </>
                   }
                 >
@@ -355,22 +377,31 @@ export const ShelterApplicationsPage = () => {
         icon={ClipboardList}
         footer={
           detailsApp ? (
-            <div className="flex gap-2">
-              <Button
-                size="sm"
-                className="flex-1 bg-green-600 text-white hover:bg-green-700"
-                onClick={() => handleStatusChange(detailsApp.id, 'Approved')}
-              >
-                <Check className="size-4" /> Approve
-              </Button>
-              <Button
-                size="sm"
-                variant="destructive"
-                className="flex-1"
-                onClick={() => handleStatusChange(detailsApp.id, 'Rejected')}
-              >
-                <X className="size-4" /> Reject
-              </Button>
+            <div className="flex flex-col gap-2">
+              {canPrintWaiver(detailsApp) && (
+                <Link to={`/shelter/applications/${detailsApp.id}/waiver`}>
+                  <Button size="sm" variant="outline" className="w-full">
+                    <Printer className="size-3.5" /> Print e-waiver
+                  </Button>
+                </Link>
+              )}
+              <div className="flex gap-2">
+                <Button
+                  size="sm"
+                  className="flex-1 bg-green-600 text-white hover:bg-green-700"
+                  onClick={() => handleStatusChange(detailsApp.id, 'Approved')}
+                >
+                  <Check className="size-4" /> Approve
+                </Button>
+                <Button
+                  size="sm"
+                  variant="destructive"
+                  className="flex-1"
+                  onClick={() => handleStatusChange(detailsApp.id, 'Rejected')}
+                >
+                  <X className="size-4" /> Reject
+                </Button>
+              </div>
             </div>
           ) : undefined
         }

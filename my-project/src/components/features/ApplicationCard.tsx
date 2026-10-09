@@ -179,11 +179,20 @@ export const ApplicationCard = ({
                   </Button>
                 </>
               ) : (
-                <Link to={`/pets/${application.petId}`}>
-                  <Button variant="outline" size="sm">
-                    View pet
-                  </Button>
-                </Link>
+                <>
+                  {application.status === 'Adopted' && (
+                    <Link to={`/applications/${application.id}/waiver`}>
+                      <Button variant="outline" size="sm">
+                        View waiver
+                      </Button>
+                    </Link>
+                  )}
+                  <Link to={`/pets/${application.petId}`}>
+                    <Button variant="outline" size="sm">
+                      View pet
+                    </Button>
+                  </Link>
+                </>
               )}
             </div>
           </div>

@@ -34,15 +34,17 @@ export const PetDetailsPage = () => {
       setLoading(true);
       const found = await petService.getById(id);
       const shelters = await shelterService.list();
-      const allPets = found ? await petService.list() : [];
+      // Siblings = other PUBLIC pets of the same shelter (backend already
+      // filters visibility='public' via ?shelterId=).
+      const shelterPets = found ? await petService.listByShelter(found.shelterId) : [];
       if (!mounted) return;
       setPet(found ?? null);
       setShelter(shelters.find((s) => s.id === found?.shelterId) ?? null);
       // Adopters only ever see other public listings from the same shelter.
       setSiblings(
         found
-          ? publicPets(allPets)
-              .filter((p) => p.shelterId === found.shelterId && p.id !== found.id)
+          ? publicPets(shelterPets)
+              .filter((p) => p.id !== found.id)
               .slice(0, 3)
           : [],
       );

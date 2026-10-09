@@ -1,6 +1,17 @@
-import { Eye, FileSignature, Search } from 'lucide-react';
-import { useMemo, useState } from 'react';
-import { DetailsModal, RecordCard, SectionHeader, TableCard } from '@/components/shared';
+import { Check, Eye, FileSignature, Pencil, Plus, Search } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
+import type { FormEvent } from 'react';
+import { toast } from 'react-toastify';
+import {
+  DetailsModal,
+  RecordCard,
+  SectionHeader,
+  SlideOver,
+  TableCard,
+  ValidatedInput,
+  focusFirstError,
+  isBlank,
+} from '@/components/shared';
 import {
   Table,
   TableBody,
@@ -10,88 +21,163 @@ import {
   TableRow,
 } from '@/components/ui/Table';
 import { Badge } from '@/components/ui/Badge';
-import { Input } from '@/components/ui/Form';
+import { Input, Label, Select, Textarea } from '@/components/ui/Form';
 import { Button } from '@/components/ui/button';
+import { EmptyState } from '@/components/ui/Feedback';
+import { ApiError } from '@/lib/apiClient';
+import { waiverService } from '@/services/waiverService';
+import type { WaiverTemplate, WaiverTemplateStatus } from '@/types';
 import { formatDate } from '@/utils/formatters';
 
-interface WaiverTemplate {
-  id: string;
-  name: string;
-  category: string;
-  status: 'Active' | 'Draft';
-  updatedAt: string;
-  body: string;
-}
-
-const MOCK_WAIVERS: WaiverTemplate[] = [
-  {
-    id: 'waiver-adoption-liability',
-    name: 'Adoption Liability Waiver',
-    category: 'Adoption',
-    status: 'Active',
-    updatedAt: '2026-08-14',
-    body: 'The adopter accepts full responsibility for the animal from the date of adoption, releases the shelter from liability for injury or damage caused by the animal, and agrees to provide adequate food, water, shelter, and veterinary care.',
-  },
-  {
-    id: 'waiver-foster-care',
-    name: 'Foster Care Agreement',
-    category: 'Foster',
-    status: 'Active',
-    updatedAt: '2026-07-30',
-    body: 'The foster caregiver agrees to house the animal temporarily, follow all medical and feeding instructions, return the animal on request, and promptly report illness, injury, or behavioral concerns to shelter staff.',
-  },
-  {
-    id: 'waiver-medical-disclosure',
-    name: 'Medical Disclosure Acknowledgment',
-    category: 'Medical',
-    status: 'Active',
-    updatedAt: '2026-07-02',
-    body: 'The adopter acknowledges receipt of the animal’s known medical history, understands that undiscovered conditions may exist, and agrees to seek veterinary care for any ongoing or future treatment needs.',
-  },
-  {
-    id: 'waiver-photo-release',
-    name: 'Photo & Story Release',
-    category: 'Media',
-    status: 'Draft',
-    updatedAt: '2026-06-18',
-    body: 'The adopter grants the shelter permission to use photos and adoption stories for promotional purposes, with the option to revoke consent in writing at any time.',
-  },
-  {
-    id: 'waiver-transport',
-    name: 'Transport Waiver',
-    category: 'Logistics',
-    status: 'Draft',
-    updatedAt: '2026-05-27',
-    body: 'The volunteer transporter accepts responsibility for the animal during transit, agrees to use secure carriers or restraints, and releases the shelter from liability for incidents occurring en route.',
-  },
+const CATEGORY_OPTIONS = [
+  { value: 'Adoption', label: 'Adoption' },
+  { value: 'Foster', label: 'Foster' },
+  { value: 'Medical', label: 'Medical' },
+  { value: 'Media', label: 'Media' },
+  { value: 'Logistics', label: 'Logistics' },
+  { value: 'General', label: 'General' },
 ];
 
+const STATUS_OPTIONS = [
+  { value: 'Active', label: 'Active' },
+  { value: 'Draft', label: 'Draft' },
+];
+
+const emptyForm = {
+  name: '',
+  category: 'Adoption',
+  body: '',
+  status: 'Active' as WaiverTemplateStatus,
+};
+
 export const ShelterEWaiversPage = () => {
+  const [templates, setTemplates] = useState<WaiverTemplate[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [query, setQuery] = useState('');
   const [detailsId, setDetailsId] = useState<string | null>(null);
+  const [slideOpen, setSlideOpen] = useState(false);
+  const [editing, setEditing] = useState<WaiverTemplate | null>(null);
+  const [form, setForm] = useState(emptyForm);
+  const [formErrors, setFormErrors] = useState<{ name?: string; body?: string }>({});
 
-  const filteredWaivers = useMemo(() => {
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      try {
+        const data = await waiverService.listTemplates();
+        if (mounted) setTemplates(data);
+      } catch (err) {
+        if (mounted) {
+          setLoadError(err instanceof ApiError ? err.message : 'Failed to load waiver templates.');
+        }
+      } finally {
+        if (mounted) setLoading(false);
+      }
+    })();
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  const filteredTemplates = useMemo(() => {
     const search = query.trim().toLowerCase();
-    if (search === '') return MOCK_WAIVERS;
-    return MOCK_WAIVERS.filter((waiver) =>
-      `${waiver.name} ${waiver.category}`.toLowerCase().includes(search),
+    if (search === '') return templates;
+    return templates.filter((t) =>
+      `${t.name} ${t.category}`.toLowerCase().includes(search),
     );
-  }, [query]);
+  }, [templates, query]);
 
-  const detailsWaiver = detailsId
-    ? (MOCK_WAIVERS.find((w) => w.id === detailsId) ?? null)
+  const detailsTemplate = detailsId
+    ? (templates.find((t) => t.id === detailsId) ?? null)
     : null;
 
+  const openAdd = () => {
+    setEditing(null);
+    setForm(emptyForm);
+    setFormErrors({});
+    setSlideOpen(true);
+  };
+
+  const openEdit = (template: WaiverTemplate) => {
+    setEditing(template);
+    setDetailsId(null);
+    setForm({
+      name: template.name,
+      category: template.category,
+      body: template.body,
+      status: template.status,
+    });
+    setFormErrors({});
+    setSlideOpen(true);
+  };
+
+  const toggleStatus = async (template: WaiverTemplate) => {
+    const next: WaiverTemplateStatus = template.status === 'Active' ? 'Draft' : 'Active';
+    try {
+      const updated = await waiverService.updateTemplate(template.id, { status: next });
+      setTemplates((prev) => prev.map((t) => (t.id === updated.id ? updated : t)));
+      toast.success(`"${template.name}" is now ${next.toLowerCase()}.`);
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : 'Failed to update template.');
+    }
+  };
+
+  const handleSubmit = async (e: FormEvent) => {
+    e.preventDefault();
+    const errors: { name?: string; body?: string } = {};
+    if (isBlank(form.name)) errors.name = 'Please enter the template name.';
+    if (isBlank(form.body)) errors.body = 'Please enter the waiver text.';
+    else if (form.body.trim().length < 10)
+      errors.body = 'Waiver text must be at least 10 characters.';
+    setFormErrors(errors);
+    if (Object.keys(errors).length > 0) {
+      toast.warning('Please fix the highlighted fields.');
+      focusFirstError();
+      return;
+    }
+    try {
+      if (editing) {
+        const updated = await waiverService.updateTemplate(editing.id, {
+          name: form.name.trim(),
+          category: form.category,
+          body: form.body.trim(),
+          status: form.status,
+        });
+        setTemplates((prev) => prev.map((t) => (t.id === updated.id ? updated : t)));
+        toast.success(`"${updated.name}" updated successfully!`);
+      } else {
+        const created = await waiverService.createTemplate({
+          name: form.name.trim(),
+          category: form.category,
+          body: form.body.trim(),
+          status: form.status,
+        });
+        setTemplates((prev) => [...prev, created]);
+        toast.success(`"${created.name}" created successfully!`);
+      }
+      setSlideOpen(false);
+      setEditing(null);
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : 'Failed to save template.');
+    }
+  };
+
   const toolbar = (
-    <div className="relative">
-      <Search className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-      <Input
-        aria-label="Search waiver templates"
-        value={query}
-        onChange={(e) => setQuery(e.target.value)}
-        placeholder="Search name or category"
-        className="h-9 w-full pl-8 sm:w-[280px]"
-      />
+    <div className="flex flex-wrap items-center justify-between gap-2">
+      <div className="relative">
+        <Search className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+        <Input
+          aria-label="Search waiver templates"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="Search name or category"
+          className="h-9 w-full pl-8 sm:w-[280px]"
+        />
+      </div>
+      <Button size="sm" onClick={openAdd}>
+        <Plus className="size-4" /> Add template
+      </Button>
     </div>
   );
 
@@ -99,121 +185,281 @@ export const ShelterEWaiversPage = () => {
     <div className="w-full px-4 py-6 sm:px-6">
       <SectionHeader
         title="E-Waivers"
-        subtitle="Waiver templates adopters review and sign before taking a pet home."
+        subtitle="Waiver templates bundled into the printable e-waiver adopters sign at handover."
       />
 
       <div className="mt-6 space-y-4">
         <TableCard
           title="Waiver templates"
-          description={`${filteredWaivers.length} of ${MOCK_WAIVERS.length} templates`}
+          description={
+            loading
+              ? 'Loading templates…'
+              : `${filteredTemplates.length} of ${templates.length} templates`
+          }
           icon={FileSignature}
           toolbar={toolbar}
-          isEmpty={filteredWaivers.length === 0}
-          emptyTitle="No waivers found"
-          emptyDescription="Try a different search."
+          isEmpty={!loading && filteredTemplates.length === 0}
+          emptyTitle={loadError ?? 'No waivers found'}
+          emptyDescription={
+            loadError ?? 'Try a different search, or add a new template.'
+          }
           contentClassName="px-0"
         >
-          {/* Desktop: data table */}
-          <div className="hidden md:block">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Template</TableHead>
-                  <TableHead>Category</TableHead>
-                  <TableHead>Last updated</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead className="text-center">Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filteredWaivers.map((waiver) => (
-                  <TableRow key={waiver.id}>
-                    <TableCell>
-                      <p className="font-medium">{waiver.name}</p>
-                    </TableCell>
-                    <TableCell className="whitespace-nowrap text-muted-foreground">
-                      {waiver.category}
-                    </TableCell>
-                    <TableCell className="whitespace-nowrap text-muted-foreground">
-                      {formatDate(waiver.updatedAt)}
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant={waiver.status === 'Active' ? 'success' : 'muted'}>
-                        {waiver.status}
+          {loading ? (
+            <p className="p-6 text-sm text-muted-foreground">Loading templates…</p>
+          ) : loadError ? (
+            <div className="p-6">
+              <EmptyState
+                title="Could not load templates"
+                description={loadError}
+                action={
+                  <Button variant="outline" size="sm" onClick={() => window.location.reload()}>
+                    Retry
+                  </Button>
+                }
+              />
+            </div>
+          ) : (
+            <>
+              {/* Desktop: data table */}
+              <div className="hidden md:block">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Template</TableHead>
+                      <TableHead>Category</TableHead>
+                      <TableHead>Last updated</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead className="text-center">Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {filteredTemplates.map((template) => (
+                      <TableRow key={template.id}>
+                        <TableCell>
+                          <p className="font-medium">{template.name}</p>
+                        </TableCell>
+                        <TableCell className="whitespace-nowrap text-muted-foreground">
+                          {template.category}
+                        </TableCell>
+                        <TableCell className="whitespace-nowrap text-muted-foreground">
+                          {formatDate(template.updatedAt)}
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant={template.status === 'Active' ? 'success' : 'muted'}>
+                            {template.status}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-center">
+                          <div className="flex justify-center gap-1">
+                            <Button
+                              variant="ghost"
+                              size="icon-sm"
+                              className="text-muted-foreground"
+                              aria-label={`Preview ${template.name}`}
+                              onClick={() => setDetailsId(template.id)}
+                            >
+                              <Eye className="size-4" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon-sm"
+                              className="text-blue-600 hover:bg-blue-50 hover:text-blue-700 dark:text-blue-400 dark:hover:bg-blue-950/40"
+                              aria-label={`Edit ${template.name}`}
+                              onClick={() => openEdit(template)}
+                            >
+                              <Pencil className="size-4" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon-sm"
+                              className={
+                                template.status === 'Active'
+                                  ? 'text-muted-foreground'
+                                  : 'text-green-600 hover:bg-green-50 hover:text-green-700 dark:text-green-400 dark:hover:bg-green-950/40'
+                              }
+                              aria-label={`${template.status === 'Active' ? 'Deactivate' : 'Activate'} ${template.name}`}
+                              onClick={() => toggleStatus(template)}
+                            >
+                              <Check className="size-4" />
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+
+              {/* Mobile: stacked cards */}
+              <div className="grid gap-3 p-4 md:hidden">
+                {filteredTemplates.map((template) => (
+                  <RecordCard
+                    key={template.id}
+                    title={template.name}
+                    subtitle={`${template.category} · ${formatDate(template.updatedAt)}`}
+                    badges={
+                      <Badge variant={template.status === 'Active' ? 'success' : 'muted'}>
+                        {template.status}
                       </Badge>
-                    </TableCell>
-                    <TableCell className="text-center">
-                      <div className="flex justify-center gap-1">
+                    }
+                    actions={
+                      <>
                         <Button
                           variant="ghost"
                           size="icon-sm"
                           className="text-muted-foreground"
-                          aria-label={`Preview ${waiver.name}`}
-                          onClick={() => setDetailsId(waiver.id)}
+                          aria-label={`Preview ${template.name}`}
+                          onClick={() => setDetailsId(template.id)}
                         >
                           <Eye className="size-4" />
                         </Button>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </div>
-
-          {/* Mobile: stacked cards */}
-          <div className="grid gap-3 p-4 md:hidden">
-            {filteredWaivers.map((waiver) => (
-              <RecordCard
-                key={waiver.id}
-                title={waiver.name}
-                subtitle={`${waiver.category} · ${formatDate(waiver.updatedAt)}`}
-                badges={
-                  <Badge variant={waiver.status === 'Active' ? 'success' : 'muted'}>
-                    {waiver.status}
-                  </Badge>
-                }
-                actions={
-                  <Button
-                    variant="ghost"
-                    size="icon-sm"
-                    className="text-muted-foreground"
-                    aria-label={`Preview ${waiver.name}`}
-                    onClick={() => setDetailsId(waiver.id)}
+                        <Button
+                          variant="ghost"
+                          size="icon-sm"
+                          className="text-blue-600 hover:bg-blue-50 hover:text-blue-700 dark:text-blue-400 dark:hover:bg-blue-950/40"
+                          aria-label={`Edit ${template.name}`}
+                          onClick={() => openEdit(template)}
+                        >
+                          <Pencil className="size-4" />
+                        </Button>
+                      </>
+                    }
                   >
-                    <Eye className="size-4" />
-                  </Button>
-                }
-              >
-                <p className="line-clamp-2 text-sm text-muted-foreground">{waiver.body}</p>
-              </RecordCard>
-            ))}
-          </div>
+                    <p className="line-clamp-2 text-sm text-muted-foreground">{template.body}</p>
+                  </RecordCard>
+                ))}
+              </div>
+            </>
+          )}
         </TableCard>
       </div>
 
-      <DetailsModal
-        open={detailsWaiver !== null}
-        onClose={() => setDetailsId(null)}
-        title={detailsWaiver?.name ?? 'Waiver'}
-        description={detailsWaiver?.category}
-        icon={FileSignature}
+      <SlideOver
+        open={slideOpen}
+        onClose={() => {
+          setSlideOpen(false);
+          setEditing(null);
+        }}
+        title={editing ? `Edit ${editing.name}` : 'Add waiver template'}
+        description={
+          editing
+            ? 'Update the template below. Already-issued waivers keep their original text.'
+            : 'New templates can be bundled into e-waivers at handover.'
+        }
+        icon={editing ? Pencil : Plus}
         footer={
-          <Button size="sm" variant="outline" className="w-full" onClick={() => setDetailsId(null)}>
-            Close
-          </Button>
+          <div className="flex flex-col-reverse gap-2 sm:flex-row">
+            <Button type="submit" form="waiver-template-form" size="sm" className="sm:flex-1">
+              {editing ? 'Save changes' : 'Create template'}
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                setSlideOpen(false);
+                setEditing(null);
+              }}
+            >
+              Cancel
+            </Button>
+          </div>
         }
       >
-        {detailsWaiver && (
+        <form id="waiver-template-form" onSubmit={handleSubmit} noValidate className="grid gap-3">
+          <div>
+            <Label htmlFor="waiver-name">Name</Label>
+            <ValidatedInput
+              id="waiver-name"
+              value={form.name}
+              onChange={(e) => {
+                setForm({ ...form, name: e.target.value });
+                setFormErrors((p) => ({ ...p, name: undefined }));
+              }}
+              placeholder="e.g. Adoption Liability Waiver"
+              required
+              error={formErrors.name}
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <Label>Category</Label>
+              <Select
+                value={form.category}
+                onChange={(e) => setForm({ ...form, category: e.target.value })}
+                required
+                options={CATEGORY_OPTIONS}
+              />
+            </div>
+            <div>
+              <Label>Status</Label>
+              <Select
+                value={form.status}
+                onChange={(e) => setForm({ ...form, status: e.target.value as WaiverTemplateStatus })}
+                required
+                options={STATUS_OPTIONS}
+              />
+            </div>
+          </div>
+          <div>
+            <Label htmlFor="waiver-body">Waiver text</Label>
+            <Textarea
+              id="waiver-body"
+              value={form.body}
+              onChange={(e) => {
+                setForm({ ...form, body: e.target.value });
+                setFormErrors((p) => ({ ...p, body: undefined }));
+              }}
+              placeholder="The full waiver wording adopters agree to… (min. 10 characters)"
+              required
+              minLength={10}
+              rows={8}
+              aria-invalid={Boolean(formErrors.body)}
+              className={
+                formErrors.body
+                  ? 'border-destructive focus-visible:border-destructive focus-visible:ring-destructive/40'
+                  : undefined
+              }
+            />
+            {formErrors.body && (
+              <p role="alert" className="mt-1 text-[13px] text-destructive">
+                {formErrors.body}
+              </p>
+            )}
+          </div>
+        </form>
+      </SlideOver>
+
+      <DetailsModal
+        open={detailsTemplate !== null}
+        onClose={() => setDetailsId(null)}
+        title={detailsTemplate?.name ?? 'Waiver'}
+        description={detailsTemplate?.category}
+        icon={FileSignature}
+        footer={
+          detailsTemplate ? (
+            <div className="flex gap-2">
+              <Button size="sm" className="flex-1" onClick={() => openEdit(detailsTemplate)}>
+                <Pencil className="size-3.5" /> Edit template
+              </Button>
+              <Button size="sm" variant="outline" onClick={() => setDetailsId(null)}>
+                Close
+              </Button>
+            </div>
+          ) : undefined
+        }
+      >
+        {detailsTemplate && (
           <div className="space-y-4">
             <div className="flex flex-wrap items-center gap-1.5">
-              <Badge variant={detailsWaiver.status === 'Active' ? 'success' : 'muted'}>
-                {detailsWaiver.status}
+              <Badge variant={detailsTemplate.status === 'Active' ? 'success' : 'muted'}>
+                {detailsTemplate.status}
               </Badge>
-              <Badge variant="muted">Updated {formatDate(detailsWaiver.updatedAt)}</Badge>
+              <Badge variant="muted">Updated {formatDate(detailsTemplate.updatedAt)}</Badge>
             </div>
             <div className="rounded-lg border p-3">
-              <p className="text-sm leading-relaxed">{detailsWaiver.body}</p>
+              <p className="text-sm leading-relaxed">{detailsTemplate.body}</p>
             </div>
           </div>
         )}

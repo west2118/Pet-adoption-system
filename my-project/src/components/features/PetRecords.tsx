@@ -35,8 +35,8 @@ const TraitPill = ({ label, value }: { label: string; value: boolean | undefined
 };
 
 /**
- * Medical history and care traits. Replaces the previous inline "Yes · No" text
- * dumps with two scannable lists.
+ * Medical history and care traits. Only confirmed ("yes") traits render —
+ * anything the shelter didn't record stays off the page entirely.
  */
 export const PetRecords = ({ pet }: PetRecordsProps) => {
   const medical = [
@@ -44,7 +44,7 @@ export const PetRecords = ({ pet }: PetRecordsProps) => {
     { label: 'Spayed / neutered', value: pet.spayedNeutered },
     { label: 'Microchipped', value: pet.microchipped },
     { label: 'Dewormed', value: pet.dewormed },
-  ];
+  ].filter((row) => row.value === true);
 
   const traits = [
     { label: 'Good with kids', value: pet.goodWithKids },
@@ -55,7 +55,7 @@ export const PetRecords = ({ pet }: PetRecordsProps) => {
     { label: 'Leash-trained', value: pet.leashTrained },
     { label: 'Crate-trained', value: pet.crateTrained },
     { label: 'Apartment-friendly', value: pet.apartmentFriendly },
-  ];
+  ].filter((row) => row.value === true);
 
   return (
     <div className="grid gap-12 lg:grid-cols-12 lg:gap-16">
@@ -67,9 +67,15 @@ export const PetRecords = ({ pet }: PetRecordsProps) => {
         </h3>
 
         <ul className="mt-5 border-t border-border">
-          {medical.map((row) => (
-            <TraitPill key={row.label} label={row.label} value={row.value} />
-          ))}
+          {medical.length > 0 ? (
+            medical.map((row) => (
+              <TraitPill key={row.label} label={row.label} value={row.value} />
+            ))
+          ) : (
+            <li className="py-3 text-sm text-muted-foreground">
+              No medical records confirmed yet.
+            </li>
+          )}
         </ul>
 
         {pet.medicalHistory.length > 0 && (
@@ -107,11 +113,13 @@ export const PetRecords = ({ pet }: PetRecordsProps) => {
           </div>
         )}
 
-        <ul className="mt-8 border-t border-border sm:grid sm:grid-cols-2 sm:gap-x-10">
-          {traits.map((row) => (
-            <TraitPill key={row.label} label={row.label} value={row.value} />
-          ))}
-        </ul>
+        {traits.length > 0 && (
+          <ul className="mt-8 border-t border-border sm:grid sm:grid-cols-2 sm:gap-x-10">
+            {traits.map((row) => (
+              <TraitPill key={row.label} label={row.label} value={row.value} />
+            ))}
+          </ul>
+        )}
       </div>
     </div>
   );

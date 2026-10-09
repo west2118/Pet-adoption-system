@@ -71,7 +71,7 @@ const seed = async () => {
         name: 'Buddy',
         species: 'dog',
         breed: 'Golden Retriever',
-        age_years: 2,
+        birthdate: '2024-04-15',
         age_group: 'young',
         size: 'large',
         gender: 'male',
@@ -93,7 +93,7 @@ const seed = async () => {
         name: 'Mittens',
         species: 'cat',
         breed: 'Siamese',
-        age_years: 1,
+        birthdate: '2025-05-10',
         age_group: 'young',
         size: 'small',
         gender: 'female',
@@ -115,7 +115,7 @@ const seed = async () => {
         name: 'Rocky (Private)',
         species: 'dog',
         breed: 'Aspins',
-        age_years: 3,
+        birthdate: '2023-08-12',
         age_group: 'adult',
         size: 'medium',
         gender: 'male',
@@ -137,12 +137,12 @@ const seed = async () => {
 
     for (const p of pets) {
       await pool.query(
-        `INSERT INTO pets (name, species, breed, age_years, age_group, size, gender, temperament,
+        `INSERT INTO pets (name, species, breed, birthdate, age_group, size, gender, temperament,
           shelter_id, visibility, description, medical_history, behavioral_notes, status,
           image_url, gallery, vaccinated, spayed_neutered, good_with_kids, good_with_pets)
          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20)`,
         [
-          p.name, p.species, p.breed, p.age_years, p.age_group, p.size, p.gender, p.temperament,
+          p.name, p.species, p.breed, p.birthdate, p.age_group, p.size, p.gender, p.temperament,
           p.shelter_id, p.visibility, p.description, p.medical_history, p.behavioral_notes, p.status,
           p.image_url, p.gallery, p.vaccinated, p.spayed_neutered, p.good_with_kids, p.good_with_pets,
         ],

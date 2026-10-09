@@ -1,4 +1,5 @@
 import { mockApplications, mockPets, mockShelters, mockUsers } from '@/data/mockData';
+import { ApiError, apiRequest, tokenStore } from '@/lib/apiClient';
 import type {
   AdoptionApplication,
   ApplicationStatus,
@@ -8,29 +9,123 @@ import type {
 } from '@/types';
 
 /**
- * Service layer prepared for Express.js (local) / Supabase (prod).
- * Currently backed by in-memory mocks so the UI works without a backend.
- * Swap the bodies with fetch()/supabase calls when the API is ready.
+ * Public catalogue service.
+ *
+ * Reads are dynamic: they hit the Express backend's public endpoints
+ * (GET /pets, GET /pets/:id, GET /shelters, GET /shelters/:id) which return
+ * only `visibility = 'public'` rows from Postgres.
+ *
+ * If the backend is unreachable (demo mode), reads fall back to the
+ * in-memory mocks so Home / Browse / Shelters still render.
  */
 
+interface PetsListResponse {
+  pets: Pet[];
+}
+
+interface PetResponse {
+  pet: Pet;
+}
+
+interface SheltersListResponse {
+  shelters: Shelter[];
+}
+
+interface ShelterResponse {
+  shelter: Shelter;
+}
+
+const PUBLIC_PAGE_LIMIT = 100;
+
+export const listPets = async (): Promise<Pet[]> => {
+  try {
+    const data = await apiRequest<PetsListResponse>(`/pets?limit=${PUBLIC_PAGE_LIMIT}`);
+    return data.pets;
+  } catch {
+    return [...petsStore];
+  }
+};
+
+export const getPetById = async (id: string): Promise<Pet | undefined> => {
+  try {
+    const data = await apiRequest<PetResponse>(`/pets/${encodeURIComponent(id)}`);
+    return data.pet;
+  } catch (err) {
+    // 404 from the API means "not public / not found" — mirror it as undefined
+    // so detail pages keep showing their EmptyState instead of throwing.
+    if (err instanceof Error && 'status' in err && (err as { status: number }).status === 404) {
+      return undefined;
+    }
+    return petsStore.find((p) => p.id === id);
+  }
+};
+
+export const listPetsByShelter = async (shelterId: string): Promise<Pet[]> => {
+  try {
+    const data = await apiRequest<PetsListResponse>(
+      `/pets?shelterId=${encodeURIComponent(shelterId)}&limit=${PUBLIC_PAGE_LIMIT}`,
+    );
+    return data.pets;
+  } catch {
+    return petsStore.filter((p) => p.shelterId === shelterId);
+  }
+};
+
 const delay = (ms = 250) => new Promise((res) => setTimeout(res, ms));
+
+/** Backend derives the shelter from the staff JWT, so never send shelterId. */
+const toListingPayload = (input: Partial<Pet>) => {
+  const {
+    id: _id,
+    shelterId: _shelterId,
+    dateAdded: _dateAdded,
+    ...payload
+  } = input;
+  return payload;
+};
+
+const shouldFallbackToMock = (err: unknown): boolean =>
+  err instanceof ApiError && (err.status === 0 || err.status === 401 || err.status === 403);
 
 let petsStore: Pet[] = [...mockPets];
 let applicationsStore: AdoptionApplication[] = [...mockApplications];
 let sheltersStore: Shelter[] = [...mockShelters];
 let usersStore: User[] = [...mockUsers];
 
-export const listPets = async (): Promise<Pet[]> => {
-  await delay();
-  return [...petsStore];
-};
-
-export const getPetById = async (id: string): Promise<Pet | undefined> => {
-  await delay(150);
-  return petsStore.find((p) => p.id === id);
+/**
+ * Own-shelter inventory (public + private) for the shelter portal.
+ * Requires a shelter_staff / platform_admin session; falls back to mocks
+ * in demo mode (no token) or when the API is unreachable.
+ */
+export const listMyListings = async (shelterId?: string | null): Promise<Pet[]> => {
+  if (tokenStore.get()) {
+    try {
+      const data = await apiRequest<PetsListResponse>(
+        `/shelter/listings?limit=${PUBLIC_PAGE_LIMIT}`,
+        { auth: 'full' },
+      );
+      return data.pets;
+    } catch (err) {
+      if (!shouldFallbackToMock(err)) throw err;
+    }
+  }
+  const all = await listPets();
+  return shelterId ? all.filter((p) => p.shelterId === shelterId) : all;
 };
 
 export const createPet = async (input: Omit<Pet, 'id' | 'dateAdded'>): Promise<Pet> => {
+  if (tokenStore.get()) {
+    try {
+      const data = await apiRequest<PetResponse>('/shelter/listings', {
+        method: 'POST',
+        body: toListingPayload(input),
+        auth: 'full',
+      });
+      return data.pet;
+    } catch (err) {
+      if (!shouldFallbackToMock(err)) throw err;
+    }
+  }
   await delay();
   const pet: Pet = {
     ...input,
@@ -42,24 +137,42 @@ export const createPet = async (input: Omit<Pet, 'id' | 'dateAdded'>): Promise<P
 };
 
 export const updatePet = async (id: string, patch: Partial<Pet>): Promise<Pet | undefined> => {
+  if (tokenStore.get()) {
+    try {
+      const data = await apiRequest<PetResponse>(
+        `/shelter/listings/${encodeURIComponent(id)}`,
+        { method: 'PATCH', body: toListingPayload(patch), auth: 'full' },
+      );
+      return data.pet;
+    } catch (err) {
+      if (!shouldFallbackToMock(err)) throw err;
+    }
+  }
   await delay();
   petsStore = petsStore.map((p) => (p.id === id ? { ...p, ...patch } : p));
   return petsStore.find((p) => p.id === id);
 };
 
 export const removePet = async (id: string): Promise<void> => {
+  if (tokenStore.get()) {
+    try {
+      await apiRequest(`/shelter/listings/${encodeURIComponent(id)}`, {
+        method: 'DELETE',
+        auth: 'full',
+      });
+      return;
+    } catch (err) {
+      if (!shouldFallbackToMock(err)) throw err;
+    }
+  }
   await delay();
   petsStore = petsStore.filter((p) => p.id !== id);
-};
-
-export const listPetsByShelter = async (shelterId: string): Promise<Pet[]> => {
-  await delay();
-  return petsStore.filter((p) => p.shelterId === shelterId);
 };
 
 export const petService = {
   list: listPets,
   listByShelter: listPetsByShelter,
+  listMine: listMyListings,
   getById: getPetById,
   create: createPet,
   update: updatePet,
@@ -67,13 +180,26 @@ export const petService = {
 };
 
 export const listShelters = async (): Promise<Shelter[]> => {
-  await delay();
-  return [...sheltersStore];
+  try {
+    const data = await apiRequest<SheltersListResponse>(
+      `/shelters?limit=${PUBLIC_PAGE_LIMIT}`,
+    );
+    return data.shelters;
+  } catch {
+    return [...sheltersStore];
+  }
 };
 
 export const getShelterById = async (id: string): Promise<Shelter | undefined> => {
-  await delay(150);
-  return sheltersStore.find((s) => s.id === id);
+  try {
+    const data = await apiRequest<ShelterResponse>(`/shelters/${encodeURIComponent(id)}`);
+    return data.shelter;
+  } catch (err) {
+    if (err instanceof Error && 'status' in err && (err as { status: number }).status === 404) {
+      return undefined;
+    }
+    return sheltersStore.find((s) => s.id === id);
+  }
 };
 
 export const createShelter = async (

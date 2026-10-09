@@ -3,6 +3,7 @@ import { ProtectedRoute } from '@/components/layout/AppLayout';
 import { ShelterLayout } from '@/components/layout/ShelterLayout';
 import { ShelterApplicationsPage } from '@/pages/shelter/ShelterApplicationsPage';
 import { ShelterEWaiversPage } from '@/pages/shelter/ShelterEWaiversPage';
+import { WaiverPrintPage } from '@/pages/shelter/WaiverPrintPage';
 import { ShelterInquiriesPage } from '@/pages/shelter/ShelterInquiriesPage';
 import { ShelterListingsPage } from '@/pages/shelter/ShelterListingsPage';
 import { ShelterOverviewPage } from '@/pages/shelter/ShelterOverviewPage';
@@ -18,6 +19,7 @@ export const shelterRoutes: RouteObject = {
         { path: 'shelter', element: <ShelterOverviewPage /> },
         { path: 'shelter/listings', element: <ShelterListingsPage /> },
         { path: 'shelter/applications', element: <ShelterApplicationsPage /> },
+        { path: 'shelter/applications/:appId/waiver', element: <WaiverPrintPage /> },
         { path: 'shelter/inquiries', element: <ShelterInquiriesPage /> },
         { path: 'shelter/templates/e-waivers', element: <ShelterEWaiversPage /> },
         { path: 'shelter/profile', element: <ShelterProfilePage /> },

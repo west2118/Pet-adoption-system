@@ -1,13 +1,35 @@
 // snake_case DB rows -> camelCase API objects (mirrors frontend types/index.ts)
 
+export const ageYearsFromBirthdate = (birthdateStr) => {
+  if (!birthdateStr) return 0;
+  const str =
+    birthdateStr instanceof Date
+      ? birthdateStr.toISOString().slice(0, 10)
+      : String(birthdateStr).slice(0, 10);
+  const birth = new Date(`${str}T00:00:00`);
+  const now = new Date();
+  if (Number.isNaN(birth.getTime()) || birth > now) return 0;
+  const years = (now.getTime() - birth.getTime()) / (365.25 * 24 * 3600 * 1000);
+  return Math.max(0, Math.round(years * 10) / 10);
+};
+
 export const mapPet = (row) => {
   if (!row) return null;
+  const birthdate =
+    row.birthdate instanceof Date
+      ? row.birthdate.toISOString().slice(0, 10)
+      : row.birthdate
+        ? String(row.birthdate).slice(0, 10)
+        : '';
+  const ageYears = ageYearsFromBirthdate(birthdate);
+
   return {
     id: row.id,
     name: row.name,
     species: row.species,
     breed: row.breed,
-    ageYears: Number(row.age_years),
+    birthdate,
+    ageYears,
     ageGroup: row.age_group,
     size: row.size,
     gender: row.gender,
@@ -121,5 +143,38 @@ export const mapInquiry = (row) => {
     message: row.message,
     resolved: row.resolved,
     createdAt: row.created_at,
+  };
+};
+
+export const mapWaiverTemplate = (row) => {
+  if (!row) return null;
+  return {
+    id: row.id,
+    shelterId: row.shelter_id,
+    name: row.name,
+    category: row.category,
+    body: row.body,
+    status: row.status,
+    updatedAt: row.updated_at,
+  };
+};
+
+export const mapWaiver = (row) => {
+  if (!row) return null;
+  let snapshot = row.snapshot;
+  if (typeof snapshot === 'string') {
+    try {
+      snapshot = JSON.parse(snapshot);
+    } catch {
+      snapshot = null;
+    }
+  }
+  return {
+    id: row.id,
+    applicationId: row.application_id,
+    shelterId: row.shelter_id,
+    snapshot,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
   };
 };

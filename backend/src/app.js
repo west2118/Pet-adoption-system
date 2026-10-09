@@ -16,7 +16,8 @@ export const createApp = () => {
       credentials: true,
     }),
   );
-  app.use(express.json({ limit: '1mb' }));
+  // 10mb: shelter staff upload photos as base64 data URLs inside JSON.
+  app.use(express.json({ limit: '10mb' }));
 
   app.get('/health', (_req, res) => res.json({ success: true, data: { status: 'ok' } }));
 

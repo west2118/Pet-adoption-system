@@ -76,7 +76,7 @@ CREATE TABLE IF NOT EXISTS pets (
   name VARCHAR(255) NOT NULL,
   species species_type NOT NULL,
   breed VARCHAR(255) NOT NULL,
-  age_years NUMERIC(4, 1) NOT NULL CHECK (age_years >= 0),
+  birthdate DATE NOT NULL,
   age_group age_group_type NOT NULL,
   size pet_size_type NOT NULL,
   gender gender_type NOT NULL,

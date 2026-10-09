@@ -1,6 +1,7 @@
 import type { RouteObject } from 'react-router-dom';
 import { ProtectedRoute } from '@/components/layout/AppLayout';
 import { PublicLayout } from '@/components/layout/PublicLayout';
+import { AdopterWaiverPage } from '@/pages/AdopterWaiverPage';
 import { AdoptionFormPage } from '@/pages/AdoptionFormPage';
 import { ApplicationsPage } from '@/pages/ApplicationsPage';
 import { BrowsePetsPage } from '@/pages/BrowsePetsPage';
@@ -39,6 +40,7 @@ export const publicRoutes: RouteObject = {
       children: [
         { path: 'apply/:petId', element: <AdoptionFormPage /> },
         { path: 'applications', element: <ApplicationsPage /> },
+        { path: 'applications/:id/waiver', element: <AdopterWaiverPage /> },
       ],
     },
 

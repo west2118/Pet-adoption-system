@@ -49,7 +49,6 @@ export const SignupPage = () => {
     else if (isBlank(confirm)) next.confirm = 'Please confirm your password.';
     setFieldErrors(next);
     if (Object.keys(next).length > 0) {
-      toast.warning('Please fix the highlighted fields.');
       focusFirstError();
       return;
     }
@@ -74,7 +73,6 @@ export const SignupPage = () => {
           ? err.message
           : 'Something went wrong. Please try again.';
       setError(message);
-      toast.error(message);
     } finally {
       setSubmitting(false);
     }

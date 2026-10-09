@@ -22,6 +22,7 @@ export interface Pet {
   name: string;
   species: Species;
   breed: string;
+  birthdate: string;
   ageYears: number;
   ageGroup: AgeGroup;
   size: PetSize;
@@ -61,6 +62,8 @@ export interface Shelter {
   description: string;
   imageUrl: string;
   totalPets: number;
+  /** Public + Available listings count (provided by GET /shelters). */
+  activeListings?: number;
 }
 
 export interface AdoptionApplication {
@@ -122,6 +125,42 @@ export interface Inquiry {
   fromEmail: string;
   message: string;
   createdAt: string;
+}
+
+export type WaiverTemplateStatus = 'Active' | 'Draft';
+
+export interface WaiverTemplate {
+  id: string;
+  shelterId: string;
+  name: string;
+  category: string;
+  body: string;
+  status: WaiverTemplateStatus;
+  updatedAt: string;
+}
+
+export interface WaiverSnapshot {
+  application: {
+    id: string;
+    applicantName: string;
+    email: string;
+    phone: string;
+    address: string;
+    status: string;
+  };
+  pet: Pet;
+  shelter: Shelter;
+  templates: { id: string; name: string; category: string; body: string }[];
+  issuedAt: string;
+}
+
+export interface Waiver {
+  id: string;
+  applicationId: string;
+  shelterId: string;
+  snapshot: WaiverSnapshot;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface AppNotification {

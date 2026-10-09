@@ -337,3 +337,44 @@
     transition-duration: 0.01ms !important;
   }
 }
+
+/*
+ * E-waiver printing: only #waiver-print reaches the paper. Everything else
+ * (sidebars, navbars, buttons marked print:hidden) is hidden via visibility
+ * so the document keeps its layout, then repositioned to the page origin.
+ */
+@media print {
+  body * {
+    visibility: hidden;
+  }
+  #waiver-print,
+  #waiver-print * {
+    visibility: visible;
+  }
+  #waiver-print {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    border: none !important;
+    border-radius: 0 !important;
+  }
+  /* Each template is its own printed page. */
+  #waiver-print .waiver-page {
+    break-after: page;
+    break-inside: avoid;
+  }
+  #waiver-print .waiver-page:last-child {
+    break-after: auto;
+  }
+  .print\:hidden {
+    display: none !important;
+  }
+}
+
+/* On screen the per-template pages stack as separated sheets. */
+#waiver-print .waiver-page + .waiver-page {
+  margin-top: 2.5rem;
+  border-top: 1px dashed var(--border);
+  padding-top: 2.5rem;
+}

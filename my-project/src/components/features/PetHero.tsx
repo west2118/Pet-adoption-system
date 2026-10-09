@@ -133,7 +133,11 @@ export const PetHero = ({ pet, shelter, favorite, onToggleFavorite }: PetHeroPro
                     Age
                   </dt>
                   <dd className="font-display text-4xl font-semibold text-primary">
-                    {formatAge(pet.ageYears).replace(' years old', ' yrs').replace(' year old', ' yr')}
+                    {formatAge(pet)
+                      .replace(' years old', ' yrs')
+                      .replace(' year old', ' yr')
+                      .replace(' months old', ' mos')
+                      .replace(' month old', ' mo')}
                   </dd>
                 </div>
                 <div className="flex flex-col gap-1">

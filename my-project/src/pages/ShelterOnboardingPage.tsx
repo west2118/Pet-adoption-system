@@ -121,7 +121,6 @@ export const ShelterOnboardingPage = () => {
     if (!isUrl(form.imageUrl)) next.imageUrl = 'Enter a valid image URL (https://…).';
     setFieldErrors(next);
     if (Object.keys(next).length > 0) {
-      toast.warning('Please fix the highlighted fields.');
       focusFirstError();
       return;
     }
@@ -143,7 +142,6 @@ export const ShelterOnboardingPage = () => {
       }
       const message = err instanceof ApiError ? err.message : 'Unable to submit. Please try again.';
       setError(message);
-      toast.error(message);
     } finally {
       setSubmitting(false);
     }

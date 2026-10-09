@@ -62,6 +62,48 @@ export const useShelters = () => {
   return { shelters, setShelters, loading };
 };
 
+/**
+ * Shelter-portal inventory: the logged-in shelter's own listings
+ * (public + private) via GET /shelter/listings. Falls back to the public
+ * catalogue filtered by shelter in demo mode (no session).
+ */
+export const useShelterListings = (shelterId?: string | null) => {
+  const [pets, setPets] = useState<Pet[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const refresh = useCallback(async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      setPets(await petService.listMine(shelterId ?? undefined));
+    } catch {
+      setError('Failed to load listings. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  }, [shelterId]);
+
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      try {
+        const data = await petService.listMine(shelterId ?? undefined);
+        if (mounted) setPets(data);
+      } catch {
+        if (mounted) setError('Failed to load listings.');
+      } finally {
+        if (mounted) setLoading(false);
+      }
+    })();
+    return () => {
+      mounted = false;
+    };
+  }, [shelterId]);
+
+  return { pets, setPets, loading, error, refresh };
+};
+
 export const useUsers = () => {
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);

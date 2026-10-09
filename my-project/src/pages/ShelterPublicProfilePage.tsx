@@ -32,10 +32,11 @@ export const ShelterPublicProfilePage = () => {
       try {
         const found = await shelterService.getById(id);
         // Adopters only ever see public listings — private inventory stays hidden.
-        const allPets = found ? await petService.list() : [];
+        // GET /pets?shelterId= returns only visibility='public' rows for this shelter.
+        const shelterPets = found ? await petService.listByShelter(found.id) : [];
         if (!mounted) return;
         setShelter(found ?? null);
-        setPets(found ? publicPets(allPets).filter((p) => p.shelterId === found.id) : []);
+        setPets(found ? publicPets(shelterPets) : []);
       } catch {
         if (mounted) setError('Failed to load this shelter. Please try again.');
       } finally {

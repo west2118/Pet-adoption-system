@@ -73,15 +73,33 @@ export const listAllPets = async ({ limit, offset }) => {
   return { rows, total: count.rows[0].total };
 };
 
+const resolveBirthdate = (input) => {
+  if (input?.birthdate && String(input.birthdate).trim().length > 0) {
+    return String(input.birthdate).slice(0, 10);
+  }
+  if (typeof input?.ageYears === 'number' || (input?.ageYears && !isNaN(input.ageYears))) {
+    const years = Number(input.ageYears);
+    const now = new Date();
+    if (years < 1) {
+      now.setMonth(now.getMonth() - Math.round(years * 12 || 6));
+    } else {
+      now.setFullYear(now.getFullYear() - Math.round(years));
+    }
+    return now.toISOString().slice(0, 10);
+  }
+  return new Date().toISOString().slice(0, 10);
+};
+
 export const createPet = async (input, shelterId) => {
+  const birthdate = resolveBirthdate(input);
   const { rows } = await pool.query(
-    `INSERT INTO pets (name, species, breed, age_years, age_group, size, gender, temperament,
+    `INSERT INTO pets (name, species, breed, birthdate, age_group, size, gender, temperament,
        shelter_id, visibility, description, medical_history, behavioral_notes, status,
        image_url, gallery, vaccinated, spayed_neutered, good_with_kids, good_with_pets)
      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20)
      RETURNING *`,
     [
-      input.name, input.species, input.breed, input.ageYears, input.ageGroup,
+      input.name, input.species, input.breed, birthdate, input.ageGroup,
       input.size, input.gender, input.temperament ?? [], shelterId,
       input.visibility ?? 'public', input.description, input.medicalHistory ?? [],
       input.behavioralNotes ?? '', input.status ?? 'Available', input.imageUrl,
@@ -95,11 +113,15 @@ export const createPet = async (input, shelterId) => {
 export const updatePet = async (id, patch) => {
   const current = await findPetById(id);
   if (!current) return null;
+  const birthdate =
+    patch.birthdate ||
+    (patch.ageYears != null ? resolveBirthdate(patch) : current.birthdate) ||
+    new Date().toISOString().slice(0, 10);
   const merged = {
     name: patch.name ?? current.name,
     species: patch.species ?? current.species,
     breed: patch.breed ?? current.breed,
-    age_years: patch.ageYears ?? current.age_years,
+    birthdate,
     age_group: patch.ageGroup ?? current.age_group,
     size: patch.size ?? current.size,
     gender: patch.gender ?? current.gender,
@@ -117,13 +139,13 @@ export const updatePet = async (id, patch) => {
     good_with_pets: patch.goodWithPets ?? current.good_with_pets,
   };
   const { rows } = await pool.query(
-    `UPDATE pets SET name=$1, species=$2, breed=$3, age_years=$4, age_group=$5, size=$6,
+    `UPDATE pets SET name=$1, species=$2, breed=$3, birthdate=$4, age_group=$5, size=$6,
        gender=$7, temperament=$8, visibility=$9, description=$10, medical_history=$11,
        behavioral_notes=$12, status=$13, image_url=$14, gallery=$15, vaccinated=$16,
        spayed_neutered=$17, good_with_kids=$18, good_with_pets=$19, updated_at=CURRENT_TIMESTAMP
      WHERE id=$20 RETURNING *`,
     [
-      merged.name, merged.species, merged.breed, merged.age_years, merged.age_group,
+      merged.name, merged.species, merged.breed, merged.birthdate, merged.age_group,
       merged.size, merged.gender, merged.temperament, merged.visibility, merged.description,
       merged.medical_history, merged.behavioral_notes, merged.status, merged.image_url,
       merged.gallery, merged.vaccinated, merged.spayed_neutered, merged.good_with_kids,
