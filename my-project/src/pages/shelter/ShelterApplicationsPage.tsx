@@ -25,7 +25,7 @@ import { ApplicationStatusBadge } from '@/components/ui/StatusBadge';
 import { usePets } from '@/hooks/useData';
 import { applicationService } from '@/services/api';
 import { adoptionApplicationService } from '@/services/adoptionApplicationService';
-import { tokenStore } from '@/lib/apiClient';
+import { sessionStore } from '@/lib/apiClient';
 import type { AdoptionApplication, ApplicationStatus } from '@/types';
 import { formatDate } from '@/utils/formatters';
 
@@ -127,7 +127,7 @@ export const ShelterApplicationsPage = () => {
     try {
       // Dynamic path: persist in Postgres so the adopter sees the new status
       // on their Applications page immediately.
-      if (tokenStore.get()) {
+      if (sessionStore.has()) {
         try {
           const updated = await adoptionApplicationService.updateStatus(
             id,

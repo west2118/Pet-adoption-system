@@ -17,7 +17,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { usePets, useShelters } from '@/hooks/useData';
 import { applicationService } from '@/services/api';
 import { adoptionApplicationService } from '@/services/adoptionApplicationService';
-import { ApiError, tokenStore } from '@/lib/apiClient';
+import { ApiError, sessionStore } from '@/lib/apiClient';
 import type { Pet } from '@/types';
 
 const frame = 'mx-auto w-full max-w-[1400px] px-6 lg:px-12';
@@ -127,7 +127,7 @@ export const AdoptionFormPage = () => {
     try {
       // Dynamic path: write to the backend when a real session exists so the
       // shelter applications table and the adopter's own list read the same row.
-      if (tokenStore.get()) {
+      if (sessionStore.has()) {
         try {
           await adoptionApplicationService.create(payload);
           toast.success(`Application sent for ${pet?.name ?? 'your pet'}!`);

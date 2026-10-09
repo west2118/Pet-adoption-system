@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { createApplication, getMyApplications } from '../controllers/applicationController.js';
+import { createApplication, getMyApplications, getMyApplicationSummary } from '../controllers/applicationController.js';
 import { getMyApplicationWaiver } from '../controllers/waiverController.js';
 import { authenticate } from '../middlewares/authenticate.js';
 import { authorize } from '../middlewares/authorize.js';
@@ -21,6 +21,14 @@ applicationRoutes.get(
   authenticate,
   authorize('adopter'),
   getMyApplications,
+);
+// Summary counters for the same adopter — registered alongside /my so the
+// paged list and the stats bar can be fetched independently.
+applicationRoutes.get(
+  '/my/stats',
+  authenticate,
+  authorize('adopter'),
+  getMyApplicationSummary,
 );
 applicationRoutes.get(
   '/:id/waiver',

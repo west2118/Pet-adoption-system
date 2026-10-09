@@ -5,6 +5,7 @@ import {
   createApplication,
   findApplicationById,
   getApplicationHistory,
+  getApplicationSummaryByApplicant,
   listApplicationsByApplicant,
   listApplicationsByShelter,
 } from '../repositories/applicationRepository.js';
@@ -30,6 +31,9 @@ export const listMyApplications = async (applicantId, pagination) => {
   );
   return { applications, total };
 };
+
+export const getApplicationSummary = async (applicantId) =>
+  getApplicationSummaryByApplicant(applicantId);
 
 export const listShelterApplications = async (shelterId, options = {}) => {
   const { rows, total } = await listApplicationsByShelter(shelterId, options);

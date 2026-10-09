@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
-import { tokenStore } from '@/lib/apiClient';
+import { sessionStore } from '@/lib/apiClient';
 import { useAuth } from '@/hooks/useAuth';
 import {
   favoriteService,
@@ -31,7 +31,7 @@ export const FavoritesProvider = ({ children }: { children: ReactNode }) => {
   useEffect(() => {
     let mounted = true;
     (async () => {
-      if (!userId || !tokenStore.get()) {
+      if (!userId || !sessionStore.has()) {
         if (mounted) {
           setFavorites([]);
           setLoading(false);
@@ -57,7 +57,7 @@ export const FavoritesProvider = ({ children }: { children: ReactNode }) => {
 
   const toggleFavorite = useCallback(
     async (petId: string): Promise<ToggleFavoriteResult> => {
-      if (!userId || !tokenStore.get()) return 'login-required';
+      if (!userId || !sessionStore.has()) return 'login-required';
 
       const adding = !favorites.includes(petId);
       const next = adding

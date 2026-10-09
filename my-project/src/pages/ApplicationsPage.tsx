@@ -1,10 +1,10 @@
 import { ArrowRight, HeartHandshake, RefreshCw } from 'lucide-react';
 import { Link } from 'react-router-dom';
-import { BlurText, GridOverlay, Reveal } from '@/components/shared';
+import { BlurText, GridOverlay, Reveal, TablePagination } from '@/components/shared';
 import { ApplicationCard } from '@/components/features/ApplicationCard';
 import { EmptyState } from '@/components/ui/Feedback';
 import { Button } from '@/components/ui/button';
-import { useApplications, usePets } from '@/hooks/useData';
+import { useMyApplicationSummary, useMyApplicationsPage, usePets } from '@/hooks/useData';
 import { useAuth } from '@/hooks/useAuth';
 import type { ApplicationStatus } from '@/types';
 
@@ -15,18 +15,27 @@ const SUMMARY_ORDER: ApplicationStatus[] = ['Under Review', 'Approved', 'Adopted
 
 export const ApplicationsPage = () => {
   const { user } = useAuth();
-  const { applications, loading, refresh } = useApplications(user?.id, 'mine');
+  // The list is paged by the backend (5 per request); the summary bar reads
+  // its own endpoint so the counters stay right across every page.
+  const { applications, total, pageSize, page, setPage, loading, error, refresh } =
+    useMyApplicationsPage(user?.id);
+  const summary = useMyApplicationSummary(user?.id);
   const { pets } = usePets();
 
   const petById = (id: string) => pets.find((p) => p.id === id);
 
-  const countBy = (status: ApplicationStatus) =>
-    applications.filter((a) => a.status === status).length;
+  const summaryByStatus: Record<ApplicationStatus, number> = {
+    Submitted: 0,
+    'Under Review': summary?.underReview ?? 0,
+    Rejected: 0,
+    Approved: summary?.approved ?? 0,
+    Adopted: summary?.adopted ?? 0,
+  };
 
   const stats = [
-    { value: applications.length || '—', label: 'applications sent' },
+    { value: summary?.total || '—', label: 'applications sent' },
     ...SUMMARY_ORDER.map((status) => ({
-      value: countBy(status) || '—',
+      value: summaryByStatus[status] || '—',
       label: status.toLowerCase(),
     })),
   ];
@@ -91,7 +100,7 @@ export const ApplicationsPage = () => {
       </section>
 
       {/* -------------------------------------------------------- TRACKER */}
-      <section className="bg-background py-20 md:py-28">
+      <section id="application-tracker" className="scroll-mt-24 bg-background py-20 md:py-28">
         <div className={frame}>
           <Reveal className="flex flex-wrap items-end justify-between gap-4">
             <div>
@@ -115,8 +124,13 @@ export const ApplicationsPage = () => {
           </Reveal>
 
           <div className="mt-14">
-            {loading ? (
+            {loading && applications.length === 0 ? (
               <p className="text-sm text-muted-foreground">Loading applications…</p>
+            ) : error ? (
+              <EmptyState
+                title="Could not load your applications"
+                description={error}
+              />
             ) : applications.length === 0 ? (
               <EmptyState
                 title="No applications yet"
@@ -131,11 +145,32 @@ export const ApplicationsPage = () => {
                 }
               />
             ) : (
-              <div className="space-y-6">
-                {applications.map((app) => (
-                  <ApplicationCard key={app.id} application={app} pet={petById(app.petId)} />
-                ))}
-              </div>
+              <>
+                <div className="space-y-6">
+                  {applications.map((app) => (
+                    <ApplicationCard key={app.id} application={app} pet={petById(app.petId)} />
+                  ))}
+                </div>
+
+                {/* Backend-owned paging: 5 applications per request. */}
+                {total > 0 && (
+                  <div className="mt-10">
+                    <TablePagination
+                      currentPage={page}
+                      totalItems={total}
+                      pageSize={pageSize}
+                      onPageChange={(next) => {
+                        setPage(next);
+                        document
+                          .getElementById('application-tracker')
+                          ?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                      }}
+                      showPageSize={false}
+                      label="applications"
+                    />
+                  </div>
+                )}
+              </>
             )}
           </div>
         </div>

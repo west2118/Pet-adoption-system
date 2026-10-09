@@ -9,19 +9,7 @@ import {
   findUserById,
   updateUserProfile,
 } from '../repositories/userRepository.js';
-
-const signToken = (user) =>
-  jwt.sign(
-    {
-      id: user.id,
-      email: user.email,
-      role: user.role,
-      shelterId: user.shelter_id ?? undefined,
-      scope: 'full',
-    },
-    env.JWT_SECRET,
-    { expiresIn: env.JWT_EXPIRES_IN },
-  );
+import { issueSession, revokeSession, rotateSession } from './sessionService.js';
 
 // Short-lived, limited token issued to a pending shelter registrant so they can
 // submit onboarding details and check status. It grants no portal access.
@@ -64,8 +52,8 @@ export const signup = async (input) => {
     accountStatus: 'approved',
   });
   const user = mapUser(row);
-  const token = signToken(row);
-  return { user, token };
+  const { accessToken: token, refreshToken } = await issueSession(row);
+  return { user, token, refreshToken };
 };
 
 export const login = async (input) => {
@@ -87,8 +75,16 @@ export const login = async (input) => {
     throw new AppError('Your account is not active. Please contact support.', 403);
   }
   const user = mapUser(row);
-  const token = signToken(row);
-  return { user, token };
+  const { accessToken: token, refreshToken } = await issueSession(row);
+  return { user, token, refreshToken };
+};
+
+export const refreshSession = async (presentedRefreshToken) =>
+  rotateSession(presentedRefreshToken);
+
+export const logoutSession = async (presentedRefreshToken) => {
+  await revokeSession(presentedRefreshToken);
+  return { revoked: true };
 };
 
 export const getMe = async (userId) => {

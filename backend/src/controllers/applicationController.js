@@ -1,4 +1,4 @@
-import { listMyApplications, listShelterApplications, submitApplication, updateApplicationStatus } from '../services/applicationService.js';
+import { getApplicationSummary, listMyApplications, listShelterApplications, submitApplication, updateApplicationStatus } from '../services/applicationService.js';
 import { sendSuccess, buildMeta } from '../utils/respond.js';
 import { parsePagination } from '../validators/commonValidator.js';
 
@@ -8,9 +8,17 @@ export const createApplication = async (req, res) => {
 };
 
 export const getMyApplications = async (req, res) => {
-  const { page, limit, offset } = parsePagination(req.query);
+  // The "My Applications" page shows 5 per page — the backend owns that
+  // default; the client only asks for a `page`.
+  const { page, limit, offset } = parsePagination(req.query, 5);
   const { applications, total } = await listMyApplications(req.user.id, { limit, offset });
   return sendSuccess(res, { applications }, undefined, buildMeta(page, limit, total));
+};
+
+/** Status counters for the adopter's summary bar (independent of paging). */
+export const getMyApplicationSummary = async (req, res) => {
+  const summary = await getApplicationSummary(req.user.id);
+  return sendSuccess(res, { summary });
 };
 
 export const getShelterApplications = async (req, res) => {

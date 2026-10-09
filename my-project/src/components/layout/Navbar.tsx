@@ -1,4 +1,4 @@
-import { Bell, Heart, LogOut, Menu, PawPrint, X } from 'lucide-react';
+import { Heart, LogOut, Menu, PawPrint, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
@@ -94,29 +94,18 @@ export const Navbar = () => {
 
         <div className="hidden items-center gap-3 lg:flex">
           {user && (
-            <>
-              <Link
-                to="/favorites"
-                className="relative flex size-9 items-center justify-center rounded-full border border-border bg-background transition-colors hover:bg-muted"
-                aria-label="Favorites"
-              >
-                <Heart className="size-4" />
-                {favorites.length > 0 && (
-                  <span className="absolute -right-1 -top-1 flex size-5 items-center justify-center rounded-full bg-[var(--brand)] font-mono text-[10px] font-bold text-white">
-                    {favorites.length}
-                  </span>
-                )}
-              </Link>
-
-              <button
-                type="button"
-                className="flex size-9 items-center justify-center rounded-full border border-border bg-background transition-colors hover:bg-muted"
-                aria-label="Notifications"
-                onClick={() => navigate('/applications')}
-              >
-                <Bell className="size-4" />
-              </button>
-            </>
+            <Link
+              to="/favorites"
+              className="relative flex size-9 items-center justify-center rounded-full border border-border bg-background transition-colors hover:bg-muted"
+              aria-label="Favorites"
+            >
+              <Heart className="size-4" />
+              {favorites.length > 0 && (
+                <span className="absolute -right-1 -top-1 flex size-5 items-center justify-center rounded-full bg-[var(--brand)] font-mono text-[10px] font-bold text-white">
+                  {favorites.length}
+                </span>
+              )}
+            </Link>
           )}
 
           {initializing ? (

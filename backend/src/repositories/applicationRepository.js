@@ -44,6 +44,29 @@ export const listApplicationsByApplicant = async (applicantId, { limit, offset }
   return { rows, total: count.rows[0].total };
 };
 
+/**
+ * Status counters across ALL of an adopter's applications — the summary bar
+ * has to stay correct while the list itself is paged at 5 per request.
+ */
+export const getApplicationSummaryByApplicant = async (applicantId) => {
+  const { rows } = await pool.query(
+    `SELECT COUNT(*)::int AS total,
+            COUNT(*) FILTER (WHERE status = 'Under Review')::int AS under_review,
+            COUNT(*) FILTER (WHERE status = 'Approved')::int AS approved,
+            COUNT(*) FILTER (WHERE status = 'Adopted')::int AS adopted
+       FROM adoption_applications
+      WHERE applicant_id = $1`,
+    [applicantId],
+  );
+  const row = rows[0];
+  return {
+    total: row.total,
+    underReview: row.under_review,
+    approved: row.approved,
+    adopted: row.adopted,
+  };
+};
+
 export const listApplicationsByShelter = async (shelterId, { limit = 10, offset = 0, status, search } = {}) => {
   const conditions = ['p.shelter_id = $1'];
   const values = [shelterId];

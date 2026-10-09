@@ -12,6 +12,19 @@ export const listShelters = async ({ limit = 50, offset = 0 } = {}) => {
   return { rows, total: count.rows[0].total };
 };
 
+/**
+ * Network-wide numbers for the shelters page header. The list itself is
+ * paged, so these aggregates are fetched separately to stay correct.
+ */
+export const getShelterStats = async () => {
+  const { rows } = await pool.query(
+    `SELECT (SELECT COUNT(*)::int FROM shelters) AS total,
+            (SELECT COUNT(DISTINCT location)::int FROM shelters) AS cities,
+            (SELECT COUNT(*)::int FROM pets) AS pets_in_care`,
+  );
+  return rows[0];
+};
+
 export const findShelterById = async (id) => {
   const { rows } = await pool.query(
     `SELECT s.*,

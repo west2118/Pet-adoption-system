@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { addShelter, editShelter, getAllShelters, getShelter } from '../controllers/shelterController.js';
+import { addShelter, editShelter, getAllShelters, getShelter, getShelterStats } from '../controllers/shelterController.js';
 import { authenticate } from '../middlewares/authenticate.js';
 import { authorize } from '../middlewares/authorize.js';
 import { validate } from '../middlewares/validate.js';
@@ -9,6 +9,8 @@ import { createShelterSchema, updateShelterSchema } from '../validators/shelterV
 export const shelterRoutes = Router();
 
 shelterRoutes.get('/', getAllShelters);
+// Registered before /:id so `stats` is never validated as a shelter UUID.
+shelterRoutes.get('/stats', getShelterStats);
 shelterRoutes.get('/:id', validate(uuidParam, 'params'), getShelter);
 shelterRoutes.post(
   '/',

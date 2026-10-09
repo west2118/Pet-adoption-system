@@ -40,21 +40,21 @@ const steps: Step[] = [
     id: 'browse',
     icon: Search,
     verb: 'Browse',
-    title: 'find your match',
+    title: 'Find your match',
     text: 'Filter by species, breed, age, size, gender, temperament, and shelter location. Every listing shows verified medical and behavioural records up front.',
   },
   {
     id: 'apply',
     icon: FileCheck2,
     verb: 'Apply',
-    title: 'submit online',
+    title: 'Submit online',
     text: 'Send an adoption application in minutes and follow it in real time: Submitted, Under Review, Approved, Adopted. No chasing, no guessing.',
   },
   {
     id: 'home',
     icon: HeartHandshake,
     verb: 'Welcome',
-    title: 'give a rescue a home',
+    title: 'Give a rescue a home',
     text: 'Message the shelter directly, schedule a visit, and bring your new companion home. Every rescue gets a profile, a medical trail, and a real adopter.',
   },
 ];
@@ -217,7 +217,7 @@ export const HomePage = () => {
 
                   {/* Main Hero Image Container */}
                   <div className="group relative flex flex-col items-center justify-center pt-4">
-                    
+
                     {/* Top Floating Badge */}
                     <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-primary/20 bg-background/90 px-4 py-1.5 shadow-md backdrop-blur-md">
                       <Sparkles className="size-4 text-amber-500 animate-pulse" />
@@ -320,8 +320,8 @@ export const HomePage = () => {
                   onMouseEnter={() => setActiveStep(i)}
                   aria-pressed={isActive}
                   className={`group relative overflow-hidden border bg-card p-8 text-left transition-all duration-500 lg:p-12 ${isActive
-                      ? 'border-primary/50 shadow-sm'
-                      : 'border-border hover:border-foreground/25'
+                    ? 'border-primary/50 shadow-sm'
+                    : 'border-border hover:border-foreground/25'
                     }`}
                 >
                   <div className="mb-8 flex items-center gap-4">

@@ -1,4 +1,4 @@
-import { apiRequest, tokenStore } from '@/lib/apiClient';
+import { apiRequest, sessionStore, tokenStore } from '@/lib/apiClient';
 import type { ShelterApplication, User, UserRole } from '@/types';
 
 export interface SignupInput {
@@ -37,7 +37,9 @@ export const signup = async (input: SignupInput): Promise<SignupResult> => {
     body: input,
   });
   if (result.token) {
-    tokenStore.set(result.token);
+    // Full session: JWTs live in httpOnly cookies now — only remember that a
+    // session exists so backend-first reads survive reloads.
+    sessionStore.mark();
     tokenStore.clearOnboarding();
   } else if (result.onboardingToken) {
     tokenStore.setOnboarding(result.onboardingToken);
@@ -50,7 +52,7 @@ export const login = async (email: string, password: string): Promise<LoginResul
     method: 'POST',
     body: { email, password },
   });
-  tokenStore.set(result.token);
+  sessionStore.mark();
   tokenStore.clearOnboarding();
   return result;
 };
@@ -58,6 +60,23 @@ export const login = async (email: string, password: string): Promise<LoginResul
 export const me = async (): Promise<User> => {
   const { user } = await apiRequest<{ user: User }>('/auth/me', { auth: 'full' });
   return user;
+};
+
+/** Rotates the session via the refresh cookie (used after access expiry). */
+export const refreshSession = async (): Promise<User> => {
+  const { user } = await apiRequest<{ user: User }>('/auth/refresh', { method: 'POST' });
+  sessionStore.mark();
+  return user;
+};
+
+/** Revokes the server session and clears cookies + the local session flag. */
+export const logoutSession = async (): Promise<void> => {
+  try {
+    await apiRequest('/auth/logout', { method: 'POST' });
+  } finally {
+    sessionStore.clear();
+    tokenStore.clearOnboarding();
+  }
 };
 
 export interface UpdateProfileInput {
@@ -96,6 +115,8 @@ export const authService = {
   signup,
   login,
   me,
+  refreshSession,
+  logoutSession,
   updateMe,
   submitShelterApplication,
   getMyShelterApplication,

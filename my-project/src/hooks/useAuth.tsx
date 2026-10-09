@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
-import { ApiError, tokenStore } from '@/lib/apiClient';
+import { ApiError, sessionStore, tokenStore } from '@/lib/apiClient';
 import { authService } from '@/services/authService';
 import type { SignupInput, SignupResult } from '@/services/authService';
 import type { User, UserRole } from '@/types';
@@ -46,15 +46,28 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   useEffect(() => {
     let mounted = true;
     (async () => {
-      if (!tokenStore.get()) {
+      // No session flag (logged out or demo preview): skip the server check
+      // entirely instead of firing a doomed /auth/me that 401s.
+      if (!sessionStore.has()) {
         if (mounted) setInitializing(false);
         return;
       }
       try {
         const me = await authService.me();
         if (mounted) setUser(me);
-      } catch {
-        tokenStore.clear();
+      } catch (err) {
+        // Access cookie may have expired while the refresh cookie is still
+        // valid — rotate once before treating this as a real logout.
+        if (err instanceof ApiError && err.status === 401) {
+          try {
+            const refreshed = await authService.refreshSession();
+            if (mounted) setUser(refreshed);
+            return;
+          } catch {
+            // Refresh rejected: session genuinely dead.
+          }
+        }
+        sessionStore.clear();
       } finally {
         if (mounted) setInitializing(false);
       }
@@ -77,18 +90,20 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   }, []);
 
   const logout = useCallback(() => {
-    tokenStore.clear();
+    // Revoke server-side best-effort; local state always clears so a dead
+    // network can never trap the user in a logged-in UI.
+    void authService.logoutSession().catch(() => undefined);
     tokenStore.clearOnboarding();
     setUser(null);
   }, []);
 
   const refresh = useCallback(async () => {
-    if (!tokenStore.get()) return;
+    if (!sessionStore.has()) return;
     try {
       setUser(await authService.me());
     } catch (err) {
       if (err instanceof ApiError && err.status === 401) {
-        tokenStore.clear();
+        sessionStore.clear();
         setUser(null);
       }
     }
@@ -99,7 +114,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   const updateProfile = useCallback(
     async (input: { name?: string; avatarUrl?: string | null }) => {
-      if (tokenStore.get()) {
+      if (sessionStore.has()) {
         const updated = await authService.updateMe(input);
         setUser(updated);
         return updated;

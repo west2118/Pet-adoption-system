@@ -1,22 +1,25 @@
 import { ArrowRight, HeartHandshake } from 'lucide-react';
 import { Link } from 'react-router-dom';
-import { BlurText, GridOverlay, Reveal } from '@/components/shared';
+import { BlurText, GridOverlay, Reveal, TablePagination } from '@/components/shared';
 import { ShelterPlate } from '@/components/features/ShelterPlate';
 import { EmptyState, LoadingGrid } from '@/components/ui/Feedback';
 import { Button } from '@/components/ui/button';
-import { useShelters } from '@/hooks/useData';
+import { useShelterStats, useSheltersPage } from '@/hooks/useData';
 
 const frame = 'mx-auto w-full max-w-[1400px] px-6 lg:px-12';
 
 export const SheltersPage = () => {
-  const { shelters, loading } = useShelters();
+  // The directory is paged by the backend (10 rescues per request); the header
+  // numbers come from its stats endpoint so they still cover the whole network.
+  const { shelters, total, pageSize, page, setPage, loading, error } = useSheltersPage();
+  const networkStats = useShelterStats();
 
-  const totalPets = shelters.reduce((sum, s) => sum + s.totalPets, 0);
-  const cities = new Set(shelters.map((s) => s.location)).size;
-  const averagePets = shelters.length ? Math.round(totalPets / shelters.length) : 0;
+  const totalPets = networkStats?.petsInCare ?? 0;
+  const cities = networkStats?.cities ?? 0;
+  const averagePets = networkStats?.total ? Math.round(totalPets / networkStats.total) : 0;
 
   const stats = [
-    { value: shelters.length || '—', label: 'partner rescues' },
+    { value: networkStats?.total || '—', label: 'partner rescues' },
     { value: cities || '—', label: 'cities covered' },
     { value: totalPets || '—', label: 'pets in care' },
     { value: averagePets || '—', label: 'average pets per rescue' },
@@ -82,7 +85,7 @@ export const SheltersPage = () => {
       </section>
 
       {/* -------------------------------------------------------- DIRECTORY */}
-      <section className="bg-background py-20 md:py-28">
+      <section id="rescue-directory" className="scroll-mt-24 bg-background py-20 md:py-28">
         <div className={frame}>
           <Reveal>
             <h2 className="text-3xl font-medium tracking-tight md:text-4xl">
@@ -96,6 +99,8 @@ export const SheltersPage = () => {
           <div className="mt-14">
             {loading ? (
               <LoadingGrid count={3} />
+            ) : error ? (
+              <EmptyState title="Could not load shelters" description={error} />
             ) : shelters.length === 0 ? (
               <EmptyState
                 title="No partner shelters yet"
@@ -119,6 +124,25 @@ export const SheltersPage = () => {
               </div>
             )}
           </div>
+
+          {/* Backend-owned paging: 10 rescues per request, `total` from its meta. */}
+          {total > 0 && (
+            <div className="mt-14">
+              <TablePagination
+                currentPage={page}
+                totalItems={total}
+                pageSize={pageSize}
+                onPageChange={(next) => {
+                  setPage(next);
+                  document
+                    .getElementById('rescue-directory')
+                    ?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                }}
+                showPageSize={false}
+                label="rescues"
+              />
+            </div>
+          )}
         </div>
       </section>
 

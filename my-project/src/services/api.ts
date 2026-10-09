@@ -1,5 +1,5 @@
 import { mockApplications, mockInquiries, mockPets, mockShelters, mockUsers, getShelterLocation, publicPets } from '@/data/mockData';
-import { ApiError, apiRequest, apiRequestWithMeta, tokenStore } from '@/lib/apiClient';
+import { ApiError, apiRequest, apiRequestWithMeta, sessionStore } from '@/lib/apiClient';
 import { ALL_FILTERS } from '@/hooks/usePetFilter';
 import type {
   AdoptionApplication,
@@ -268,7 +268,7 @@ let usersStore: User[] = [...mockUsers];
  * in demo mode (no token) or when the API is unreachable.
  */
 export const listMyListings = async (shelterId?: string | null): Promise<Pet[]> => {
-  if (tokenStore.get()) {
+  if (sessionStore.has()) {
     try {
       const data = await apiRequest<PetsListResponse>(
         `/shelter/listings?limit=${PUBLIC_PAGE_LIMIT}`,
@@ -292,7 +292,7 @@ export const listMyListingsPaginated = async (options: {
 } = {}): Promise<PaginatedResult<Pet>> => {
   const page = options.page ?? 1;
   const limit = options.limit ?? 10;
-  if (tokenStore.get()) {
+  if (sessionStore.has()) {
     try {
       const queryParams = new URLSearchParams();
       queryParams.set('page', String(page));
@@ -335,7 +335,7 @@ export const listMyListingsPaginated = async (options: {
 };
 
 export const createPet = async (input: Omit<Pet, 'id' | 'dateAdded'>): Promise<Pet> => {
-  if (tokenStore.get()) {
+  if (sessionStore.has()) {
     try {
       const data = await apiRequest<PetResponse>('/shelter/listings', {
         method: 'POST',
@@ -358,7 +358,7 @@ export const createPet = async (input: Omit<Pet, 'id' | 'dateAdded'>): Promise<P
 };
 
 export const updatePet = async (id: string, patch: Partial<Pet>): Promise<Pet | undefined> => {
-  if (tokenStore.get()) {
+  if (sessionStore.has()) {
     try {
       const data = await apiRequest<PetResponse>(
         `/shelter/listings/${encodeURIComponent(id)}`,
@@ -375,7 +375,7 @@ export const updatePet = async (id: string, patch: Partial<Pet>): Promise<Pet | 
 };
 
 export const removePet = async (id: string): Promise<void> => {
-  if (tokenStore.get()) {
+  if (sessionStore.has()) {
     try {
       await apiRequest(`/shelter/listings/${encodeURIComponent(id)}`, {
         method: 'DELETE',
@@ -420,6 +420,68 @@ export const getShelterById = async (id: string): Promise<Shelter | undefined> =
       return undefined;
     }
     return sheltersStore.find((s) => s.id === id);
+  }
+};
+
+export interface ShelterStats {
+  /** Partner rescues across the whole network. */
+  total: number;
+  cities: number;
+  /** Every pet in the shelters' care, not just public listings. */
+  petsInCare: number;
+}
+
+/** Mirrors the backend's default page size for GET /shelters (demo fallback only). */
+const SHELTER_PAGE_SIZE = 10;
+
+/**
+ * One page of the public shelter directory.
+ *
+ * No `limit` is sent — the backend applies its own default (10) and answers
+ * with `meta { page, limit, total, totalPages }`.
+ */
+export const listSheltersPaginated = async (
+  options: { page?: number } = {},
+): Promise<PaginatedResult<Shelter>> => {
+  const page = options.page ?? 1;
+  try {
+    const { data, meta } = await apiRequestWithMeta<SheltersListResponse>(
+      `/shelters?page=${page}`,
+    );
+    const limit = meta?.limit ?? SHELTER_PAGE_SIZE;
+    const total = meta?.total ?? data.shelters.length;
+    return {
+      items: data.shelters,
+      total,
+      page: meta?.page ?? page,
+      limit,
+      totalPages: meta?.totalPages ?? Math.ceil(total / limit),
+    };
+  } catch {
+    const total = sheltersStore.length;
+    const start = (page - 1) * SHELTER_PAGE_SIZE;
+    return {
+      items: sheltersStore.slice(start, start + SHELTER_PAGE_SIZE),
+      total,
+      page,
+      limit: SHELTER_PAGE_SIZE,
+      totalPages: Math.ceil(total / SHELTER_PAGE_SIZE),
+    };
+  }
+};
+
+/** Network-wide header numbers — fetched apart from the paged directory. */
+export const getShelterStats = async (): Promise<ShelterStats> => {
+  try {
+    const data = await apiRequest<{ stats: ShelterStats }>('/shelters/stats');
+    return data.stats;
+  } catch {
+    const petsInCare = sheltersStore.reduce((sum, s) => sum + s.totalPets, 0);
+    return {
+      total: sheltersStore.length,
+      cities: new Set(sheltersStore.map((s) => s.location)).size,
+      petsInCare,
+    };
   }
 };
 
@@ -471,7 +533,7 @@ export const listUsersPaginated = async (options: {
 } = {}): Promise<PaginatedResult<User>> => {
   const page = options.page ?? 1;
   const limit = options.limit ?? 10;
-  if (tokenStore.get()) {
+  if (sessionStore.has()) {
     try {
       const queryParams = new URLSearchParams();
       queryParams.set('page', String(page));
@@ -517,7 +579,7 @@ export const listAdminPetsPaginated = async (options: {
 } = {}): Promise<PaginatedResult<Pet>> => {
   const page = options.page ?? 1;
   const limit = options.limit ?? 10;
-  if (tokenStore.get()) {
+  if (sessionStore.has()) {
     try {
       const queryParams = new URLSearchParams();
       queryParams.set('page', String(page));
@@ -693,7 +755,7 @@ export const listShelterInquiriesPaginated = async (options: {
 } = {}): Promise<PaginatedResult<Inquiry>> => {
   const page = options.page ?? 1;
   const limit = options.limit ?? 10;
-  if (tokenStore.get()) {
+  if (sessionStore.has()) {
     try {
       const queryParams = new URLSearchParams();
       queryParams.set('page', String(page));

@@ -4,9 +4,16 @@ import {
   createShelter as createShelterRow,
   findShelterByEmail,
   findShelterById as findShelterRowById,
+  getShelterStats as readShelterStats,
   listShelters as listShelterRows,
   updateShelter as updateShelterRow,
 } from '../repositories/shelterRepository.js';
+
+/** Header numbers for the shelters page, independent of the paged list. */
+export const getShelterStats = async () => {
+  const row = await readShelterStats();
+  return { total: row.total, cities: row.cities, petsInCare: row.pets_in_care };
+};
 
 export const listShelters = async (pagination) => {
   const { rows, total } = await listShelterRows(pagination);

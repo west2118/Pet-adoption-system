@@ -2,14 +2,21 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   applicationService,
   getPetFacets,
+  getShelterStats,
   listPetsPaginated,
+  listSheltersPaginated,
   petService,
   shelterService,
   userService,
 } from '@/services/api';
-import type { PetFacets } from '@/services/api';
+import type { PetFacets, ShelterStats } from '@/services/api';
 import { adoptionApplicationService } from '@/services/adoptionApplicationService';
-import { tokenStore } from '@/lib/apiClient';
+import {
+  getMyApplicationSummary,
+  listMyApplicationsPaginated,
+} from '@/services/adoptionApplicationService';
+import type { ApplicationSummary } from '@/services/adoptionApplicationService';
+import { sessionStore } from '@/lib/apiClient';
 import { ALL_FILTERS } from '@/hooks/usePetFilter';
 import type { AdoptionApplication, Pet, PetFilters, Shelter, User } from '@/types';
 
@@ -199,6 +206,180 @@ export const useHeroPets = () => {
 };
 
 /**
+ * One page of the shelter directory — the backend applies its own 10-per-page
+ * default and answers with `total` / `totalPages`.
+ */
+export const useSheltersPage = () => {
+  const [page, setPage] = useState(1);
+  const [result, setResult] = useState<{
+    key: string;
+    shelters: Shelter[];
+    total: number;
+    limit: number;
+    totalPages: number;
+    error: string | null;
+  } | null>(null);
+
+  const requestKey = String(page);
+
+  useEffect(() => {
+    let mounted = true;
+    listSheltersPaginated({ page })
+      .then((res) => {
+        if (!mounted) return;
+        const totalPages = res.totalPages ?? Math.max(1, Math.ceil(res.total / res.limit));
+        // Data changes can leave us on a page that no longer exists.
+        if (totalPages > 0 && page > totalPages) {
+          setPage(totalPages);
+          return;
+        }
+        setResult({
+          key: requestKey,
+          shelters: res.items,
+          total: res.total,
+          limit: res.limit,
+          totalPages,
+          error: null,
+        });
+      })
+      .catch(() => {
+        if (!mounted) return;
+        setResult({
+          key: requestKey,
+          shelters: [],
+          total: 0,
+          limit: 10,
+          totalPages: 1,
+          error: 'Failed to load shelters. Please try again.',
+        });
+      });
+    return () => {
+      mounted = false;
+    };
+  }, [page, requestKey]);
+
+  const loading = result?.key !== requestKey;
+
+  return {
+    shelters: result?.shelters ?? [],
+    total: result?.total ?? 0,
+    pageSize: result?.limit ?? 10,
+    totalPages: result?.totalPages ?? 1,
+    page,
+    setPage,
+    loading,
+    error: loading ? null : (result?.error ?? null),
+  };
+};
+
+/** Network-wide header numbers for the shelters page (fetched once). */
+export const useShelterStats = () => {
+  const [stats, setStats] = useState<ShelterStats | null>(null);
+
+  useEffect(() => {
+    let mounted = true;
+    getShelterStats().then((data) => {
+      if (mounted) setStats(data);
+    });
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  return stats;
+};
+
+/**
+ * One page of the adopter's applications — the backend's default page size
+ * for this endpoint is 5, and `refresh()` re-reads the current page (the
+ * page's Refresh button).
+ */
+export const useMyApplicationsPage = (applicantId?: string) => {
+  const [page, setPage] = useState(1);
+  const [reload, setReload] = useState(0);
+  const [result, setResult] = useState<{
+    key: string;
+    applications: AdoptionApplication[];
+    total: number;
+    limit: number;
+    totalPages: number;
+    error: string | null;
+  } | null>(null);
+
+  const requestKey = `${page}|${reload}`;
+
+  useEffect(() => {
+    let mounted = true;
+    listMyApplicationsPaginated({ page, applicantId })
+      .then((res) => {
+        if (!mounted) return;
+        const totalPages = res.totalPages ?? Math.max(1, Math.ceil(res.total / res.limit));
+        if (totalPages > 0 && page > totalPages) {
+          setPage(totalPages);
+          return;
+        }
+        setResult({
+          key: requestKey,
+          applications: res.items,
+          total: res.total,
+          limit: res.limit,
+          totalPages,
+          error: null,
+        });
+      })
+      .catch(() => {
+        if (!mounted) return;
+        setResult({
+          key: requestKey,
+          applications: [],
+          total: 0,
+          limit: 5,
+          totalPages: 1,
+          error: 'Failed to load your applications. Please try again.',
+        });
+      });
+    return () => {
+      mounted = false;
+    };
+  }, [applicantId, page, reload, requestKey]);
+
+  const loading = result?.key !== requestKey;
+
+  return {
+    applications: result?.applications ?? [],
+    total: result?.total ?? 0,
+    pageSize: result?.limit ?? 5,
+    totalPages: result?.totalPages ?? 1,
+    page,
+    setPage,
+    loading,
+    error: loading ? null : (result?.error ?? null),
+    refresh: () => setReload((value) => value + 1),
+  };
+};
+
+/** Status counters across ALL of an adopter's applications (fetched once). */
+export const useMyApplicationSummary = (applicantId?: string) => {
+  const [summary, setSummary] = useState<ApplicationSummary | null>(null);
+
+  useEffect(() => {
+    let mounted = true;
+    getMyApplicationSummary(applicantId)
+      .then((data) => {
+        if (mounted) setSummary(data);
+      })
+      .catch(() => {
+        // Summary bar degrades to placeholders when the counts are unavailable.
+      });
+    return () => {
+      mounted = false;
+    };
+  }, [applicantId]);
+
+  return summary;
+};
+
+/**
  * Shelter-portal inventory: the logged-in shelter's own listings
  * (public + private) via GET /shelter/listings. Falls back to the public
  * catalogue filtered by shelter in demo mode (no session).
@@ -265,7 +446,7 @@ export const useApplications = (applicantId?: string, mode?: 'mine' | 'shelter')
   const [loading, setLoading] = useState(true);
 
   const load = useCallback(async (): Promise<AdoptionApplication[]> => {
-    const hasSession = Boolean(tokenStore.get());
+    const hasSession = sessionStore.has();
     // Backend-first when a real session exists so adopter submissions and the
     // shelter table read the same Postgres rows. Fall back to the in-memory
     // mocks for demo mode (no token) or when the API is unreachable.

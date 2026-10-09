@@ -292,6 +292,8 @@ interface ApiErrorResponse {
 | **Auth** | | | |
 | `POST` | `/api/v1/auth/signup` | Public | Register new adopter or shelter staff account |
 | `POST` | `/api/v1/auth/login` | Public | Authenticate user and issue JWT access token |
+| `POST` | `/api/v1/auth/refresh` | Refresh cookie | Rotate session (consumes refresh token, reissues both cookies) |
+| `POST` | `/api/v1/auth/logout` | Public | Revoke session refresh token and clear auth cookies |
 | `GET` | `/api/v1/auth/me` | Authenticated | Fetch active user profile |
 | **Public Pets Catalog** | | | |
 | `GET` | `/api/v1/pets` | Public | List public pets with filtering & pagination |
@@ -325,7 +327,10 @@ interface ApiErrorResponse {
 ## 4. Authentication & Role-Based Access Control (RBAC)
 
 ### 4.1 JWT Authentication Middleware
-Validate JWT tokens passed via `Authorization: Bearer <token>` header and attach decoded payload to `req.user`.
+Sessions use short-lived access JWTs (default 15m) in the `paws_at` **httpOnly** cookie plus
+opaque refresh tokens (default 30d, SHA-256 hashed in `refresh_tokens`) in the `paws_rt`
+httpOnly cookie, rotated on every `POST /auth/refresh`. `authenticate` reads the cookie first
+and still accepts an `Authorization: Bearer <token>` header as a fallback for API clients.
 
 ```typescript
 // src/middlewares/authenticate.ts
