@@ -16,10 +16,10 @@ export const getMyApplications = async (req, res) => {
 export const getShelterApplications = async (req, res) => {
   const { page, limit, offset } = parsePagination(req.query);
   const status = req.query.status || undefined;
+  const search = req.query.search || undefined;
   const { applications, total } = await listShelterApplications(
     req.user.shelterId,
-    { limit, offset },
-    status,
+    { limit, offset, status, search },
   );
   return sendSuccess(res, { applications }, undefined, buildMeta(page, limit, total));
 };

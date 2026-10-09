@@ -44,23 +44,30 @@ export const listApplicationsByApplicant = async (applicantId, { limit, offset }
   return { rows, total: count.rows[0].total };
 };
 
-export const listApplicationsByShelter = async (shelterId, { limit, offset, status }) => {
+export const listApplicationsByShelter = async (shelterId, { limit = 10, offset = 0, status, search } = {}) => {
+  const conditions = ['p.shelter_id = $1'];
   const values = [shelterId];
-  let statusClause = '';
-  if (status) {
+  if (status && status !== 'all') {
     values.push(status);
-    statusClause = `AND a.status = $${values.length}`;
+    conditions.push(`a.status = $${values.length}`);
   }
+  if (search) {
+    values.push(`%${search}%`);
+    conditions.push(
+      `(a.applicant_name ILIKE $${values.length} OR a.email ILIKE $${values.length} OR p.name ILIKE $${values.length})`,
+    );
+  }
+  const where = `WHERE ${conditions.join(' AND ')}`;
   const { rows } = await pool.query(
     `SELECT a.* FROM adoption_applications a
      JOIN pets p ON a.pet_id = p.id
-     WHERE p.shelter_id = $1 ${statusClause}
+     ${where}
      ORDER BY a.submitted_at DESC LIMIT $${values.length + 1} OFFSET $${values.length + 2}`,
     [...values, limit, offset],
   );
   const count = await pool.query(
     `SELECT COUNT(*)::int AS total FROM adoption_applications a
-     JOIN pets p ON a.pet_id = p.id WHERE p.shelter_id = $1 ${statusClause}`,
+     JOIN pets p ON a.pet_id = p.id ${where}`,
     values,
   );
   return { rows, total: count.rows[0].total };

@@ -9,7 +9,9 @@ export const getStats = async (_req, res) => {
 
 export const getUsers = async (req, res) => {
   const { page, limit, offset } = parsePagination(req.query);
-  const { users, total } = await listAllUsers({ limit, offset });
+  const role = req.query.role || undefined;
+  const search = req.query.search || undefined;
+  const { users, total } = await listAllUsers({ limit, offset, role, search });
   return sendSuccess(res, { users }, undefined, buildMeta(page, limit, total));
 };
 
@@ -24,6 +26,7 @@ export const changeRole = async (req, res) => {
 
 export const getAllPets = async (req, res) => {
   const { page, limit, offset } = parsePagination(req.query);
-  const { pets, total } = await listAllPets({ limit, offset });
+  const search = req.query.search || undefined;
+  const { pets, total } = await listAllPets({ limit, offset, search });
   return sendSuccess(res, { pets }, undefined, buildMeta(page, limit, total));
 };

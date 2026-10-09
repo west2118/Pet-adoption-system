@@ -1,5 +1,5 @@
 import { Check, Eye, FileSignature, Pencil, Plus, Search } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import type { FormEvent } from 'react';
 import { toast } from 'react-toastify';
 import {
@@ -8,6 +8,7 @@ import {
   SectionHeader,
   SlideOver,
   TableCard,
+  TablePagination,
   ValidatedInput,
   focusFirstError,
   isBlank,
@@ -52,41 +53,39 @@ const emptyForm = {
 
 export const ShelterEWaiversPage = () => {
   const [templates, setTemplates] = useState<WaiverTemplate[]>([]);
+  const [totalTemplates, setTotalTemplates] = useState<number>(0);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [query, setQuery] = useState('');
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
   const [detailsId, setDetailsId] = useState<string | null>(null);
   const [slideOpen, setSlideOpen] = useState(false);
   const [editing, setEditing] = useState<WaiverTemplate | null>(null);
   const [form, setForm] = useState(emptyForm);
   const [formErrors, setFormErrors] = useState<{ name?: string; body?: string }>({});
 
-  useEffect(() => {
-    let mounted = true;
-    (async () => {
-      try {
-        const data = await waiverService.listTemplates();
-        if (mounted) setTemplates(data);
-      } catch (err) {
-        if (mounted) {
-          setLoadError(err instanceof ApiError ? err.message : 'Failed to load waiver templates.');
-        }
-      } finally {
-        if (mounted) setLoading(false);
-      }
-    })();
-    return () => {
-      mounted = false;
-    };
-  }, []);
+  const fetchTemplates = useCallback(async () => {
+    setLoading(true);
+    setLoadError(null);
+    try {
+      const res = await waiverService.listTemplatesPaginated({
+        page,
+        limit: pageSize,
+        search: query.trim(),
+      });
+      setTemplates(res.items);
+      setTotalTemplates(res.total);
+    } catch (err) {
+      setLoadError(err instanceof ApiError ? err.message : 'Failed to load waiver templates.');
+    } finally {
+      setLoading(false);
+    }
+  }, [page, pageSize, query]);
 
-  const filteredTemplates = useMemo(() => {
-    const search = query.trim().toLowerCase();
-    if (search === '') return templates;
-    return templates.filter((t) =>
-      `${t.name} ${t.category}`.toLowerCase().includes(search),
-    );
-  }, [templates, query]);
+  useEffect(() => {
+    fetchTemplates();
+  }, [fetchTemplates]);
 
   const detailsTemplate = detailsId
     ? (templates.find((t) => t.id === detailsId) ?? null)
@@ -158,6 +157,7 @@ export const ShelterEWaiversPage = () => {
       }
       setSlideOpen(false);
       setEditing(null);
+      await fetchTemplates();
     } catch (err) {
       toast.error(err instanceof ApiError ? err.message : 'Failed to save template.');
     }
@@ -170,7 +170,10 @@ export const ShelterEWaiversPage = () => {
         <Input
           aria-label="Search waiver templates"
           value={query}
-          onChange={(e) => setQuery(e.target.value)}
+          onChange={(e) => {
+            setQuery(e.target.value);
+            setPage(1);
+          }}
           placeholder="Search name or category"
           className="h-9 w-full pl-8 sm:w-[280px]"
         />
@@ -180,6 +183,21 @@ export const ShelterEWaiversPage = () => {
       </Button>
     </div>
   );
+
+  const pagination =
+    totalTemplates > 0 ? (
+      <TablePagination
+        currentPage={page}
+        totalItems={totalTemplates}
+        pageSize={pageSize}
+        onPageChange={setPage}
+        onPageSizeChange={(newSize) => {
+          setPageSize(newSize);
+          setPage(1);
+        }}
+        label="templates"
+      />
+    ) : undefined;
 
   return (
     <div className="w-full px-4 py-6 sm:px-6">
@@ -194,11 +212,12 @@ export const ShelterEWaiversPage = () => {
           description={
             loading
               ? 'Loading templates…'
-              : `${filteredTemplates.length} of ${templates.length} templates`
+              : `${templates.length} of ${totalTemplates} templates`
           }
           icon={FileSignature}
           toolbar={toolbar}
-          isEmpty={!loading && filteredTemplates.length === 0}
+          footer={pagination}
+          isEmpty={!loading && templates.length === 0}
           emptyTitle={loadError ?? 'No waivers found'}
           emptyDescription={
             loadError ?? 'Try a different search, or add a new template.'
@@ -234,7 +253,7 @@ export const ShelterEWaiversPage = () => {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {filteredTemplates.map((template) => (
+                    {templates.map((template) => (
                       <TableRow key={template.id}>
                         <TableCell>
                           <p className="font-medium">{template.name}</p>
@@ -293,7 +312,7 @@ export const ShelterEWaiversPage = () => {
 
               {/* Mobile: stacked cards */}
               <div className="grid gap-3 p-4 md:hidden">
-                {filteredTemplates.map((template) => (
+                {templates.map((template) => (
                   <RecordCard
                     key={template.id}
                     title={template.name}

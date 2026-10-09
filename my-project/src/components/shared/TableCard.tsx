@@ -52,7 +52,7 @@ export const TableCard = ({
         </div>
       </CardHeader>
       {toolbar ? <div className="border-b px-5 py-3">{toolbar}</div> : null}
-      <CardContent className={cn(isEmpty ? 'p-5 sm:p-6' : contentClassName)}>
+      <CardContent className={cn(isEmpty ? 'p-5 sm:p-6' : 'p-0', contentClassName)}>
         {isEmpty ? (
           <EmptyState title={emptyTitle} description={emptyDescription} />
         ) : (

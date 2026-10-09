@@ -107,7 +107,6 @@ export const FilterBar = ({
       options: [
         { value: ALL_FILTERS, label: 'Any status' },
         { value: 'Available', label: 'Available' },
-        { value: 'Pending Adoption', label: 'Pending Adoption' },
         { value: 'Fostered', label: 'Fostered' },
         { value: 'Adopted', label: 'Adopted' },
       ],

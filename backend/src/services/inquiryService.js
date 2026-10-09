@@ -17,8 +17,8 @@ export const submitInquiry = async (input) => {
   return mapInquiry(row);
 };
 
-export const listShelterInquiries = async (shelterId, pagination, resolved) => {
-  const { rows, total } = await listInquiriesByShelter(shelterId, { ...pagination, resolved });
+export const listShelterInquiries = async (shelterId, options = {}) => {
+  const { rows, total } = await listInquiriesByShelter(shelterId, options);
   return { inquiries: rows.map((r) => mapInquiry(r)), total };
 };
 

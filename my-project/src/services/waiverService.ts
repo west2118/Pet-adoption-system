@@ -1,4 +1,5 @@
-import { apiRequest } from '@/lib/apiClient';
+import { apiRequest, apiRequestWithMeta } from '@/lib/apiClient';
+import type { PaginatedResult } from '@/services/api';
 import type { Waiver, WaiverTemplate, WaiverTemplateStatus } from '@/types';
 
 export interface WaiverTemplateInput {
@@ -21,6 +22,32 @@ export const listWaiverTemplates = async (): Promise<WaiverTemplate[]> => {
     { auth: 'full' },
   );
   return templates;
+};
+
+export const listWaiverTemplatesPaginated = async (options: {
+  page?: number;
+  limit?: number;
+  category?: string;
+  search?: string;
+} = {}): Promise<PaginatedResult<WaiverTemplate>> => {
+  const page = options.page ?? 1;
+  const limit = options.limit ?? 10;
+  const queryParams = new URLSearchParams();
+  queryParams.set('page', String(page));
+  queryParams.set('limit', String(limit));
+  if (options.category && options.category !== 'all') queryParams.set('category', options.category);
+  if (options.search) queryParams.set('search', options.search);
+
+  const { data, meta } = await apiRequestWithMeta<{ templates: WaiverTemplate[] }>(
+    `/shelter/waiver-templates?${queryParams.toString()}`,
+    { auth: 'full' },
+  );
+  return {
+    items: data.templates,
+    total: meta?.total ?? data.templates.length,
+    page: meta?.page ?? page,
+    limit: meta?.limit ?? limit,
+  };
 };
 
 export const createWaiverTemplate = async (
@@ -80,6 +107,7 @@ export const getMyApplicationWaiver = async (applicationId: string): Promise<Wai
 
 export const waiverService = {
   listTemplates: listWaiverTemplates,
+  listTemplatesPaginated: listWaiverTemplatesPaginated,
   createTemplate: createWaiverTemplate,
   updateTemplate: updateWaiverTemplate,
   generateForApplication: generateApplicationWaiver,

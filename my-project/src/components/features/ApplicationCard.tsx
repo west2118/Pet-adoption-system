@@ -200,11 +200,6 @@ export const ApplicationCard = ({
           <div className="mt-6 border-t border-border pt-6">
             <StatusTrack application={application} />
           </div>
-
-          <p className="mt-6 font-mono text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
-            Submitted {formatDate(application.submittedAt)} · Updated{' '}
-            {formatDate(application.updatedAt)}
-          </p>
         </div>
       </div>
 

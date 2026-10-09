@@ -157,7 +157,7 @@ export const AdoptionFormPage = () => {
     }
   };
 
-  if (pet?.visibility === 'private') {
+  if (pet?.visibility === 'private' || (pet && pet.status !== 'Available')) {
     return (
       <div className="landing-theme">
         <section className="relative overflow-hidden bg-background py-20 md:py-28">
@@ -169,8 +169,15 @@ export const AdoptionFormPage = () => {
               Adoption application
             </p>
             <h1 className="mt-6 font-display text-4xl tracking-tight md:text-5xl">
-              This pet is not available for adoption.
+              {pet?.visibility === 'private'
+                ? 'This pet is not available for adoption.'
+                : 'Applications are closed for this pet.'}
             </h1>
+            <p className="mx-auto mt-4 max-w-xl text-muted-foreground">
+              {pet?.visibility === 'private'
+                ? 'Private shelter records are not visible to the public.'
+                : `${pet?.name ?? 'This pet'} already has an accepted application and is no longer open for new applications.`}
+            </p>
             <Link to="/pets" className="mt-8 inline-block">
               <Button className="h-11 rounded-full px-7">Back to browse</Button>
             </Link>

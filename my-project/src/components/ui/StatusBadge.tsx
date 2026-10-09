@@ -8,7 +8,7 @@ export const PetStatusBadge = ({ status }: { status: PetStatus }) => {
       variant={
         status === 'Available'
           ? 'success'
-          : status === 'Pending Adoption'
+          : status === 'In Process'
             ? 'warning'
             : status === 'Adopted'
               ? 'info'

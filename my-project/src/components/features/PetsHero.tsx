@@ -31,7 +31,7 @@ const LISTINGS_ANCHOR = 'pet-listings';
 /** Short status line for a card on the ring, in the hero's own voice. */
 const statusNote: Record<Pet['status'], { label: string; tone: string }> = {
   Available: { label: 'Ready for a home', tone: 'text-primary' },
-  'Pending Adoption': { label: 'Application pending', tone: 'text-amber-600' },
+  'In Process': { label: 'Adoption in process', tone: 'text-amber-600' },
   Fostered: { label: 'In a foster home', tone: 'text-sky-600' },
   Adopted: { label: 'Already adopted', tone: 'text-muted-foreground' },
 };

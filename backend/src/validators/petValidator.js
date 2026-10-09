@@ -13,7 +13,7 @@ export const createPetSchema = z.object({
   description: z.string().min(10, 'Description must be at least 10 characters'),
   medicalHistory: z.array(z.string()).default([]),
   behavioralNotes: z.string().default(''),
-  status: z.enum(['Available', 'Pending Adoption', 'Adopted', 'Fostered']).default('Available'),
+  status: z.enum(['Available', 'In Process', 'Adopted', 'Fostered']).default('Available'),
   // Staff can upload photos (base64 data URLs) or paste https links — the
   // public catalogue just renders whatever string is stored.
   imageUrl: z

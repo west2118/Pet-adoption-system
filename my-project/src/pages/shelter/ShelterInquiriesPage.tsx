@@ -1,15 +1,13 @@
 import {
   Check,
-  ChevronLeft,
-  ChevronRight,
   Eye,
   MessageCircleQuestion,
   RotateCcw,
   Search,
 } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { toast } from 'react-toastify';
-import { DetailsModal, RecordCard, SectionHeader, TableCard } from '@/components/shared';
+import { DetailsModal, RecordCard, SectionHeader, TableCard, TablePagination } from '@/components/shared';
 import {
   Table,
   TableBody,
@@ -23,7 +21,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/Badge';
 import { useAuth } from '@/hooks/useAuth';
 import { usePets, useShelters } from '@/hooks/useData';
-import { mockInquiries } from '@/data/mockData';
+import { listShelterInquiriesPaginated, type Inquiry } from '@/services/api';
 import { formatDate } from '@/utils/formatters';
 
 const STATUS_FILTER_OPTIONS = [
@@ -32,51 +30,51 @@ const STATUS_FILTER_OPTIONS = [
   { value: 'resolved', label: 'Resolved' },
 ];
 
-const PAGE_SIZE = 8;
-
 export const ShelterInquiriesPage = () => {
   const { user } = useAuth();
   const { pets } = usePets();
   const { shelters } = useShelters();
+  const [inquiries, setInquiries] = useState<Inquiry[]>([]);
+  const [totalInquiries, setTotalInquiries] = useState<number>(0);
+  const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'open' | 'resolved'>('all');
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
   const [detailsId, setDetailsId] = useState<string | null>(null);
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [replies, setReplies] = useState<Record<string, string>>({});
   const [resolved, setResolved] = useState<Set<string>>(new Set());
 
-  const petOf = (petId: string) => pets.find((p) => p.id === petId);
-
-  // Only inquiries about this shelter's own pets — other shelters' pets
-  // (and their messages) are never listed here.
   const myShelterId = user?.shelterId ?? shelters[0]?.id ?? null;
 
-  const filteredInquiries = useMemo(() => {
-    const search = query.trim().toLowerCase();
-    return mockInquiries.filter((inquiry) => {
-      const pet = pets.find((p) => p.id === inquiry.petId);
-      if (myShelterId && pet?.shelterId !== myShelterId) return false;
-      const isResolved = resolved.has(inquiry.id);
-      const matchesStatus =
-        statusFilter === 'all' || (statusFilter === 'resolved') === isResolved;
-      const petName = pet?.name ?? '';
-      const matchesSearch =
-        search === '' ||
-        inquiry.fromName.toLowerCase().includes(search) ||
-        inquiry.fromEmail.toLowerCase().includes(search) ||
-        inquiry.message.toLowerCase().includes(search) ||
-        petName.toLowerCase().includes(search);
-      return matchesStatus && matchesSearch;
-    });
-  }, [pets, resolved, statusFilter, query, myShelterId]);
+  const fetchInquiries = useCallback(async () => {
+    setLoading(true);
+    try {
+      const isResolved = statusFilter === 'all' ? undefined : statusFilter === 'resolved';
+      const res = await listShelterInquiriesPaginated({
+        page,
+        limit: pageSize,
+        resolved: isResolved,
+        search: query.trim(),
+        shelterId: myShelterId,
+      });
+      setInquiries(res.items);
+      setTotalInquiries(res.total);
+    } catch {
+      toast.error('Failed to load inquiries.');
+    } finally {
+      setLoading(false);
+    }
+  }, [page, pageSize, statusFilter, query, myShelterId]);
 
-  const totalPages = Math.max(1, Math.ceil(filteredInquiries.length / PAGE_SIZE));
-  const currentPage = Math.min(page, totalPages);
-  const startIndex = (currentPage - 1) * PAGE_SIZE;
-  const pagedInquiries = filteredInquiries.slice(startIndex, startIndex + PAGE_SIZE);
+  useEffect(() => {
+    fetchInquiries();
+  }, [fetchInquiries]);
 
-  const detailsInquiry = mockInquiries.find((i) => i.id === detailsId) ?? null;
+  const detailsInquiry = inquiries.find((i) => i.id === detailsId) ?? null;
+
+  const petOf = (petId: string) => pets.find((p) => p.id === petId);
 
   const toggleResolved = (id: string) => {
     setResolved((prev) => {
@@ -143,47 +141,18 @@ export const ShelterInquiriesPage = () => {
   );
 
   const pagination =
-    filteredInquiries.length > 0 ? (
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <p className="text-sm text-muted-foreground">
-          Showing <span className="font-medium text-foreground">{startIndex + 1}</span>–
-          <span className="font-medium text-foreground">
-            {Math.min(startIndex + PAGE_SIZE, filteredInquiries.length)}
-          </span>{' '}
-          of <span className="font-medium text-foreground">{filteredInquiries.length}</span>{' '}
-          inquiries
-        </p>
-        <div className="flex items-center gap-1">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setPage((p) => Math.max(1, p - 1))}
-            disabled={currentPage === 1}
-          >
-            <ChevronLeft className="size-4" /> Prev
-          </Button>
-          {Array.from({ length: totalPages }, (_, i) => i + 1).map((n) => (
-            <Button
-              key={n}
-              variant={n === currentPage ? 'default' : 'outline'}
-              size="icon-sm"
-              aria-label={`Go to page ${n}`}
-              aria-current={n === currentPage ? 'page' : undefined}
-              onClick={() => setPage(n)}
-            >
-              {n}
-            </Button>
-          ))}
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-            disabled={currentPage === totalPages}
-          >
-            Next <ChevronRight className="size-4" />
-          </Button>
-        </div>
-      </div>
+    totalInquiries > 0 ? (
+      <TablePagination
+        currentPage={page}
+        totalItems={totalInquiries}
+        pageSize={pageSize}
+        onPageChange={setPage}
+        onPageSizeChange={(newSize) => {
+          setPageSize(newSize);
+          setPage(1);
+        }}
+        label="inquiries"
+      />
     ) : undefined;
 
   return (
@@ -192,6 +161,9 @@ export const ShelterInquiriesPage = () => {
         title="Inquiries inbox"
         subtitle="Messages from potential adopters about your pets."
       />
+      {loading && (
+        <p className="mt-4 text-sm text-muted-foreground">Loading inquiries…</p>
+      )}
 
       <div className="mt-6 space-y-4">
         <TableCard
@@ -199,7 +171,7 @@ export const ShelterInquiriesPage = () => {
           description="Direct messages from adopters about your listings."
           icon={MessageCircleQuestion}
           toolbar={toolbar}
-          isEmpty={filteredInquiries.length === 0}
+          isEmpty={inquiries.length === 0}
           emptyTitle="No inquiries found"
           emptyDescription="Try a different search or filter."
           footer={pagination}
@@ -219,7 +191,7 @@ export const ShelterInquiriesPage = () => {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {pagedInquiries.map((inquiry) => {
+                {inquiries.map((inquiry) => {
                   const pet = petOf(inquiry.petId);
                   const isResolved = resolved.has(inquiry.id);
                   return (
@@ -303,7 +275,7 @@ export const ShelterInquiriesPage = () => {
 
           {/* Mobile: stacked cards */}
           <div className="grid gap-3 p-4 md:hidden">
-            {pagedInquiries.map((inquiry) => {
+            {inquiries.map((inquiry) => {
               const pet = petOf(inquiry.petId);
               const isResolved = resolved.has(inquiry.id);
               return (

@@ -17,10 +17,10 @@ export const createInquiry = async (req, res) => {
 export const getShelterInquiries = async (req, res) => {
   const { page, limit, offset } = parsePagination(req.query);
   const resolved = parseResolved(req.query.resolved);
+  const search = req.query.search || undefined;
   const { inquiries, total } = await listShelterInquiries(
     req.user.shelterId,
-    { limit, offset },
-    resolved,
+    { limit, offset, resolved, search },
   );
   return sendSuccess(res, { inquiries }, undefined, buildMeta(page, limit, total));
 };

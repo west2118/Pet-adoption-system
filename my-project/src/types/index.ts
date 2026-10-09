@@ -2,7 +2,7 @@ export type Species = 'dog' | 'cat' | 'rabbit' | 'bird' | 'other';
 export type AgeGroup = 'puppy-kitten' | 'young' | 'adult' | 'senior';
 export type PetSize = 'small' | 'medium' | 'large';
 export type Gender = 'male' | 'female';
-export type PetStatus = 'Available' | 'Pending Adoption' | 'Adopted' | 'Fostered';
+export type PetStatus = 'Available' | 'In Process' | 'Adopted' | 'Fostered';
 
 export type ApplicationStatus =
   | 'Submitted'
@@ -125,6 +125,8 @@ export interface Inquiry {
   fromEmail: string;
   message: string;
   createdAt: string;
+  /** Server-tracked resolution (backend only) — the shelter inbox also keeps a local override set. */
+  resolved?: boolean;
 }
 
 export type WaiverTemplateStatus = 'Active' | 'Draft';

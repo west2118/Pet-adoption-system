@@ -1,11 +1,30 @@
 import { pool } from '../config/database.js';
 
-export const listTemplatesByShelter = async (shelterId) => {
-  const { rows } = await pool.query(
-    'SELECT * FROM waiver_templates WHERE shelter_id = $1 ORDER BY created_at ASC',
-    [shelterId],
-  );
-  return rows;
+export const listTemplatesByShelter = async (shelterId, { limit, offset, category, search } = {}) => {
+  const conditions = ['shelter_id = $1'];
+  const values = [shelterId];
+
+  if (category && category !== 'all') {
+    values.push(category);
+    conditions.push(`category = $${values.length}`);
+  }
+  if (search) {
+    values.push(`%${search}%`);
+    conditions.push(`(name ILIKE $${values.length} OR body ILIKE $${values.length})`);
+  }
+
+  const where = `WHERE ${conditions.join(' AND ')}`;
+  let query = `SELECT * FROM waiver_templates ${where} ORDER BY created_at ASC`;
+  const queryValues = [...values];
+
+  if (limit !== undefined && offset !== undefined) {
+    queryValues.push(limit, offset);
+    query += ` LIMIT $${queryValues.length - 1} OFFSET $${queryValues.length}`;
+  }
+
+  const { rows } = await pool.query(query, queryValues);
+  const count = await pool.query(`SELECT COUNT(*)::int AS total FROM waiver_templates ${where}`, values);
+  return { rows, total: count.rows[0].total };
 };
 
 export const findTemplateById = async (id) => {

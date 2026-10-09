@@ -1,7 +1,5 @@
 import {
   Check,
-  ChevronLeft,
-  ChevronRight,
   Eye,
   ImagePlus,
   ListPlus,
@@ -12,10 +10,11 @@ import {
   Trash2,
   X,
 } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { FormEvent, ReactNode } from 'react';
 import { toast } from 'react-toastify';
-import { DetailsModal, RecordCard, SectionHeader, SlideOver, TableCard } from '@/components/shared';
+import { DetailsModal, RecordCard, SectionHeader, SlideOver, TableCard, TablePagination } from '@/components/shared';
+import { ConfirmDeleteModal } from '@/components/shared/ConfirmDeleteModal';
 import { PetStatusBadge, VisibilityBadge } from '@/components/ui/StatusBadge';
 import {
   Table,
@@ -33,15 +32,15 @@ import {
 } from '@/components/shared';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/hooks/useAuth';
-import { useShelters, useShelterListings } from '@/hooks/useData';
-import { petService } from '@/services/api';
+import { useShelters } from '@/hooks/useData';
+import { listMyListingsPaginated, petService } from '@/services/api';
 import { ApiError } from '@/lib/apiClient';
 import type { AgeGroup, Pet, PetStatus, PetVisibility } from '@/types';
 import { formatAge, formatDate } from '@/utils/formatters';
 
 const STATUS_OPTIONS = [
   { value: 'Available', label: 'Available' },
-  { value: 'Pending Adoption', label: 'Pending' },
+  { value: 'In Process', label: 'In Process' },
   { value: 'Adopted', label: 'Adopted' },
   { value: 'Fostered', label: 'Fostered' },
 ];
@@ -56,8 +55,6 @@ const VISIBILITY_FILTER_OPTIONS = [
   { value: 'public', label: 'Public' },
   { value: 'private', label: 'Private' },
 ];
-
-const PAGE_SIZE = 8;
 
 const CARE_FLAG_OPTIONS = [
   ['vaccinated', 'Vaccinated'],
@@ -321,13 +318,43 @@ export const ShelterListingsPage = () => {
   // Own-shelter inventory (public + private) from GET /shelter/listings —
   // the backend scopes rows by the staff JWT, so shelters only ever see
   // their own pets here.
-  const { pets, setPets } = useShelterListings(myShelterId);
+  const [pets, setPets] = useState<Pet[]>([]);
+  const [totalPets, setTotalPets] = useState<number>(0);
+  const [page, setPage] = useState<number>(1);
+  const [pageSize, setPageSize] = useState<number>(10);
+  const [query, setQuery] = useState('');
+  const [visibilityFilter, setVisibilityFilter] = useState<'all' | PetVisibility>('all');
+  const [loadingListings, setLoadingListings] = useState<boolean>(true);
+
   const [slideOpen, setSlideOpen] = useState(false);
   const [editingPet, setEditingPet] = useState<Pet | null>(null);
   const [detailsPet, setDetailsPet] = useState<Pet | null>(null);
-  const [query, setQuery] = useState('');
-  const [visibilityFilter, setVisibilityFilter] = useState<'all' | PetVisibility>('all');
-  const [page, setPage] = useState(1);
+  const [pendingDeletePet, setPendingDeletePet] = useState<Pet | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  const fetchListings = useCallback(async () => {
+    setLoadingListings(true);
+    try {
+      const res = await listMyListingsPaginated({
+        page,
+        limit: pageSize,
+        search: query.trim(),
+        visibility: visibilityFilter,
+        shelterId: myShelterId,
+      });
+      setPets(res.items);
+      setTotalPets(res.total);
+    } catch {
+      toast.error('Failed to load listings.');
+    } finally {
+      setLoadingListings(false);
+    }
+  }, [page, pageSize, query, visibilityFilter, myShelterId]);
+
+  useEffect(() => {
+    fetchListings();
+  }, [fetchListings]);
+
   const [listingErrors, setListingErrors] = useState<{
     name?: string;
     breed?: string;
@@ -368,29 +395,8 @@ export const ShelterListingsPage = () => {
     apartmentFriendly: false,
   });
 
-  // Backend already scopes GET /shelter/listings to the staff's own
-  // shelter — this client filter is belt-and-suspenders for demo fallback.
   const myShelter = shelters.find((s) => s.id === myShelterId) ?? null;
   const isLockedToShelter = Boolean(user?.shelterId);
-
-  const filteredPets = useMemo(() => {
-    const search = query.trim().toLowerCase();
-    return pets.filter((pet) => {
-      const matchesShelter = !myShelterId || pet.shelterId === myShelterId;
-      const matchesVisibility =
-        visibilityFilter === 'all' || pet.visibility === visibilityFilter;
-      const matchesSearch =
-        search === '' ||
-        pet.name.toLowerCase().includes(search) ||
-        pet.breed.toLowerCase().includes(search);
-      return matchesShelter && matchesVisibility && matchesSearch;
-    });
-  }, [pets, visibilityFilter, query, myShelterId]);
-
-  const totalPages = Math.max(1, Math.ceil(filteredPets.length / PAGE_SIZE));
-  const currentPage = Math.min(page, totalPages);
-  const startIndex = (currentPage - 1) * PAGE_SIZE;
-  const pagedPets = filteredPets.slice(startIndex, startIndex + PAGE_SIZE);
 
   const remove = async (id: string) => {
     const target = pets.find((p) => p.id === id);
@@ -399,13 +405,26 @@ export const ShelterListingsPage = () => {
       toast.error('This listing belongs to another shelter.');
       return;
     }
+    setIsDeleting(true);
     try {
       await petService.remove(id);
-      setPets((prev) => prev.filter((p) => p.id !== id));
       toast.success(target ? `${target.name} removed.` : 'Listing removed.');
+      setPendingDeletePet(null);
+      await fetchListings();
     } catch (err) {
       toast.error(err instanceof ApiError ? err.message : 'Failed to remove listing. Please try again.');
+    } finally {
+      setIsDeleting(false);
     }
+  };
+
+  /** Open the delete confirmation card modal — nothing is removed until confirmed. */
+  const askRemove = (pet: Pet) => {
+    if (myShelterId && pet.shelterId !== myShelterId) {
+      toast.error('This listing belongs to another shelter.');
+      return;
+    }
+    setPendingDeletePet(pet);
   };
 
   const resetForm = () =>
@@ -642,7 +661,7 @@ export const ShelterListingsPage = () => {
       : (form.shelterId || myShelterId || editingPet?.shelterId || 's1');
     if (editingPet) {
       try {
-        const updated = await petService.update(editingPet.id, {
+        await petService.update(editingPet.id, {
           name: form.name,
           species: form.species as 'dog' | 'cat' | 'rabbit' | 'bird' | 'other',
           breed: form.breed || 'Mixed',
@@ -673,9 +692,9 @@ export const ShelterListingsPage = () => {
           litterTrained: form.litterTrained,
           apartmentFriendly: form.apartmentFriendly,
         });
-        if (updated) setPets((prev) => prev.map((p) => (p.id === updated.id ? updated : p)));
         toast.success(`${form.name || 'Pet'} updated successfully!`);
         closeSlide();
+        await fetchListings();
       } catch (err) {
         toast.error(err instanceof ApiError ? err.message : 'Failed to update listing. Please try again.');
       }
@@ -713,10 +732,10 @@ export const ShelterListingsPage = () => {
         litterTrained: form.litterTrained,
         apartmentFriendly: form.apartmentFriendly,
       });
-      setPets((prev) => [created, ...prev]);
       toast.success(`${created.name} listed successfully!`);
       closeSlide();
       resetForm();
+      await fetchListings();
     } catch (err) {
       toast.error(err instanceof ApiError ? err.message : 'Failed to create listing. Please try again.');
     }
@@ -757,46 +776,18 @@ export const ShelterListingsPage = () => {
   );
 
   const pagination =
-    filteredPets.length > 0 ? (
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <p className="text-sm text-muted-foreground">
-          Showing <span className="font-medium text-foreground">{startIndex + 1}</span>–
-          <span className="font-medium text-foreground">
-            {Math.min(startIndex + PAGE_SIZE, filteredPets.length)}
-          </span>{' '}
-          of <span className="font-medium text-foreground">{filteredPets.length}</span> listings
-        </p>
-        <div className="flex items-center gap-1">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setPage((p) => Math.max(1, p - 1))}
-            disabled={currentPage === 1}
-          >
-            <ChevronLeft className="size-4" /> Prev
-          </Button>
-          {Array.from({ length: totalPages }, (_, i) => i + 1).map((n) => (
-            <Button
-              key={n}
-              variant={n === currentPage ? 'default' : 'outline'}
-              size="icon-sm"
-              aria-label={`Go to page ${n}`}
-              aria-current={n === currentPage ? 'page' : undefined}
-              onClick={() => setPage(n)}
-            >
-              {n}
-            </Button>
-          ))}
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-            disabled={currentPage === totalPages}
-          >
-            Next <ChevronRight className="size-4" />
-          </Button>
-        </div>
-      </div>
+    totalPets > 0 ? (
+      <TablePagination
+        currentPage={page}
+        totalItems={totalPets}
+        pageSize={pageSize}
+        onPageChange={setPage}
+        onPageSizeChange={(newSize) => {
+          setPageSize(newSize);
+          setPage(1);
+        }}
+        label="listings"
+      />
     ) : undefined;
 
   return (
@@ -809,6 +800,9 @@ export const ShelterListingsPage = () => {
             : 'Manage your public listings and private inventory.'
         }
       />
+      {loadingListings && (
+        <p className="mt-4 text-sm text-muted-foreground">Loading listings…</p>
+      )}
 
       <div className="mt-6 space-y-4">
         <TableCard
@@ -817,7 +811,7 @@ export const ShelterListingsPage = () => {
           icon={PawPrint}
           action={addPetButton}
           toolbar={searchFilter}
-          isEmpty={filteredPets.length === 0}
+          isEmpty={pets.length === 0}
           emptyTitle="No listings found"
           emptyDescription={
             myShelter
@@ -841,7 +835,7 @@ export const ShelterListingsPage = () => {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {pagedPets.map((pet) => (
+                {pets.map((pet) => (
                   <TableRow key={pet.id}>
                     <TableCell>
                       <div className="flex items-center gap-3">
@@ -893,7 +887,7 @@ export const ShelterListingsPage = () => {
                           size="icon-sm"
                           className="text-red-600 hover:bg-red-50 hover:text-red-700 dark:text-red-400 dark:hover:bg-red-950/40"
                           aria-label={`Delete ${pet.name}`}
-                          onClick={() => remove(pet.id)}
+                          onClick={() => askRemove(pet)}
                         >
                           <Trash2 className="size-4" />
                         </Button>
@@ -907,7 +901,7 @@ export const ShelterListingsPage = () => {
 
           {/* Mobile: stacked cards */}
           <div className="grid gap-3 p-4 md:hidden">
-            {pagedPets.map((pet) => (
+            {pets.map((pet) => (
               <RecordCard
                 key={pet.id}
                 imageUrl={pet.imageUrl}
@@ -945,7 +939,7 @@ export const ShelterListingsPage = () => {
                       size="icon-sm"
                       className="text-red-600 hover:bg-red-50 hover:text-red-700 dark:text-red-400 dark:hover:bg-red-950/40"
                       aria-label={`Delete ${pet.name}`}
-                      onClick={() => remove(pet.id)}
+                      onClick={() => askRemove(pet)}
                     >
                       <Trash2 className="size-4" />
                     </Button>
@@ -1414,6 +1408,19 @@ export const ShelterListingsPage = () => {
           </div>
         )}
       </DetailsModal>
+
+      <ConfirmDeleteModal
+        open={pendingDeletePet !== null}
+        onClose={() => (isDeleting ? undefined : setPendingDeletePet(null))}
+        onConfirm={() => {
+          if (pendingDeletePet) void remove(pendingDeletePet.id);
+        }}
+        title="Delete pet listing?"
+        description="This permanently removes the listing from your inventory."
+        itemName={pendingDeletePet?.name}
+        confirmLabel="Delete listing"
+        isDeleting={isDeleting}
+      />
     </div>
   );
 };

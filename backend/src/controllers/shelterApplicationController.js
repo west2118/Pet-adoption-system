@@ -26,8 +26,11 @@ export const getMyApplication = async (req, res) => {
 
 export const getShelterApplications = async (req, res) => {
   const { page, limit, offset } = parsePagination(req.query);
+  const status = req.query.status || undefined;
+  const search = req.query.search || undefined;
   const { applications, total } = await listShelterApplications({
-    status: req.query.status,
+    status,
+    search,
     limit,
     offset,
   });

@@ -3,7 +3,10 @@ import { pool } from '../config/database.js';
 const selectPets = 'SELECT * FROM pets';
 
 export const buildPublicFilters = (filters) => {
-  const conditions = [`visibility = 'public'`];
+  // In-process pets (accepted application, adoption underway) are hidden from
+  // every public surface — adopters browse adoptable pets only. Adopted pets
+  // stay visible so their profiles can show the "found a home" state.
+  const conditions = [`visibility = 'public'`, `status <> 'In Process'`];
   const values = [];
 
   const push = (clause, value) => {
@@ -41,7 +44,7 @@ export const listPublicPets = async (filters, { limit, offset }) => {
 
 export const findPublicPetById = async (id) => {
   const { rows } = await pool.query(
-    `${selectPets} WHERE id = $1 AND visibility = 'public'`,
+    `${selectPets} WHERE id = $1 AND visibility = 'public' AND status <> 'In Process'`,
     [id],
   );
   return rows[0] ?? null;
@@ -52,24 +55,46 @@ export const findPetById = async (id) => {
   return rows[0] ?? null;
 };
 
-export const listPetsByShelter = async (shelterId, { limit, offset }) => {
+export const listPetsByShelter = async (shelterId, { limit = 10, offset = 0, search, visibility } = {}) => {
+  const conditions = ['shelter_id = $1'];
+  const values = [shelterId];
+
+  if (visibility && visibility !== 'all') {
+    values.push(visibility);
+    conditions.push(`visibility = $${values.length}`);
+  }
+  if (search) {
+    values.push(`%${search}%`);
+    conditions.push(`(name ILIKE $${values.length} OR breed ILIKE $${values.length})`);
+  }
+
+  const where = `WHERE ${conditions.join(' AND ')}`;
   const { rows } = await pool.query(
-    `${selectPets} WHERE shelter_id = $1 ORDER BY created_at DESC LIMIT $2 OFFSET $3`,
-    [shelterId, limit, offset],
+    `${selectPets} ${where} ORDER BY created_at DESC LIMIT $${values.length + 1} OFFSET $${values.length + 2}`,
+    [...values, limit, offset],
   );
   const count = await pool.query(
-    'SELECT COUNT(*)::int AS total FROM pets WHERE shelter_id = $1',
-    [shelterId],
+    `SELECT COUNT(*)::int AS total FROM pets ${where}`,
+    values,
   );
   return { rows, total: count.rows[0].total };
 };
 
-export const listAllPets = async ({ limit, offset }) => {
+export const listAllPets = async ({ limit = 10, offset = 0, search } = {}) => {
+  const conditions = [];
+  const values = [];
+
+  if (search) {
+    values.push(`%${search}%`);
+    conditions.push(`(name ILIKE $${values.length} OR breed ILIKE $${values.length})`);
+  }
+
+  const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
   const { rows } = await pool.query(
-    `${selectPets} ORDER BY created_at DESC LIMIT $1 OFFSET $2`,
-    [limit, offset],
+    `${selectPets} ${where} ORDER BY created_at DESC LIMIT $${values.length + 1} OFFSET $${values.length + 2}`,
+    [...values, limit, offset],
   );
-  const count = await pool.query('SELECT COUNT(*)::int AS total FROM pets');
+  const count = await pool.query(`SELECT COUNT(*)::int AS total FROM pets ${where}`, values);
   return { rows, total: count.rows[0].total };
 };
 

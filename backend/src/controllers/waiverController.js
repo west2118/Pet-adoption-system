@@ -7,11 +7,20 @@ import {
   listWaiverTemplates,
   updateWaiverTemplate,
 } from '../services/waiverService.js';
-import { sendSuccess } from '../utils/respond.js';
+import { sendSuccess, buildMeta } from '../utils/respond.js';
+import { parsePagination } from '../validators/commonValidator.js';
 
 export const getWaiverTemplates = async (req, res) => {
-  const templates = await listWaiverTemplates(req.user.shelterId);
-  return sendSuccess(res, { templates });
+  const { page, limit, offset } = parsePagination(req.query);
+  const category = req.query.category || undefined;
+  const search = req.query.search || undefined;
+  const { templates, total } = await listWaiverTemplates(req.user.shelterId, {
+    limit,
+    offset,
+    category,
+    search,
+  });
+  return sendSuccess(res, { templates }, undefined, buildMeta(page, limit, total));
 };
 
 export const addWaiverTemplate = async (req, res) => {

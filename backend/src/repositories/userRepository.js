@@ -51,12 +51,25 @@ export const setUserAccountStatus = async (id, accountStatus, reviewNote = null)
   return rows[0] ?? null;
 };
 
-export const listUsers = async ({ limit = 50, offset = 0 } = {}) => {
+export const listUsers = async ({ limit = 10, offset = 0, role, search } = {}) => {
+  const conditions = [];
+  const values = [];
+
+  if (role && role !== 'all') {
+    values.push(role);
+    conditions.push(`role = $${values.length}`);
+  }
+  if (search) {
+    values.push(`%${search}%`);
+    conditions.push(`(name ILIKE $${values.length} OR email ILIKE $${values.length})`);
+  }
+
+  const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
   const { rows } = await pool.query(
-    'SELECT * FROM users ORDER BY created_at DESC LIMIT $1 OFFSET $2',
-    [limit, offset],
+    `SELECT * FROM users ${where} ORDER BY created_at DESC LIMIT $${values.length + 1} OFFSET $${values.length + 2}`,
+    [...values, limit, offset],
   );
-  const count = await pool.query('SELECT COUNT(*)::int AS total FROM users');
+  const count = await pool.query(`SELECT COUNT(*)::int AS total FROM users ${where}`, values);
   return { rows, total: count.rows[0].total };
 };
 

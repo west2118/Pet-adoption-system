@@ -4,7 +4,14 @@ import { parsePagination } from '../validators/commonValidator.js';
 
 export const getMyListings = async (req, res) => {
   const { page, limit, offset } = parsePagination(req.query);
-  const { pets, total } = await listShelterListings(req.user.shelterId, { limit, offset });
+  const search = req.query.search || undefined;
+  const visibility = req.query.visibility || undefined;
+  const { pets, total } = await listShelterListings(req.user.shelterId, {
+    limit,
+    offset,
+    search,
+    visibility,
+  });
   return sendSuccess(res, { pets }, undefined, buildMeta(page, limit, total));
 };
 

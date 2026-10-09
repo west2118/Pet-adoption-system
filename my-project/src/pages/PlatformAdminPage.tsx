@@ -1,8 +1,6 @@
 import {
   ArrowRight,
   Building2,
-  ChevronLeft,
-  ChevronRight,
   Clock3,
   Eye,
   HeartHandshake,
@@ -29,7 +27,9 @@ import {
   SummaryStatCard,
   SummaryStatGrid,
   TableCard,
+  TablePagination,
 } from '@/components/shared';
+import { ConfirmDeleteModal } from '@/components/shared/ConfirmDeleteModal';
 import { RecentApplicationsTable } from '@/components/features/RecentApplicationsTable';
 import { SheltersSummaryTable } from '@/components/features/SheltersSummaryTable';
 import { ListingsByShelterChart } from '@/components/features/charts/ListingsByShelterChart';
@@ -90,12 +90,14 @@ export const PlatformAdminPage = ({ initialSection = 'overview' }: PlatformAdmin
     role === 'platform_admin' ? 'info' : role === 'shelter_staff' ? 'warning' : 'muted';
 
   // Shelters table state (mirrors the shelter portal listings page).
-  const SHELTER_PAGE_SIZE = 8;
+  const [shelterPageSize, setShelterPageSize] = useState(10);
   const [shelterQuery, setShelterQuery] = useState('');
   const [shelterPage, setShelterPage] = useState(1);
   const [shelterSlideOpen, setShelterSlideOpen] = useState(false);
   const [editingShelter, setEditingShelter] = useState<Shelter | null>(null);
   const [detailsShelter, setDetailsShelter] = useState<Shelter | null>(null);
+  const [pendingDeleteShelter, setPendingDeleteShelter] = useState<Shelter | null>(null);
+  const [isDeletingShelter, setIsDeletingShelter] = useState(false);
   const [shelterForm, setShelterForm] = useState({
     name: '',
     location: '',
@@ -133,10 +135,10 @@ export const PlatformAdminPage = ({ initialSection = 'overview' }: PlatformAdmin
     );
   }, [shelters, shelterQuery]);
 
-  const shelterTotalPages = Math.max(1, Math.ceil(filteredShelters.length / SHELTER_PAGE_SIZE));
+  const shelterTotalPages = Math.max(1, Math.ceil(filteredShelters.length / shelterPageSize));
   const shelterCurrentPage = Math.min(shelterPage, shelterTotalPages);
-  const shelterStartIndex = (shelterCurrentPage - 1) * SHELTER_PAGE_SIZE;
-  const pagedShelters = filteredShelters.slice(shelterStartIndex, shelterStartIndex + SHELTER_PAGE_SIZE);
+  const shelterStartIndex = (shelterCurrentPage - 1) * shelterPageSize;
+  const pagedShelters = filteredShelters.slice(shelterStartIndex, shelterStartIndex + shelterPageSize);
 
   const resetShelterForm = () =>
     setShelterForm({
@@ -208,12 +210,16 @@ export const PlatformAdminPage = ({ initialSection = 'overview' }: PlatformAdmin
 
   const removeShelter = async (id: string) => {
     const target = shelters.find((s) => s.id === id);
+    setIsDeletingShelter(true);
     try {
       await shelterService.remove(id);
       setShelters((prev) => prev.filter((s) => s.id !== id));
       toast.success(target ? `${target.name} removed.` : 'Shelter removed.');
+      setPendingDeleteShelter(null);
     } catch {
       toast.error('Failed to remove shelter. Please try again.');
+    } finally {
+      setIsDeletingShelter(false);
     }
   };
 
@@ -244,69 +250,42 @@ export const PlatformAdminPage = ({ initialSection = 'overview' }: PlatformAdmin
 
   const shelterPagination =
     filteredShelters.length > 0 ? (
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <p className="text-sm text-muted-foreground">
-          Showing <span className="font-medium text-foreground">{shelterStartIndex + 1}</span>–
-          <span className="font-medium text-foreground">
-            {Math.min(shelterStartIndex + SHELTER_PAGE_SIZE, filteredShelters.length)}
-          </span>{' '}
-          of <span className="font-medium text-foreground">{filteredShelters.length}</span> shelters
-        </p>
-        <div className="flex items-center gap-1">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setShelterPage((p) => Math.max(1, p - 1))}
-            disabled={shelterCurrentPage === 1}
-          >
-            <ChevronLeft className="size-4" /> Prev
-          </Button>
-          {Array.from({ length: shelterTotalPages }, (_, i) => i + 1).map((n) => (
-            <Button
-              key={n}
-              variant={n === shelterCurrentPage ? 'default' : 'outline'}
-              size="icon-sm"
-              aria-label={`Go to page ${n}`}
-              aria-current={n === shelterCurrentPage ? 'page' : undefined}
-              onClick={() => setShelterPage(n)}
-            >
-              {n}
-            </Button>
-          ))}
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setShelterPage((p) => Math.min(shelterTotalPages, p + 1))}
-            disabled={shelterCurrentPage === shelterTotalPages}
-          >
-            Next <ChevronRight className="size-4" />
-          </Button>
-        </div>
-      </div>
+      <TablePagination
+        currentPage={shelterCurrentPage}
+        totalItems={filteredShelters.length}
+        pageSize={shelterPageSize}
+        onPageChange={setShelterPage}
+        onPageSizeChange={setShelterPageSize}
+        label="shelters"
+      />
     ) : undefined;
 
   // Platform pets directory: every pet and which shelter posted it.
-  const PET_PAGE_SIZE = 8;
+  const [adminPetsList, setAdminPetsList] = useState<Pet[]>([]);
+  const [totalAdminPets, setTotalAdminPets] = useState(0);
+  const [petPageSize, setPetPageSize] = useState(10);
   const [petQuery, setPetQuery] = useState('');
   const [petShelterFilter, setPetShelterFilter] = useState('all');
   const [petPage, setPetPage] = useState(1);
   const [detailsPet, setDetailsPet] = useState<Pet | null>(null);
 
-  const filteredPets = useMemo(() => {
-    const q = petQuery.trim().toLowerCase();
-    return pets.filter((pet) => {
-      const matchesShelter = petShelterFilter === 'all' || pet.shelterId === petShelterFilter;
-      const matchesSearch =
-        q === '' ||
-        `${pet.name} ${pet.breed} ${pet.species}`.toLowerCase().includes(q);
-      return matchesShelter && matchesSearch;
-    });
-  }, [pets, petQuery, petShelterFilter]);
+  const fetchAdminPets = useCallback(async () => {
+    try {
+      const res = await listAdminPetsPaginated({
+        page: petPage,
+        limit: petPageSize,
+        search: petQuery.trim(),
+      });
+      setAdminPetsList(res.items);
+      setTotalAdminPets(res.total);
+    } catch {
+      toast.error('Failed to load pets.');
+    }
+  }, [petPage, petPageSize, petQuery]);
 
-  const petTotalPages = Math.max(1, Math.ceil(filteredPets.length / PET_PAGE_SIZE));
-  const petCurrentPage = Math.min(petPage, petTotalPages);
-  const petStartIndex = (petCurrentPage - 1) * PET_PAGE_SIZE;
-  const pagedPets = filteredPets.slice(petStartIndex, petStartIndex + PET_PAGE_SIZE);
+  useEffect(() => {
+    fetchAdminPets();
+  }, [fetchAdminPets]);
 
   const petSearchFilter = (
     <div className="flex flex-wrap items-center gap-2">
@@ -340,55 +319,31 @@ export const PlatformAdminPage = ({ initialSection = 'overview' }: PlatformAdmin
   );
 
   const petPagination =
-    filteredPets.length > 0 ? (
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <p className="text-sm text-muted-foreground">
-          Showing <span className="font-medium text-foreground">{petStartIndex + 1}</span>–
-          <span className="font-medium text-foreground">
-            {Math.min(petStartIndex + PET_PAGE_SIZE, filteredPets.length)}
-          </span>{' '}
-          of <span className="font-medium text-foreground">{filteredPets.length}</span> pets
-        </p>
-        <div className="flex items-center gap-1">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setPetPage((p) => Math.max(1, p - 1))}
-            disabled={petCurrentPage === 1}
-          >
-            <ChevronLeft className="size-4" /> Prev
-          </Button>
-          {Array.from({ length: petTotalPages }, (_, i) => i + 1).map((n) => (
-            <Button
-              key={n}
-              variant={n === petCurrentPage ? 'default' : 'outline'}
-              size="icon-sm"
-              aria-label={`Go to page ${n}`}
-              aria-current={n === petCurrentPage ? 'page' : undefined}
-              onClick={() => setPetPage(n)}
-            >
-              {n}
-            </Button>
-          ))}
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setPetPage((p) => Math.min(petTotalPages, p + 1))}
-            disabled={petCurrentPage === petTotalPages}
-          >
-            Next <ChevronRight className="size-4" />
-          </Button>
-        </div>
-      </div>
+    totalAdminPets > 0 ? (
+      <TablePagination
+        currentPage={petPage}
+        totalItems={totalAdminPets}
+        pageSize={petPageSize}
+        onPageChange={setPetPage}
+        onPageSizeChange={(newSize) => {
+          setPetPageSize(newSize);
+          setPetPage(1);
+        }}
+        label="pets"
+      />
     ) : undefined;
 
   // Users table state (mirrors the shelters table).
-  const USER_PAGE_SIZE = 8;
+  const [usersList, setUsersList] = useState<User[]>([]);
+  const [totalUsers, setTotalUsers] = useState(0);
+  const [userPageSize, setUserPageSize] = useState(10);
   const [userQuery, setUserQuery] = useState('');
   const [userPage, setUserPage] = useState(1);
   const [userSlideOpen, setUserSlideOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<User | null>(null);
   const [detailsUser, setDetailsUser] = useState<User | null>(null);
+  const [pendingDeleteUser, setPendingDeleteUser] = useState<User | null>(null);
+  const [isDeletingUser, setIsDeletingUser] = useState(false);
   const [userForm, setUserForm] = useState({
     name: '',
     email: '',
@@ -397,18 +352,23 @@ export const PlatformAdminPage = ({ initialSection = 'overview' }: PlatformAdmin
     avatarUrl: '',
   });
 
-  const filteredUsers = useMemo(() => {
-    const q = userQuery.trim().toLowerCase();
-    if (!q) return users;
-    return users.filter((u) =>
-      `${u.name} ${u.email} ${u.role.replace('_', ' ')}`.toLowerCase().includes(q),
-    );
-  }, [users, userQuery]);
+  const fetchUsers = useCallback(async () => {
+    try {
+      const res = await listUsersPaginated({
+        page: userPage,
+        limit: userPageSize,
+        search: userQuery.trim(),
+      });
+      setUsersList(res.items);
+      setTotalUsers(res.total);
+    } catch {
+      toast.error('Failed to load users.');
+    }
+  }, [userPage, userPageSize, userQuery]);
 
-  const userTotalPages = Math.max(1, Math.ceil(filteredUsers.length / USER_PAGE_SIZE));
-  const userCurrentPage = Math.min(userPage, userTotalPages);
-  const userStartIndex = (userCurrentPage - 1) * USER_PAGE_SIZE;
-  const pagedUsers = filteredUsers.slice(userStartIndex, userStartIndex + USER_PAGE_SIZE);
+  useEffect(() => {
+    fetchUsers();
+  }, [fetchUsers]);
 
   const resetUserForm = () =>
     setUserForm({ name: '', email: '', role: 'adopter', shelterId: '', avatarUrl: '' });
@@ -451,26 +411,30 @@ export const PlatformAdminPage = ({ initialSection = 'overview' }: PlatformAdmin
     };
     if (editingUser) {
       const updated = await userService.update(editingUser.id, input);
-      if (updated) setUsers((prev) => prev.map((u) => (u.id === updated.id ? updated : u)));
       toast.success(`${input.name} updated successfully!`);
       closeUserSlide();
+      await fetchUsers();
       return;
     }
     const created = await userService.create(input);
-    setUsers((prev) => [created, ...prev]);
     toast.success(`${created.name} added successfully!`);
     closeUserSlide();
     resetUserForm();
+    await fetchUsers();
   };
 
   const removeUser = async (id: string) => {
-    const target = users.find((u) => u.id === id);
+    const target = usersList.find((u) => u.id === id);
+    setIsDeletingUser(true);
     try {
       await userService.remove(id);
-      setUsers((prev) => prev.filter((u) => u.id !== id));
       toast.success(target ? `${target.name} removed.` : 'User removed.');
+      setPendingDeleteUser(null);
+      await fetchUsers();
     } catch {
       toast.error('Failed to remove user. Please try again.');
+    } finally {
+      setIsDeletingUser(false);
     }
   };
 
@@ -500,46 +464,18 @@ export const PlatformAdminPage = ({ initialSection = 'overview' }: PlatformAdmin
   );
 
   const userPagination =
-    filteredUsers.length > 0 ? (
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <p className="text-sm text-muted-foreground">
-          Showing <span className="font-medium text-foreground">{userStartIndex + 1}</span>–
-          <span className="font-medium text-foreground">
-            {Math.min(userStartIndex + USER_PAGE_SIZE, filteredUsers.length)}
-          </span>{' '}
-          of <span className="font-medium text-foreground">{filteredUsers.length}</span> users
-        </p>
-        <div className="flex items-center gap-1">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setUserPage((p) => Math.max(1, p - 1))}
-            disabled={userCurrentPage === 1}
-          >
-            <ChevronLeft className="size-4" /> Prev
-          </Button>
-          {Array.from({ length: userTotalPages }, (_, i) => i + 1).map((n) => (
-            <Button
-              key={n}
-              variant={n === userCurrentPage ? 'default' : 'outline'}
-              size="icon-sm"
-              aria-label={`Go to page ${n}`}
-              aria-current={n === userCurrentPage ? 'page' : undefined}
-              onClick={() => setUserPage(n)}
-            >
-              {n}
-            </Button>
-          ))}
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setUserPage((p) => Math.min(userTotalPages, p + 1))}
-            disabled={userCurrentPage === userTotalPages}
-          >
-            Next <ChevronRight className="size-4" />
-          </Button>
-        </div>
-      </div>
+    totalUsers > 0 ? (
+      <TablePagination
+        currentPage={userPage}
+        totalItems={totalUsers}
+        pageSize={userPageSize}
+        onPageChange={setUserPage}
+        onPageSizeChange={(newSize) => {
+          setUserPageSize(newSize);
+          setUserPage(1);
+        }}
+        label="users"
+      />
     ) : undefined;
 
   return (
@@ -731,7 +667,7 @@ export const PlatformAdminPage = ({ initialSection = 'overview' }: PlatformAdmin
                               size="icon-sm"
                               className="text-muted-foreground"
                               aria-label={`Remove ${shelter.name}`}
-                              onClick={() => removeShelter(shelter.id)}
+                              onClick={() => setPendingDeleteShelter(shelter)}
                             >
                               <Trash2 className="size-4" />
                             </Button>
@@ -792,7 +728,7 @@ export const PlatformAdminPage = ({ initialSection = 'overview' }: PlatformAdmin
                           size="icon-sm"
                           className="text-muted-foreground"
                           aria-label={`Remove ${shelter.name}`}
-                          onClick={() => removeShelter(shelter.id)}
+                          onClick={() => setPendingDeleteShelter(shelter)}
                         >
                           <Trash2 className="size-4" />
                         </Button>
@@ -997,10 +933,10 @@ export const PlatformAdminPage = ({ initialSection = 'overview' }: PlatformAdmin
         <div className="mt-6 space-y-4">
           <TableCard
             title="All pets"
-            description={`${filteredPets.length} of ${pets.length} pets across every shelter`}
+            description={`${adminPetsList.length} of ${totalAdminPets} pets across every shelter`}
             icon={PawPrint}
             toolbar={petSearchFilter}
-            isEmpty={filteredPets.length === 0}
+            isEmpty={adminPetsList.length === 0}
             emptyTitle="No pets found"
             emptyDescription="Try a different search or shelter filter."
             footer={petPagination}
@@ -1021,7 +957,7 @@ export const PlatformAdminPage = ({ initialSection = 'overview' }: PlatformAdmin
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {pagedPets.map((pet) => (
+                  {adminPetsList.map((pet) => (
                     <TableRow key={pet.id}>
                       <TableCell>
                         <div className="flex items-center gap-3">
@@ -1072,7 +1008,7 @@ export const PlatformAdminPage = ({ initialSection = 'overview' }: PlatformAdmin
 
             {/* Mobile: stacked cards */}
             <div className="grid gap-3 p-4 md:hidden">
-              {pagedPets.map((pet) => (
+              {adminPetsList.map((pet) => (
                 <RecordCard
                   key={pet.id}
                   imageUrl={pet.imageUrl}
@@ -1165,11 +1101,11 @@ export const PlatformAdminPage = ({ initialSection = 'overview' }: PlatformAdmin
         <div className="mt-6 space-y-4">
           <TableCard
             title="Users"
-            description={`${filteredUsers.length} of ${users.length} registered users`}
+            description={`${usersList.length} of ${totalUsers} registered users`}
             icon={Users}
             action={addUserButton}
             toolbar={userSearchFilter}
-            isEmpty={filteredUsers.length === 0}
+            isEmpty={usersList.length === 0}
             emptyTitle="No users found"
             emptyDescription="Try a different search, or add a new user."
             footer={userPagination}
@@ -1187,7 +1123,7 @@ export const PlatformAdminPage = ({ initialSection = 'overview' }: PlatformAdmin
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {pagedUsers.map((user) => (
+                  {usersList.map((user) => (
                     <TableRow key={user.id}>
                       <TableCell>
                         <div className="flex items-center gap-3">
@@ -1243,7 +1179,7 @@ export const PlatformAdminPage = ({ initialSection = 'overview' }: PlatformAdmin
                             size="icon-sm"
                             className="text-muted-foreground"
                             aria-label={`Remove ${user.name}`}
-                            onClick={() => removeUser(user.id)}
+                            onClick={() => setPendingDeleteUser(user)}
                           >
                             <Trash2 className="size-4" />
                           </Button>
@@ -1257,7 +1193,7 @@ export const PlatformAdminPage = ({ initialSection = 'overview' }: PlatformAdmin
 
             {/* Mobile: stacked cards */}
             <div className="grid gap-3 p-4 md:hidden">
-              {pagedUsers.map((user) => (
+              {usersList.map((user) => (
                 <RecordCard
                   key={user.id}
                   imageUrl={user.avatarUrl}
@@ -1299,7 +1235,7 @@ export const PlatformAdminPage = ({ initialSection = 'overview' }: PlatformAdmin
                         size="icon-sm"
                         className="text-muted-foreground"
                         aria-label={`Remove ${user.name}`}
-                        onClick={() => removeUser(user.id)}
+                        onClick={() => setPendingDeleteUser(user)}
                       >
                         <Trash2 className="size-4" />
                       </Button>
@@ -1461,6 +1397,32 @@ export const PlatformAdminPage = ({ initialSection = 'overview' }: PlatformAdmin
           </div>
         )}
       </DetailsModal>
+
+      <ConfirmDeleteModal
+        open={pendingDeleteShelter !== null}
+        onClose={() => (isDeletingShelter ? undefined : setPendingDeleteShelter(null))}
+        onConfirm={() => {
+          if (pendingDeleteShelter) void removeShelter(pendingDeleteShelter.id);
+        }}
+        title="Delete shelter?"
+        description="This permanently removes the shelter and its assignment."
+        itemName={pendingDeleteShelter?.name}
+        confirmLabel="Delete shelter"
+        isDeleting={isDeletingShelter}
+      />
+
+      <ConfirmDeleteModal
+        open={pendingDeleteUser !== null}
+        onClose={() => (isDeletingUser ? undefined : setPendingDeleteUser(null))}
+        onConfirm={() => {
+          if (pendingDeleteUser) void removeUser(pendingDeleteUser.id);
+        }}
+        title="Delete user?"
+        description="This permanently removes the user account."
+        itemName={pendingDeleteUser?.name}
+        confirmLabel="Delete user"
+        isDeleting={isDeletingUser}
+      />
     </div>
   );
 };

@@ -123,7 +123,7 @@ export const mockPets: Pet[] = [
       'Rocky is a brave and loyal Aspin. Best suited for an active home with a yard.',
     medicalHistory: ['Vaccinated', 'Neutered', 'Treated for skin allergy 2025'],
     behavioralNotes: 'Needs experienced owner. Good guard dog. Leash-trained.',
-    status: 'Pending Adoption',
+    status: 'In Process',
     imageUrl: img('photo-1587300003388-59208cc962cb'),
     gallery: [img('photo-1587300003388-59208cc962cb')],
     vaccinated: true,
@@ -616,7 +616,7 @@ export const mockUsers: User[] = [
 ];
 
 export const publicPets = (pets: Pet[]): Pet[] =>
-  pets.filter((pet) => pet.visibility === 'public');
+  pets.filter((pet) => pet.visibility === 'public' && pet.status !== 'In Process');
 
 export const mockInquiries: Inquiry[] = [
   {

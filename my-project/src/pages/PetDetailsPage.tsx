@@ -121,6 +121,25 @@ export const PetDetailsPage = () => {
     );
   }
 
+  // In-process pets (accepted application, adoption underway) are hidden from
+  // every public surface — adopters browse adoptable pets only. This also
+  // covers demo mode, where the mock store still holds the record.
+  if (pet.status === 'In Process') {
+    return (
+      <Container className="py-16">
+        <EmptyState
+          title="Adoption in process"
+          description={`${pet.name} already has an accepted application and is no longer open for new applications.`}
+          action={
+            <Link to="/pets">
+              <Button size="sm">Back to browse</Button>
+            </Link>
+          }
+        />
+      </Container>
+    );
+  }
+
   return (
     <div className="landing-theme">
       <PetHero

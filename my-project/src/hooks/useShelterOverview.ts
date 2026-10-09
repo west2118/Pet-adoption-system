@@ -112,7 +112,7 @@ export const useShelterOverview = (
     });
     const petsBySpecies = [...speciesMap.entries()].map(([name, value]) => ({ name, value }));
 
-    const petStatusOrder: Pet['status'][] = ['Available', 'Pending Adoption', 'Adopted', 'Fostered'];
+    const petStatusOrder: Pet['status'][] = ['Available', 'In Process', 'Adopted', 'Fostered'];
     const listingsByStatus = petStatusOrder
       .map((status) => ({ name: status, value: pets.filter((p) => p.status === status).length }))
       .filter((point) => point.value > 0);

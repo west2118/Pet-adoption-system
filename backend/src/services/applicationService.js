@@ -31,12 +31,38 @@ export const listMyApplications = async (applicantId, pagination) => {
   return { applications, total };
 };
 
-export const listShelterApplications = async (shelterId, pagination, status) => {
-  const { rows, total } = await listApplicationsByShelter(shelterId, { ...pagination, status });
+export const listShelterApplications = async (shelterId, options = {}) => {
+  const { rows, total } = await listApplicationsByShelter(shelterId, options);
   const applications = await Promise.all(
     rows.map(async (r) => mapApplication(r, await getApplicationHistory(r.id))),
   );
   return { applications, total };
+};
+
+// Auto-rejects every other open application for the same pet inside the
+// same transaction, so accepting one adopter can never leave competitors
+// hanging. Returns the number of applications rejected.
+const autoRejectCompetingApplications = async (
+  client,
+  petId,
+  acceptedId,
+  statuses,
+  note,
+) => {
+  const { rows } = await client.query(
+    `UPDATE adoption_applications
+      SET status = 'Rejected', staff_notes = $1, updated_at = CURRENT_TIMESTAMP
+      WHERE pet_id = $2 AND id <> $3 AND status = ANY($4)
+      RETURNING id`,
+    [note, petId, acceptedId, statuses],
+  );
+  for (const row of rows) {
+    await client.query(
+      `INSERT INTO application_history (application_id, status, note) VALUES ($1, 'Rejected', $2)`,
+      [row.id, note],
+    );
+  }
+  return rows.length;
 };
 
 // Atomic: application status + audit history + pet status move together.
@@ -74,13 +100,30 @@ export const updateApplicationStatus = async (applicationId, shelterId, newStatu
 
     if (newStatus === 'Approved') {
       await client.query(
-        `UPDATE pets SET status = 'Pending Adoption', updated_at = CURRENT_TIMESTAMP WHERE id = $1`,
+        `UPDATE pets SET status = 'In Process', updated_at = CURRENT_TIMESTAMP WHERE id = $1`,
         [record.pet_id],
+      );
+      // One accepted adopter per pet — every other open application for the
+      // same pet is rejected automatically with an audit trail.
+      await autoRejectCompetingApplications(
+        client,
+        record.pet_id,
+        applicationId,
+        ['Submitted', 'Under Review'],
+        'Auto-rejected: another application for this pet was accepted.',
       );
     } else if (newStatus === 'Adopted') {
       await client.query(
         `UPDATE pets SET status = 'Adopted', updated_at = CURRENT_TIMESTAMP WHERE id = $1`,
         [record.pet_id],
+      );
+      // Safety net: nothing may stay open once the pet is adopted.
+      await autoRejectCompetingApplications(
+        client,
+        record.pet_id,
+        applicationId,
+        ['Submitted', 'Under Review', 'Approved'],
+        'Auto-rejected: this pet has been adopted.',
       );
     }
 

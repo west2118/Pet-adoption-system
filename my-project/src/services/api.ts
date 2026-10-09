@@ -1,12 +1,20 @@
-import { mockApplications, mockPets, mockShelters, mockUsers } from '@/data/mockData';
-import { ApiError, apiRequest, tokenStore } from '@/lib/apiClient';
+import { mockApplications, mockInquiries, mockPets, mockShelters, mockUsers } from '@/data/mockData';
+import { ApiError, apiRequest, apiRequestWithMeta, tokenStore } from '@/lib/apiClient';
 import type {
   AdoptionApplication,
   ApplicationStatus,
+  Inquiry,
   Pet,
   Shelter,
   User,
 } from '@/types';
+
+export interface PaginatedResult<T> {
+  items: T[];
+  total: number;
+  page: number;
+  limit: number;
+}
 
 /**
  * Public catalogue service.
@@ -111,6 +119,57 @@ export const listMyListings = async (shelterId?: string | null): Promise<Pet[]> 
   }
   const all = await listPets();
   return shelterId ? all.filter((p) => p.shelterId === shelterId) : all;
+};
+
+export const listMyListingsPaginated = async (options: {
+  page?: number;
+  limit?: number;
+  search?: string;
+  visibility?: string;
+  shelterId?: string | null;
+} = {}): Promise<PaginatedResult<Pet>> => {
+  const page = options.page ?? 1;
+  const limit = options.limit ?? 10;
+  if (tokenStore.get()) {
+    try {
+      const queryParams = new URLSearchParams();
+      queryParams.set('page', String(page));
+      queryParams.set('limit', String(limit));
+      if (options.search) queryParams.set('search', options.search);
+      if (options.visibility && options.visibility !== 'all') queryParams.set('visibility', options.visibility);
+
+      const { data, meta } = await apiRequestWithMeta<PetsListResponse>(
+        `/shelter/listings?${queryParams.toString()}`,
+        { auth: 'full' },
+      );
+      return {
+        items: data.pets,
+        total: meta?.total ?? data.pets.length,
+        page: meta?.page ?? page,
+        limit: meta?.limit ?? limit,
+      };
+    } catch (err) {
+      if (!shouldFallbackToMock(err)) throw err;
+    }
+  }
+
+  let filtered = [...petsStore];
+  if (options.shelterId) {
+    filtered = filtered.filter((p) => p.shelterId === options.shelterId);
+  }
+  if (options.visibility && options.visibility !== 'all') {
+    filtered = filtered.filter((p) => p.visibility === options.visibility);
+  }
+  if (options.search) {
+    const s = options.search.toLowerCase();
+    filtered = filtered.filter(
+      (p) => p.name.toLowerCase().includes(s) || p.breed.toLowerCase().includes(s),
+    );
+  }
+  const total = filtered.length;
+  const start = (page - 1) * limit;
+  const items = filtered.slice(start, start + limit);
+  return { items, total, page, limit };
 };
 
 export const createPet = async (input: Omit<Pet, 'id' | 'dateAdded'>): Promise<Pet> => {
@@ -242,6 +301,95 @@ export const listUsers = async (): Promise<User[]> => {
   return [...usersStore];
 };
 
+export const listUsersPaginated = async (options: {
+  page?: number;
+  limit?: number;
+  role?: string;
+  search?: string;
+} = {}): Promise<PaginatedResult<User>> => {
+  const page = options.page ?? 1;
+  const limit = options.limit ?? 10;
+  if (tokenStore.get()) {
+    try {
+      const queryParams = new URLSearchParams();
+      queryParams.set('page', String(page));
+      queryParams.set('limit', String(limit));
+      if (options.role && options.role !== 'all') queryParams.set('role', options.role);
+      if (options.search) queryParams.set('search', options.search);
+
+      const { data, meta } = await apiRequestWithMeta<{ users: User[] }>(
+        `/admin/users?${queryParams.toString()}`,
+        { auth: 'full' },
+      );
+      return {
+        items: data.users,
+        total: meta?.total ?? data.users.length,
+        page: meta?.page ?? page,
+        limit: meta?.limit ?? limit,
+      };
+    } catch (err) {
+      if (!shouldFallbackToMock(err)) throw err;
+    }
+  }
+
+  let filtered = [...usersStore];
+  if (options.role && options.role !== 'all') {
+    filtered = filtered.filter((u) => u.role === options.role);
+  }
+  if (options.search) {
+    const s = options.search.toLowerCase();
+    filtered = filtered.filter(
+      (u) => u.name.toLowerCase().includes(s) || u.email.toLowerCase().includes(s),
+    );
+  }
+  const total = filtered.length;
+  const start = (page - 1) * limit;
+  const items = filtered.slice(start, start + limit);
+  return { items, total, page, limit };
+};
+
+export const listAdminPetsPaginated = async (options: {
+  page?: number;
+  limit?: number;
+  search?: string;
+} = {}): Promise<PaginatedResult<Pet>> => {
+  const page = options.page ?? 1;
+  const limit = options.limit ?? 10;
+  if (tokenStore.get()) {
+    try {
+      const queryParams = new URLSearchParams();
+      queryParams.set('page', String(page));
+      queryParams.set('limit', String(limit));
+      if (options.search) queryParams.set('search', options.search);
+
+      const { data, meta } = await apiRequestWithMeta<PetsListResponse>(
+        `/admin/pets?${queryParams.toString()}`,
+        { auth: 'full' },
+      );
+      return {
+        items: data.pets,
+        total: meta?.total ?? data.pets.length,
+        page: meta?.page ?? page,
+        limit: meta?.limit ?? limit,
+      };
+    } catch (err) {
+      if (!shouldFallbackToMock(err)) throw err;
+    }
+  }
+
+  let filtered = [...petsStore];
+  if (options.search) {
+    const s = options.search.toLowerCase();
+    filtered = filtered.filter(
+      (p) => p.name.toLowerCase().includes(s) || p.breed.toLowerCase().includes(s),
+    );
+  }
+  const total = filtered.length;
+  const start = (page - 1) * limit;
+  const items = filtered.slice(start, start + limit);
+  return { items, total, page, limit };
+};
+
 export const createUser = async (input: Omit<User, 'id'>): Promise<User> => {
   await delay();
   const user: User = {
@@ -311,16 +459,49 @@ export const updateApplicationStatus = async (
 ): Promise<AdoptionApplication | undefined> => {
   await delay();
   const now = new Date().toISOString().slice(0, 10);
-  applicationsStore = applicationsStore.map((a) =>
-    a.id === id
-      ? {
-          ...a,
-          status,
-          updatedAt: now,
-          history: [...a.history, { status, date: now, note }],
-        }
-      : a,
-  );
+  const target = applicationsStore.find((a) => a.id === id);
+  if (!target) return undefined;
+  // Mirror the backend rule: accepting one application auto-rejects every
+  // other open application for the same pet, and moves the pet itself.
+  const rejectable: ApplicationStatus[] =
+    status === 'Approved'
+      ? ['Submitted', 'Under Review']
+      : status === 'Adopted'
+        ? ['Submitted', 'Under Review', 'Approved']
+        : [];
+  const autoNote =
+    status === 'Approved'
+      ? 'Auto-rejected: another application for this pet was accepted.'
+      : status === 'Adopted'
+        ? 'Auto-rejected: this pet has been adopted.'
+        : undefined;
+  applicationsStore = applicationsStore.map((a) => {
+    if (a.id === id) {
+      return {
+        ...a,
+        status,
+        updatedAt: now,
+        staffNotes: note ?? a.staffNotes,
+        history: [...a.history, { status, date: now, note }],
+      };
+    }
+    if (a.petId === target.petId && rejectable.includes(a.status) && autoNote) {
+      return {
+        ...a,
+        status: 'Rejected' as ApplicationStatus,
+        updatedAt: now,
+        staffNotes: autoNote,
+        history: [...a.history, { status: 'Rejected' as ApplicationStatus, date: now, note: autoNote }],
+      };
+    }
+    return a;
+  });
+  if (status === 'Approved' || status === 'Adopted') {
+    const petStatus = status === 'Approved' ? 'In Process' : 'Adopted';
+    petsStore = petsStore.map((p) =>
+      p.id === target.petId ? { ...p, status: petStatus } : p,
+    );
+  }
   return applicationsStore.find((a) => a.id === id);
 };
 
@@ -329,4 +510,64 @@ export const applicationService = {
   listByApplicant: listApplicationsByApplicant,
   create: createApplication,
   updateStatus: updateApplicationStatus,
+};
+
+export type { Inquiry } from '@/types';
+
+interface ShelterInquiriesResponse {
+  inquiries: Inquiry[];
+}
+
+/**
+ * Shelter inbox (paginated). The backend scopes rows by the staff JWT, so
+ * `shelterId` is only used by the mock fallback in demo mode.
+ */
+export const listShelterInquiriesPaginated = async (options: {
+  page?: number;
+  limit?: number;
+  resolved?: boolean;
+  search?: string;
+  shelterId?: string | null;
+} = {}): Promise<PaginatedResult<Inquiry>> => {
+  const page = options.page ?? 1;
+  const limit = options.limit ?? 10;
+  if (tokenStore.get()) {
+    try {
+      const queryParams = new URLSearchParams();
+      queryParams.set('page', String(page));
+      queryParams.set('limit', String(limit));
+      if (options.resolved !== undefined) queryParams.set('resolved', String(options.resolved));
+      if (options.search) queryParams.set('search', options.search);
+
+      const { data, meta } = await apiRequestWithMeta<ShelterInquiriesResponse>(
+        `/shelter/inquiries?${queryParams.toString()}`,
+        { auth: 'full' },
+      );
+      return {
+        items: data.inquiries,
+        total: meta?.total ?? data.inquiries.length,
+        page: meta?.page ?? page,
+        limit: meta?.limit ?? limit,
+      };
+    } catch (err) {
+      if (!shouldFallbackToMock(err)) throw err;
+    }
+  }
+
+  const search = (options.search ?? '').trim().toLowerCase();
+  const filtered = mockInquiries.filter((inquiry) => {
+    if (options.shelterId) {
+      const pet = petsStore.find((p) => p.id === inquiry.petId);
+      if (!pet || pet.shelterId !== options.shelterId) return false;
+    }
+    if (search === '') return true;
+    const petName = petsStore.find((p) => p.id === inquiry.petId)?.name ?? '';
+    return `${inquiry.fromName} ${inquiry.fromEmail} ${inquiry.message} ${petName}`
+      .toLowerCase()
+      .includes(search);
+  });
+  const total = filtered.length;
+  const start = (page - 1) * limit;
+  const items = filtered.slice(start, start + limit);
+  return { items, total, page, limit };
 };

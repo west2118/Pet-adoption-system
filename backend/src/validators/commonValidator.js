@@ -6,11 +6,11 @@ export const uuidParam = z.object({
 
 export const paginationQuery = z.object({
   page: z.string().optional().default('1'),
-  limit: z.string().optional().default('12'),
+  limit: z.string().optional().default('10'),
 });
 
 export const parsePagination = (query) => {
   const page = Math.max(1, Number.parseInt(query.page ?? '1', 10) || 1);
-  const limit = Math.min(100, Math.max(1, Number.parseInt(query.limit ?? '12', 10) || 12));
+  const limit = Math.min(100, Math.max(1, Number.parseInt(query.limit ?? '10', 10) || 10));
   return { page, limit, offset: (page - 1) * limit };
 };

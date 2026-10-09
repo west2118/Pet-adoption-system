@@ -123,7 +123,7 @@ CREATE TYPE species_type AS ENUM ('dog', 'cat', 'rabbit', 'bird', 'other');
 CREATE TYPE age_group_type AS ENUM ('puppy-kitten', 'young', 'adult', 'senior');
 CREATE TYPE pet_size_type AS ENUM ('small', 'medium', 'large');
 CREATE TYPE gender_type AS ENUM ('male', 'female');
-CREATE TYPE pet_status_type AS ENUM ('Available', 'Pending Adoption', 'Adopted', 'Fostered');
+CREATE TYPE pet_status_type AS ENUM ('Available', 'In Process', 'Adopted', 'Fostered');
 CREATE TYPE pet_visibility_type AS ENUM ('public', 'private');
 CREATE TYPE application_status_type AS ENUM ('Submitted', 'Under Review', 'Approved', 'Rejected', 'Adopted');
 CREATE TYPE housing_type AS ENUM ('house', 'apartment', 'condo', 'other');
@@ -448,7 +448,7 @@ export const createPetSchema = z.object({
   description: z.string().min(10, 'Description must be at least 10 characters'),
   medicalHistory: z.array(z.string()).default([]),
   behavioralNotes: z.string().optional().default(''),
-  status: z.enum(['Available', 'Pending Adoption', 'Adopted', 'Fostered']).default('Available'),
+  status: z.enum(['Available', 'In Process', 'Adopted', 'Fostered']).default('Available'),
   imageUrl: z.string().url('Invalid image URL format'),
   gallery: z.array(z.string().url()).default([]),
   vaccinated: z.boolean().default(false),
@@ -604,9 +604,10 @@ export const errorHandler = (
 ## 7. Business Logic & Transaction Management
 
 ### 7.1 Application Status Workflow & Atomic DB Transactions
-When a shelter staff member updates an adoption application status to `Approved` or `Adopted`, two operations **MUST** complete atomically:
+When a shelter staff member updates an adoption application status to `Approved` or `Adopted`, three operations **MUST** complete atomically:
 1. The application status and audit history table are updated.
-2. The pet status is automatically set to `Pending Adoption` or `Adopted`.
+2. The pet status is automatically set to `In Process` or `Adopted`.
+3. Every other open application for the same pet is auto-rejected with its own audit history entry (one accepted adopter per pet).
 
 If either step fails, the entire transaction must be rolled back (`ROLLBACK`).
 
@@ -661,10 +662,10 @@ export const updateApplicationStatus = async (
       [applicationId, newStatus, note || null]
     );
 
-    // 4. Update pet status accordingly
+    // 4. Update pet status accordingly + auto-reject competing applications
     if (newStatus === 'Approved') {
       await client.query(
-        `UPDATE pets SET status = 'Pending Adoption', updated_at = CURRENT_TIMESTAMP WHERE id = $1`,
+        `UPDATE pets SET status = 'In Process', updated_at = CURRENT_TIMESTAMP WHERE id = $1`,
         [appRecord.pet_id]
       );
     } else if (newStatus === 'Adopted') {

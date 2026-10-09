@@ -16,18 +16,29 @@ export const findApplicationById = async (id) => {
   return rows[0] ?? null;
 };
 
-export const listApplications = async ({ status, limit = 50, offset = 0 } = {}) => {
-  const where = status ? 'WHERE a.status = $3' : '';
-  const params = status ? [limit, offset, status] : [limit, offset];
+export const listApplications = async ({ status, search, limit = 10, offset = 0 } = {}) => {
+  const conditions = [];
+  const values = [];
+
+  if (status && status !== 'all') {
+    values.push(status);
+    conditions.push(`a.status = $${values.length}`);
+  }
+  if (search) {
+    values.push(`%${search}%`);
+    conditions.push(
+      `(a.name ILIKE $${values.length} OR u.name ILIKE $${values.length} OR u.email ILIKE $${values.length})`,
+    );
+  }
+
+  const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
   const { rows } = await pool.query(
-    `${SELECT_WITH_APPLICANT} ${where} ORDER BY a.submitted_at DESC LIMIT $1 OFFSET $2`,
-    params,
+    `${SELECT_WITH_APPLICANT} ${where} ORDER BY a.submitted_at DESC LIMIT $${values.length + 1} OFFSET $${values.length + 2}`,
+    [...values, limit, offset],
   );
   const count = await pool.query(
-    status
-      ? 'SELECT COUNT(*)::int AS total FROM shelter_applications WHERE status = $1'
-      : 'SELECT COUNT(*)::int AS total FROM shelter_applications',
-    status ? [status] : [],
+    `SELECT COUNT(*)::int AS total FROM shelter_applications a JOIN users u ON u.id = a.user_id ${where}`,
+    values,
   );
   return { rows, total: count.rows[0].total };
 };

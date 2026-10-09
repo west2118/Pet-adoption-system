@@ -35,10 +35,18 @@ export class ApiError extends Error {
   }
 }
 
+export interface ApiMeta {
+  page: number;
+  limit: number;
+  total: number;
+  totalPages: number;
+}
+
 interface ApiEnvelope<T> {
   success: boolean;
   data?: T;
   message?: string;
+  meta?: ApiMeta;
   error?: { code: string; message: string; details?: ApiFieldError[] };
 }
 
@@ -54,6 +62,14 @@ export const apiRequest = async <T>(
   path: string,
   { method = 'GET', body, auth = 'none' }: RequestOptions = {},
 ): Promise<T> => {
+  const { data } = await apiRequestWithMeta<T>(path, { method, body, auth });
+  return data;
+};
+
+export const apiRequestWithMeta = async <T>(
+  path: string,
+  { method = 'GET', body, auth = 'none' }: RequestOptions = {},
+): Promise<{ data: T; meta?: ApiMeta }> => {
   const headers: Record<string, string> = { 'Content-Type': 'application/json' };
 
   if (auth !== 'none') {
@@ -88,5 +104,5 @@ export const apiRequest = async <T>(
     );
   }
 
-  return json.data as T;
+  return { data: json.data as T, meta: json.meta };
 };

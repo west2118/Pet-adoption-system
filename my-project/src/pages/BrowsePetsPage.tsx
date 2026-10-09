@@ -36,7 +36,7 @@ export const BrowsePetsPage = () => {
   const orbitPets = useMemo(() => {
     const statusRank: Record<Pet['status'], number> = {
       Available: 0,
-      'Pending Adoption': 1,
+      'In Process': 1,
       Fostered: 2,
       Adopted: 3,
     };

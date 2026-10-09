@@ -45,15 +45,17 @@ const DEFAULT_TEMPLATES = [
   },
 ];
 
-export const listWaiverTemplates = async (shelterId) => {
-  let rows = await listTemplatesByShelter(shelterId);
-  if (rows.length === 0) {
+export const listWaiverTemplates = async (shelterId, options = {}) => {
+  let { rows, total } = await listTemplatesByShelter(shelterId, options);
+  if (total === 0 && !options.search && !options.category) {
     for (const t of DEFAULT_TEMPLATES) {
       await createTemplateRow(shelterId, t);
     }
-    rows = await listTemplatesByShelter(shelterId);
+    const res = await listTemplatesByShelter(shelterId, options);
+    rows = res.rows;
+    total = res.total;
   }
-  return rows.map((r) => mapWaiverTemplate(r));
+  return { templates: rows.map((r) => mapWaiverTemplate(r)), total };
 };
 
 export const createWaiverTemplate = async (shelterId, input) => {

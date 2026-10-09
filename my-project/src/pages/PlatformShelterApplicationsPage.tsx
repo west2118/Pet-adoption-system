@@ -1,7 +1,7 @@
 import { Building2, Check, Clock, Inbox, Mail, MapPin, Phone, X } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 import { toast } from 'react-toastify';
-import { DetailsModal, SectionHeader, TableCard } from '@/components/shared';
+import { DetailsModal, SectionHeader, TableCard, TablePagination } from '@/components/shared';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/button';
 import { Label, Textarea } from '@/components/ui/Form';
@@ -20,8 +20,11 @@ import { formatDate } from '@/utils/formatters';
 
 export const PlatformShelterApplicationsPage = () => {
   const [applications, setApplications] = useState<ShelterApplication[]>([]);
+  const [totalApplications, setTotalApplications] = useState<number>(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
   const [reviewing, setReviewing] = useState<ShelterApplication | null>(null);
   const [note, setNote] = useState('');
   const [working, setWorking] = useState(false);
@@ -31,7 +34,9 @@ export const PlatformShelterApplicationsPage = () => {
     setLoading(true);
     setError(null);
     try {
-      setApplications(await shelterApplicationService.list());
+      const res = await shelterApplicationService.listPaginated({ page, limit: pageSize });
+      setApplications(res.items);
+      setTotalApplications(res.total);
     } catch (err) {
       const message = err instanceof ApiError ? err.message : 'Failed to load applications.';
       setError(message);
@@ -39,7 +44,7 @@ export const PlatformShelterApplicationsPage = () => {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [page, pageSize]);
 
   useEffect(() => {
     load();
@@ -87,6 +92,21 @@ export const PlatformShelterApplicationsPage = () => {
     }
   };
 
+  const pagination =
+    totalApplications > 0 ? (
+      <TablePagination
+        currentPage={page}
+        totalItems={totalApplications}
+        pageSize={pageSize}
+        onPageChange={setPage}
+        onPageSizeChange={(newSize) => {
+          setPageSize(newSize);
+          setPage(1);
+        }}
+        label="applications"
+      />
+    ) : undefined;
+
   return (
     <div className="w-full px-4 py-6 sm:px-6">
       <SectionHeader
@@ -104,9 +124,11 @@ export const PlatformShelterApplicationsPage = () => {
           title="Pending & reviewed"
           description="Newest submissions first."
           icon={Inbox}
+          footer={pagination}
           isEmpty={!loading && applications.length === 0}
           emptyTitle="No shelter applications"
           emptyDescription="New shelter sign-ups will appear here for review."
+          contentClassName="px-0"
         >
           {loading ? (
             <p className="p-5 text-sm text-muted-foreground">Loading applications…</p>

@@ -1,4 +1,5 @@
-import { apiRequest } from '@/lib/apiClient';
+import { apiRequest, apiRequestWithMeta } from '@/lib/apiClient';
+import type { PaginatedResult } from '@/services/api';
 import type { ShelterApplication } from '@/types';
 
 export const listShelterApplications = async (status?: string): Promise<ShelterApplication[]> => {
@@ -8,6 +9,32 @@ export const listShelterApplications = async (status?: string): Promise<ShelterA
     { auth: 'full' },
   );
   return applications;
+};
+
+export const listShelterApplicationsPaginated = async (options: {
+  page?: number;
+  limit?: number;
+  status?: string;
+  search?: string;
+} = {}): Promise<PaginatedResult<ShelterApplication>> => {
+  const page = options.page ?? 1;
+  const limit = options.limit ?? 10;
+  const queryParams = new URLSearchParams();
+  queryParams.set('page', String(page));
+  queryParams.set('limit', String(limit));
+  if (options.status && options.status !== 'all') queryParams.set('status', options.status);
+  if (options.search) queryParams.set('search', options.search);
+
+  const { data, meta } = await apiRequestWithMeta<{ applications: ShelterApplication[] }>(
+    `/admin/shelter-applications?${queryParams.toString()}`,
+    { auth: 'full' },
+  );
+  return {
+    items: data.applications,
+    total: meta?.total ?? data.applications.length,
+    page: meta?.page ?? page,
+    limit: meta?.limit ?? limit,
+  };
 };
 
 export const approveShelterApplication = async (id: string): Promise<void> => {
@@ -27,6 +54,7 @@ export const rejectShelterApplication = async (id: string, reviewNote?: string):
 
 export const shelterApplicationService = {
   list: listShelterApplications,
+  listPaginated: listShelterApplicationsPaginated,
   approve: approveShelterApplication,
   reject: rejectShelterApplication,
 };

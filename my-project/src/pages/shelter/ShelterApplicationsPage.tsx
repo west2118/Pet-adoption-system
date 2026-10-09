@@ -1,17 +1,16 @@
 import {
   Check,
-  ChevronLeft,
-  ChevronRight,
   ClipboardList,
   Eye,
+  HeartHandshake,
   Printer,
   Search,
   X,
 } from 'lucide-react';
-import { useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { useCallback, useEffect, useState } from 'react';
 import { toast } from 'react-toastify';
-import { DetailsModal, RecordCard, SectionHeader, TableCard } from '@/components/shared';
+import { DetailsModal, RecordCard, SectionHeader, TableCard, TablePagination } from '@/components/shared';
+import { WaiverModal } from '@/components/features/WaiverModal';
 import {
   Table,
   TableBody,
@@ -23,8 +22,7 @@ import {
 import { Input, Select } from '@/components/ui/Form';
 import { Button } from '@/components/ui/button';
 import { ApplicationStatusBadge } from '@/components/ui/StatusBadge';
-import { useApplications, usePets, useShelters } from '@/hooks/useData';
-import { useAuth } from '@/hooks/useAuth';
+import { usePets } from '@/hooks/useData';
 import { applicationService } from '@/services/api';
 import { adoptionApplicationService } from '@/services/adoptionApplicationService';
 import { tokenStore } from '@/lib/apiClient';
@@ -40,46 +38,92 @@ const STATUS_FILTER_OPTIONS = [
   { value: 'Adopted', label: 'Adopted' },
 ];
 
-const PAGE_SIZE = 8;
-
 export const ShelterApplicationsPage = () => {
-  const { user } = useAuth();
-  const { pets } = usePets();
-  const { shelters } = useShelters();
-  // Shelter mode reads GET /shelter/applications (same Postgres rows the
-  // adopter just wrote via POST /applications), with mock fallback for demo.
-  const { applications, setApplications, refresh, loading } = useApplications(undefined, 'shelter');
+  const { pets, setPets } = usePets();
+
+  const [applications, setApplications] = useState<AdoptionApplication[]>([]);
+  const [totalApplications, setTotalApplications] = useState<number>(0);
+  const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | ApplicationStatus>('all');
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
   const [detailsApp, setDetailsApp] = useState<AdoptionApplication | null>(null);
+  const [waiverAppId, setWaiverAppId] = useState<string | null>(null);
 
-  // Only applications for this shelter's own pets — other shelters' pets
-  // (and their applications) are never listed here.
-  const myShelterId = user?.shelterId ?? shelters[0]?.id ?? null;
+  const refresh = useCallback(async () => {
+    setLoading(true);
+    try {
+      const res = await adoptionApplicationService.listForShelterPaginated({
+        page,
+        limit: pageSize,
+        status: statusFilter,
+        search: query.trim(),
+      });
+      setApplications(res.items);
+      setTotalApplications(res.total);
+    } catch {
+      toast.error('Failed to load applications.');
+    } finally {
+      setLoading(false);
+    }
+  }, [page, pageSize, statusFilter, query]);
 
-  const filteredApplications = useMemo(() => {
-    const search = query.trim().toLowerCase();
-    return applications.filter((app) => {
-      const pet = pets.find((p) => p.id === app.petId);
-      if (myShelterId && pet?.shelterId !== myShelterId) return false;
-      const matchesStatus = statusFilter === 'all' || app.status === statusFilter;
-      const petName = pet?.name ?? '';
-      const matchesSearch =
-        search === '' ||
-        app.applicantName.toLowerCase().includes(search) ||
-        app.email.toLowerCase().includes(search) ||
-        petName.toLowerCase().includes(search);
-      return matchesStatus && matchesSearch;
-    });
-  }, [applications, pets, statusFilter, query, myShelterId]);
+  useEffect(() => {
+    refresh();
+  }, [refresh]);
 
-  const totalPages = Math.max(1, Math.ceil(filteredApplications.length / PAGE_SIZE));
-  const currentPage = Math.min(page, totalPages);
-  const startIndex = (currentPage - 1) * PAGE_SIZE;
-  const pagedApplications = filteredApplications.slice(startIndex, startIndex + PAGE_SIZE);
+  const waiverApp = waiverAppId
+    ? (applications.find((a) => a.id === waiverAppId) ?? null)
+    : null;
 
   const handleStatusChange = async (id: string, status: ApplicationStatus) => {
+    // Local mirror of the server rule: accepting one application auto-rejects
+    // the other open ones for the same pet and moves the pet itself, so the
+    // table stays correct without a refetch.
+    const syncAcceptanceSideEffects = (updated: AdoptionApplication) => {
+      const rejectable: ApplicationStatus[] =
+        status === 'Approved'
+          ? ['Submitted', 'Under Review']
+          : status === 'Adopted'
+            ? ['Submitted', 'Under Review', 'Approved']
+            : [];
+      const competitors = applications.filter(
+        (a) => a.id !== updated.id && a.petId === updated.petId && rejectable.includes(a.status),
+      );
+      if (rejectable.length > 0) {
+        const today = new Date().toISOString().slice(0, 10);
+        const autoNote =
+          status === 'Approved'
+            ? 'Auto-rejected: another application for this pet was accepted.'
+            : 'Auto-rejected: this pet has been adopted.';
+        setApplications((prev) =>
+          prev.map((a) => {
+            if (a.id === updated.id) return updated;
+            if (a.petId === updated.petId && rejectable.includes(a.status)) {
+              return {
+                ...a,
+                status: 'Rejected' as ApplicationStatus,
+                updatedAt: today,
+                staffNotes: autoNote,
+                history: [
+                  ...a.history,
+                  { status: 'Rejected' as ApplicationStatus, date: today, note: autoNote },
+                ],
+              };
+            }
+            return a;
+          }),
+        );
+        const petStatus = status === 'Approved' ? ('In Process' as const) : ('Adopted' as const);
+        setPets((prev) => prev.map((p) => (p.id === updated.petId ? { ...p, status: petStatus } : p)));
+      } else {
+        setApplications((prev) => prev.map((a) => (a.id === id ? updated : a)));
+      }
+      setDetailsApp((prev) => (prev && prev.id === id ? updated : prev));
+      return competitors.length;
+    };
+
     try {
       // Dynamic path: persist in Postgres so the adopter sees the new status
       // on their Applications page immediately.
@@ -90,23 +134,49 @@ export const ShelterApplicationsPage = () => {
             status,
             'Updated by staff',
           );
-          setApplications((prev) => prev.map((a) => (a.id === id ? updated : a)));
-          setDetailsApp((prev) => (prev && prev.id === id ? updated : prev));
+          const autoRejected = syncAcceptanceSideEffects(updated);
           toast.success(`Application ${status.toLowerCase()}!`);
-          return;
+          if (autoRejected > 0) {
+            toast.info(
+              `${autoRejected} competing application${autoRejected === 1 ? '' : 's'} auto-rejected.`,
+            );
+          }
+          return true;
         } catch {
           // fall through to the local mock store (demo mode / unreachable API)
         }
       }
       const updated = await applicationService.updateStatus(id, status, 'Updated by staff');
       if (updated) {
-        setApplications((prev) => prev.map((a) => (a.id === id ? updated : a)));
-        setDetailsApp((prev) => (prev && prev.id === id ? updated : prev));
+        const autoRejected = syncAcceptanceSideEffects(updated);
         toast.success(`Application ${status.toLowerCase()}!`);
+        if (autoRejected > 0) {
+          toast.info(
+            `${autoRejected} competing application${autoRejected === 1 ? '' : 's'} auto-rejected.`,
+          );
+        }
+        return true;
       }
+      return false;
     } catch {
       toast.error('Failed to update application status. Please try again.');
+      return false;
     }
+  };
+
+  /**
+   * Approved is not terminal — the next step is handover. Marking as adopted
+   * flips the pet to Adopted, then opens the e-waiver print modal so staff
+   * can generate / print the handover documents immediately (no navigation).
+   */
+  const openWaiver = (id: string) => {
+    setDetailsApp(null);
+    setWaiverAppId(id);
+  };
+
+  const handleMarkAdopted = async (id: string) => {
+    const ok = await handleStatusChange(id, 'Adopted');
+    if (ok) openWaiver(id);
   };
 
   const toolbar = (
@@ -138,47 +208,18 @@ export const ShelterApplicationsPage = () => {
   );
 
   const pagination =
-    filteredApplications.length > 0 ? (
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <p className="text-sm text-muted-foreground">
-          Showing <span className="font-medium text-foreground">{startIndex + 1}</span>–
-          <span className="font-medium text-foreground">
-            {Math.min(startIndex + PAGE_SIZE, filteredApplications.length)}
-          </span>{' '}
-          of <span className="font-medium text-foreground">{filteredApplications.length}</span>{' '}
-          applications
-        </p>
-        <div className="flex items-center gap-1">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setPage((p) => Math.max(1, p - 1))}
-            disabled={currentPage === 1}
-          >
-            <ChevronLeft className="size-4" /> Prev
-          </Button>
-          {Array.from({ length: totalPages }, (_, i) => i + 1).map((n) => (
-            <Button
-              key={n}
-              variant={n === currentPage ? 'default' : 'outline'}
-              size="icon-sm"
-              aria-label={`Go to page ${n}`}
-              aria-current={n === currentPage ? 'page' : undefined}
-              onClick={() => setPage(n)}
-            >
-              {n}
-            </Button>
-          ))}
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-            disabled={currentPage === totalPages}
-          >
-            Next <ChevronRight className="size-4" />
-          </Button>
-        </div>
-      </div>
+    totalApplications > 0 ? (
+      <TablePagination
+        currentPage={page}
+        totalItems={totalApplications}
+        pageSize={pageSize}
+        onPageChange={setPage}
+        onPageSizeChange={(newSize) => {
+          setPageSize(newSize);
+          setPage(1);
+        }}
+        label="applications"
+      />
     ) : undefined;
 
   const petOf = (petId: string) => pets.find((p) => p.id === petId);
@@ -189,17 +230,60 @@ export const ShelterApplicationsPage = () => {
 
   const waiverAction = (app: AdoptionApplication, label: string) =>
     canPrintWaiver(app) ? (
-      <Link to={`/shelter/applications/${app.id}/waiver`}>
-        <Button
-          variant="ghost"
-          size="icon-sm"
-          className="text-muted-foreground"
-          aria-label={label}
-        >
-          <Printer className="size-4" />
-        </Button>
-      </Link>
+      <Button
+        variant="ghost"
+        size="icon-sm"
+        className="text-muted-foreground"
+        aria-label={label}
+        title="Open e-waiver"
+        onClick={() => openWaiver(app.id)}
+      >
+        <Printer className="size-4" />
+      </Button>
     ) : null;
+
+  const isTerminal = (app: AdoptionApplication) =>
+    app.status === 'Adopted' || app.status === 'Rejected';
+  const isApproved = (app: AdoptionApplication) => app.status === 'Approved';
+
+  /** Status-driven next step: Submitted/Under Review → Approve/Reject,
+   *  Approved → Mark as adopted (then waiver print), Adopted/Rejected → terminal. */
+  const approveAction = (app: AdoptionApplication) => (
+    <Button
+      variant="ghost"
+      size="icon-sm"
+      className="text-green-600 hover:bg-green-50 hover:text-green-700 dark:text-green-400 dark:hover:bg-green-950/40"
+      aria-label={`Approve ${app.applicantName}`}
+      onClick={() => handleStatusChange(app.id, 'Approved')}
+    >
+      <Check className="size-4" />
+    </Button>
+  );
+
+  const rejectAction = (app: AdoptionApplication) => (
+    <Button
+      variant="ghost"
+      size="icon-sm"
+      className="text-red-600 hover:bg-red-50 hover:text-red-700 dark:text-red-400 dark:hover:bg-red-950/40"
+      aria-label={`Reject ${app.applicantName}`}
+      onClick={() => handleStatusChange(app.id, 'Rejected')}
+    >
+      <X className="size-4" />
+    </Button>
+  );
+
+  const markAdoptedAction = (app: AdoptionApplication) => (
+    <Button
+      variant="ghost"
+      size="icon-sm"
+      className="text-blue-600 hover:bg-blue-50 hover:text-blue-700 dark:text-blue-400 dark:hover:bg-blue-950/40"
+      aria-label={`Mark ${app.applicantName} as adopted`}
+      title="Mark as adopted & print e-waiver"
+      onClick={() => handleMarkAdopted(app.id)}
+    >
+      <HeartHandshake className="size-4" />
+    </Button>
+  );
 
   return (
     <div className="w-full px-4 py-6 sm:px-6">
@@ -222,7 +306,7 @@ export const ShelterApplicationsPage = () => {
           description="Incoming adoption requests for your shelter's pets."
           icon={ClipboardList}
           toolbar={toolbar}
-          isEmpty={filteredApplications.length === 0}
+          isEmpty={applications.length === 0}
           emptyTitle="No applications found"
           emptyDescription="Try a different search or status filter."
           footer={pagination}
@@ -241,7 +325,7 @@ export const ShelterApplicationsPage = () => {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {pagedApplications.map((app) => {
+                {applications.map((app) => {
                   const pet = petOf(app.petId);
                   return (
                     <TableRow key={app.id}>
@@ -285,25 +369,19 @@ export const ShelterApplicationsPage = () => {
                           >
                             <Eye className="size-4" />
                           </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon-sm"
-                            className="text-green-600 hover:bg-green-50 hover:text-green-700 dark:text-green-400 dark:hover:bg-green-950/40"
-                            aria-label={`Approve ${app.applicantName}`}
-                            onClick={() => handleStatusChange(app.id, 'Approved')}
-                          >
-                            <Check className="size-4" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon-sm"
-                            className="text-red-600 hover:bg-red-50 hover:text-red-700 dark:text-red-400 dark:hover:bg-red-950/40"
-                            aria-label={`Reject ${app.applicantName}`}
-                            onClick={() => handleStatusChange(app.id, 'Rejected')}
-                          >
-                            <X className="size-4" />
-                          </Button>
-                          {waiverAction(app, `Print e-waiver for ${app.applicantName}`)}
+                          {isApproved(app) ? (
+                            <>
+                              {markAdoptedAction(app)}
+                              {waiverAction(app, `Print e-waiver for ${app.applicantName}`)}
+                            </>
+                          ) : isTerminal(app) ? (
+                            waiverAction(app, `Print e-waiver for ${app.applicantName}`)
+                          ) : (
+                            <>
+                              {approveAction(app)}
+                              {rejectAction(app)}
+                            </>
+                          )}
                         </div>
                       </TableCell>
                     </TableRow>
@@ -315,7 +393,7 @@ export const ShelterApplicationsPage = () => {
 
           {/* Mobile: stacked cards */}
           <div className="grid gap-3 p-4 md:hidden">
-            {pagedApplications.map((app) => {
+            {applications.map((app) => {
               const pet = petOf(app.petId);
               return (
                 <RecordCard
@@ -336,25 +414,19 @@ export const ShelterApplicationsPage = () => {
                       >
                         <Eye className="size-4" />
                       </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon-sm"
-                        className="text-green-600 hover:bg-green-50 hover:text-green-700 dark:text-green-400 dark:hover:bg-green-950/40"
-                        aria-label={`Approve ${app.applicantName}`}
-                        onClick={() => handleStatusChange(app.id, 'Approved')}
-                      >
-                        <Check className="size-4" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon-sm"
-                        className="text-red-600 hover:bg-red-50 hover:text-red-700 dark:text-red-400 dark:hover:bg-red-950/40"
-                        aria-label={`Reject ${app.applicantName}`}
-                        onClick={() => handleStatusChange(app.id, 'Rejected')}
-                      >
-                        <X className="size-4" />
-                      </Button>
-                      {waiverAction(app, `Print e-waiver for ${app.applicantName}`)}
+                      {isApproved(app) ? (
+                        <>
+                          {markAdoptedAction(app)}
+                          {waiverAction(app, `Print e-waiver for ${app.applicantName}`)}
+                        </>
+                      ) : isTerminal(app) ? (
+                        waiverAction(app, `Print e-waiver for ${app.applicantName}`)
+                      ) : (
+                        <>
+                          {approveAction(app)}
+                          {rejectAction(app)}
+                        </>
+                      )}
                     </>
                   }
                 >
@@ -379,29 +451,42 @@ export const ShelterApplicationsPage = () => {
           detailsApp ? (
             <div className="flex flex-col gap-2">
               {canPrintWaiver(detailsApp) && (
-                <Link to={`/shelter/applications/${detailsApp.id}/waiver`}>
-                  <Button size="sm" variant="outline" className="w-full">
-                    <Printer className="size-3.5" /> Print e-waiver
-                  </Button>
-                </Link>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="w-full"
+                  onClick={() => openWaiver(detailsApp.id)}
+                >
+                  <Printer className="size-3.5" /> Print e-waiver
+                </Button>
               )}
-              <div className="flex gap-2">
+              {detailsApp.status === 'Approved' ? (
                 <Button
                   size="sm"
-                  className="flex-1 bg-green-600 text-white hover:bg-green-700"
-                  onClick={() => handleStatusChange(detailsApp.id, 'Approved')}
+                  className="w-full bg-blue-600 text-white hover:bg-blue-700"
+                  onClick={() => handleMarkAdopted(detailsApp.id)}
                 >
-                  <Check className="size-4" /> Approve
+                  <HeartHandshake className="size-4" /> Mark as adopted & print e-waiver
                 </Button>
-                <Button
-                  size="sm"
-                  variant="destructive"
-                  className="flex-1"
-                  onClick={() => handleStatusChange(detailsApp.id, 'Rejected')}
-                >
-                  <X className="size-4" /> Reject
-                </Button>
-              </div>
+              ) : detailsApp.status === 'Adopted' || detailsApp.status === 'Rejected' ? null : (
+                <div className="flex gap-2">
+                  <Button
+                    size="sm"
+                    className="flex-1 bg-green-600 text-white hover:bg-green-700"
+                    onClick={() => handleStatusChange(detailsApp.id, 'Approved')}
+                  >
+                    <Check className="size-4" /> Approve
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="destructive"
+                    className="flex-1"
+                    onClick={() => handleStatusChange(detailsApp.id, 'Rejected')}
+                  >
+                    <X className="size-4" /> Reject
+                  </Button>
+                </div>
+              )}
             </div>
           ) : undefined
         }
@@ -476,6 +561,14 @@ export const ShelterApplicationsPage = () => {
           </div>
         )}
       </DetailsModal>
+
+      <WaiverModal
+        key={waiverAppId ?? 'closed'}
+        open={waiverAppId !== null}
+        onClose={() => setWaiverAppId(null)}
+        applicationId={waiverAppId}
+        applicantName={waiverApp?.applicantName}
+      />
     </div>
   );
 };
