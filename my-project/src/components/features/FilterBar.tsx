@@ -108,7 +108,6 @@ export const FilterBar = ({
         { value: ALL_FILTERS, label: 'Any status' },
         { value: 'Available', label: 'Available' },
         { value: 'Fostered', label: 'Fostered' },
-        { value: 'Adopted', label: 'Adopted' },
       ],
     },
   ];

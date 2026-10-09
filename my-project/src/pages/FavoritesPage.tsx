@@ -12,9 +12,10 @@ import { publicPets } from '@/data/mockData';
 const frame = 'mx-auto w-full max-w-[1400px] px-6 lg:px-12';
 
 export const FavoritesPage = () => {
-  const { favorites } = useFavorites();
+  const { favorites, loading: favoritesLoading } = useFavorites();
   const { pets, loading } = usePets();
   const { shelters } = useShelters();
+  const listLoading = loading || favoritesLoading;
 
   const locationByShelter = useMemo(
     () => new Map(shelters.map((s) => [s.id, s.location])),
@@ -110,7 +111,7 @@ export const FavoritesPage = () => {
             </span>
 
             <h2 className="mt-6 font-display text-[clamp(2rem,4vw,3.25rem)] leading-[0.95] tracking-tight">
-              {loading ? (
+              {listLoading ? (
                 'Gathering your pets…'
               ) : (
                 <>
@@ -128,7 +129,7 @@ export const FavoritesPage = () => {
           </Reveal>
 
           <div className="mt-12">
-            {loading ? (
+            {listLoading ? (
               <LoadingGrid count={6} />
             ) : saved.length === 0 ? (
               <EmptyState

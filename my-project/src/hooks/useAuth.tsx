@@ -15,6 +15,8 @@ interface AuthContextValue {
   switchRole: (role: UserRole) => void;
   /** Re-fetch the current session user. */
   refresh: () => Promise<void>;
+  /** Update the signed-in user's profile (backend when a session exists, local preview otherwise). */
+  updateProfile: (input: { name?: string; avatarUrl?: string | null }) => Promise<User | null>;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -95,9 +97,32 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   // Demo-only: lets the UI preview other roles without a real backend session.
   const switchRole = useCallback((role: UserRole) => setUser(DEMO_USERS[role]), []);
 
+  const updateProfile = useCallback(
+    async (input: { name?: string; avatarUrl?: string | null }) => {
+      if (tokenStore.get()) {
+        const updated = await authService.updateMe(input);
+        setUser(updated);
+        return updated;
+      }
+      // Demo preview (no session): keep the edit in local auth state only.
+      let next: User | null = null;
+      setUser((prev) => {
+        if (!prev) return prev;
+        next = {
+          ...prev,
+          ...(input.name !== undefined ? { name: input.name } : {}),
+          ...(input.avatarUrl !== undefined ? { avatarUrl: input.avatarUrl ?? undefined } : {}),
+        };
+        return next;
+      });
+      return next;
+    },
+    [],
+  );
+
   const value = useMemo(
-    () => ({ user, initializing, login, signup, logout, switchRole, refresh }),
-    [user, initializing, login, signup, logout, switchRole, refresh],
+    () => ({ user, initializing, login, signup, logout, switchRole, refresh, updateProfile }),
+    [user, initializing, login, signup, logout, switchRole, refresh, updateProfile],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

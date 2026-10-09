@@ -12,3 +12,8 @@ export const loginSchema = z.object({
   email: z.string().email('Invalid email format'),
   password: z.string().min(1, 'Password is required'),
 });
+
+export const updateProfileSchema = z.object({
+  name: z.string().trim().min(1, 'Name is required').max(255).optional(),
+  avatarUrl: z.string().trim().max(2048).optional().nullable(),
+});

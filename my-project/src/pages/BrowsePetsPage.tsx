@@ -21,12 +21,19 @@ export const BrowsePetsPage = () => {
 
   const visiblePets = useMemo(() => publicPets(pets), [pets]);
 
+  // Adopted pets have found homes — they never appear in browse results,
+  // only adoptable listings (Available + Fostered) do.
+  const browsablePets = useMemo(
+    () => visiblePets.filter((pet) => pet.status !== 'Adopted'),
+    [visiblePets],
+  );
+
   const { filters, updateFilter, clearFilter, resetFilters, filteredPets, activeFilterCount } =
-    usePetFilter(visiblePets, shelters, presetLocation);
+    usePetFilter(browsablePets, shelters, presetLocation);
 
   const adoptablePets = useMemo(
-    () => visiblePets.filter((pet) => pet.status === 'Available'),
-    [visiblePets],
+    () => browsablePets.filter((pet) => pet.status === 'Available'),
+    [browsablePets],
   );
   const adoptedCount = useMemo(
     () => visiblePets.filter((pet) => pet.status === 'Adopted').length,
@@ -40,20 +47,20 @@ export const BrowsePetsPage = () => {
       Fostered: 2,
       Adopted: 3,
     };
-    return [...visiblePets].sort((a, b) => statusRank[a.status] - statusRank[b.status]);
-  }, [visiblePets]);
+    return [...browsablePets].sort((a, b) => statusRank[a.status] - statusRank[b.status]);
+  }, [browsablePets]);
 
   const breeds = useMemo(
-    () => Array.from(new Set(visiblePets.map((p) => p.breed))).sort(),
-    [visiblePets],
+    () => Array.from(new Set(browsablePets.map((p) => p.breed))).sort(),
+    [browsablePets],
   );
   const locations = useMemo(
     () => Array.from(new Set(shelters.map((s) => s.location))).sort(),
     [shelters],
   );
   const temperaments = useMemo(
-    () => Array.from(new Set(visiblePets.flatMap((p) => p.temperament))).sort(),
-    [visiblePets],
+    () => Array.from(new Set(browsablePets.flatMap((p) => p.temperament))).sort(),
+    [browsablePets],
   );
 
   const locationByShelter = useMemo(
@@ -91,7 +98,7 @@ export const BrowsePetsPage = () => {
         pets={orbitPets}
         availableCount={adoptablePets.length}
         shelterCount={shelters.length}
-        listedCount={visiblePets.length}
+        listedCount={browsablePets.length}
         adoptedCount={adoptedCount}
       />
 

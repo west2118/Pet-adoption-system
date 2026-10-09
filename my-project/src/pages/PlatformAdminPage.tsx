@@ -14,7 +14,7 @@ import {
   Trash2,
   Users,
 } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { FormEvent } from 'react';
 import { Link } from 'react-router-dom';
 import { toast } from 'react-toastify';
@@ -48,7 +48,7 @@ import {
 } from '@/components/ui/Table';
 import { useApplications, usePets, useShelters, useUsers } from '@/hooks/useData';
 import { usePlatformOverview } from '@/hooks/usePlatformOverview';
-import { shelterService, userService } from '@/services/api';
+import { listAdminPetsPaginated, listUsersPaginated, shelterService, userService } from '@/services/api';
 import type { Pet, Shelter, User, UserRole } from '@/types';
 import { formatDate } from '@/utils/formatters';
 
@@ -64,7 +64,7 @@ export const PlatformAdminPage = ({ initialSection = 'overview' }: PlatformAdmin
   const { pets } = usePets();
   const { shelters, setShelters } = useShelters();
   const { applications } = useApplications();
-  const { users, setUsers } = useUsers();
+  const { users } = useUsers();
 
   const {
     stats,
@@ -410,7 +410,7 @@ export const PlatformAdminPage = ({ initialSection = 'overview' }: PlatformAdmin
       avatarUrl: userForm.avatarUrl || undefined,
     };
     if (editingUser) {
-      const updated = await userService.update(editingUser.id, input);
+      await userService.update(editingUser.id, input);
       toast.success(`${input.name} updated successfully!`);
       closeUserSlide();
       await fetchUsers();

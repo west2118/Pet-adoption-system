@@ -10,6 +10,7 @@ import { HomePage } from '@/pages/HomePage';
 import { LoginPage } from '@/pages/LoginPage';
 import { NotFoundPage } from '@/pages/NotFoundPage';
 import { PetDetailsPage } from '@/pages/PetDetailsPage';
+import { ProfilePage } from '@/pages/ProfilePage';
 import { ShelterOnboardingPage } from '@/pages/ShelterOnboardingPage';
 import { ShelterPendingPage } from '@/pages/ShelterPendingPage';
 import { ShelterPublicProfilePage } from '@/pages/ShelterPublicProfilePage';
@@ -42,6 +43,12 @@ export const publicRoutes: RouteObject = {
         { path: 'applications', element: <ApplicationsPage /> },
         { path: 'applications/:id/waiver', element: <AdopterWaiverPage /> },
       ],
+    },
+
+    // Any signed-in account (adopter, staff, or admin) has a profile page.
+    {
+      element: <ProtectedRoute allowedRoles={['adopter', 'shelter_staff', 'platform_admin']} />,
+      children: [{ path: 'profile', element: <ProfilePage /> }],
     },
 
     { path: '*', element: <NotFoundPage /> },

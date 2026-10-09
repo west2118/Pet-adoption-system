@@ -60,6 +60,20 @@ export const me = async (): Promise<User> => {
   return user;
 };
 
+export interface UpdateProfileInput {
+  name?: string;
+  avatarUrl?: string | null;
+}
+
+export const updateMe = async (input: UpdateProfileInput): Promise<User> => {
+  const { user } = await apiRequest<{ user: User }>('/auth/me', {
+    method: 'PATCH',
+    body: input,
+    auth: 'full',
+  });
+  return user;
+};
+
 export const submitShelterApplication = async (
   input: ShelterApplicationInput,
 ): Promise<ShelterApplication> => {
@@ -82,6 +96,7 @@ export const authService = {
   signup,
   login,
   me,
+  updateMe,
   submitShelterApplication,
   getMyShelterApplication,
 };

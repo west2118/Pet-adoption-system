@@ -14,7 +14,7 @@ const links = [
 ];
 
 export const Navbar = () => {
-  const { user, logout } = useAuth();
+  const { user, logout, initializing } = useAuth();
   const { favorites } = useFavorites();
   const [open, setOpen] = useState(false);
   const [scrolled, setScrolled] = useState(
@@ -39,6 +39,14 @@ export const Navbar = () => {
   };
 
   const visibleLinks = links.filter((l) => l.to !== '/applications' || Boolean(user));
+
+  const userInitials = (name: string): string =>
+    name
+      .split(' ')
+      .filter(Boolean)
+      .map((part) => part.charAt(0).toUpperCase())
+      .slice(0, 2)
+      .join('');
 
   const shell = onLanding ? 'landing-theme' : '';
   const solid = !onLanding || scrolled;
@@ -111,14 +119,36 @@ export const Navbar = () => {
             </>
           )}
 
-          {user ? (
-            <Button
-              variant="outline"
-              onClick={handleLogout}
-              className="h-9 rounded-full border-border bg-transparent px-4 hover:bg-muted hover:text-foreground"
-            >
-              <LogOut className="size-3.5" /> Logout
-            </Button>
+          {initializing ? (
+            // Session still resolving — neutral placeholders so the logged-out
+            // buttons never flash on reload for signed-in users.
+            <div className="flex items-center gap-3" aria-hidden="true">
+              <span className="h-9 w-24 animate-pulse rounded-full bg-muted" />
+              <span className="h-9 w-24 animate-pulse rounded-full bg-muted" />
+            </div>
+          ) : user ? (
+            <>
+              <Link
+                to="/profile"
+                aria-label="View profile"
+                className="flex size-9 items-center justify-center overflow-hidden rounded-full border border-border bg-background transition-colors hover:bg-muted"
+              >
+                {user.avatarUrl ? (
+                  <img src={user.avatarUrl} alt={user.name} className="size-full object-cover" />
+                ) : (
+                  <span className="font-mono text-[11px] font-bold text-primary">
+                    {userInitials(user.name)}
+                  </span>
+                )}
+              </Link>
+              <Button
+                variant="outline"
+                onClick={handleLogout}
+                className="h-9 rounded-full border-border bg-transparent px-4 hover:bg-muted hover:text-foreground"
+              >
+                <LogOut className="size-3.5" /> Logout
+              </Button>
+            </>
           ) : (
             <>
               <Button
@@ -184,14 +214,31 @@ export const Navbar = () => {
             )}
 
             <div className="mt-3 flex gap-3 border-t border-border pt-4">
-              {user ? (
-                <Button
-                  variant="outline"
-                  onClick={handleLogout}
-                  className="h-11 flex-1 rounded-full border-border bg-transparent"
-                >
-                  <LogOut className="size-4" /> Logout
-                </Button>
+              {initializing ? (
+                <div className="flex flex-1 gap-3" aria-hidden="true">
+                  <span className="h-11 flex-1 animate-pulse rounded-full bg-muted" />
+                  <span className="h-11 flex-1 animate-pulse rounded-full bg-muted" />
+                </div>
+              ) : user ? (
+                <>
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      navigate('/profile');
+                      setOpen(false);
+                    }}
+                    className="h-11 flex-1 rounded-full border-border bg-transparent"
+                  >
+                    Profile
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={handleLogout}
+                    className="h-11 flex-1 rounded-full border-border bg-transparent"
+                  >
+                    <LogOut className="size-4" /> Logout
+                  </Button>
+                </>
               ) : (
                 <>
                   <Button

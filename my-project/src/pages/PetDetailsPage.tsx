@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { ArrowRight, HeartHandshake } from 'lucide-react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import type { Pet, Shelter } from '@/types';
 import { Reveal } from '@/components/shared';
@@ -21,6 +21,7 @@ const frame = 'mx-auto w-full max-w-[1400px] px-6 lg:px-12';
 
 export const PetDetailsPage = () => {
   const { id } = useParams<{ id: string }>();
+  const navigate = useNavigate();
   const [pet, setPet] = useState<Pet | null>(null);
   const [shelter, setShelter] = useState<Shelter | null>(null);
   const [siblings, setSiblings] = useState<Pet[]>([]);
@@ -57,14 +58,22 @@ export const PetDetailsPage = () => {
 
   const favorite = pet ? isFavorite(pet.id) : false;
 
-  const handleToggleFavorite = () => {
+  const handleToggleFavorite = async () => {
     if (!pet) return;
-    const wasFavorite = favorite;
-    toggleFavorite(pet.id);
-    if (wasFavorite) {
-      toast.info(`${pet.name} removed from favorites.`);
-    } else {
+    const result = await toggleFavorite(pet.id);
+    if (result === 'login-required') {
+      toast.info('Log in to save favorites.');
+      navigate('/login');
+      return;
+    }
+    if (result === 'error') {
+      toast.error('Could not update favorites. Please try again.');
+      return;
+    }
+    if (result === 'added') {
       toast.success(`${pet.name} saved to favorites!`);
+    } else {
+      toast.info(`${pet.name} removed from favorites.`);
     }
   };
 

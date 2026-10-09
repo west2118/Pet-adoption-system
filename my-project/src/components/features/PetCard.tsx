@@ -1,5 +1,5 @@
 import { Heart, MapPin } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import type { Pet } from '@/types';
 import { cn } from '@/lib/utils';
@@ -25,14 +25,24 @@ export const PetCard = ({
   className,
 }: PetCardProps) => {
   const { isFavorite, toggleFavorite } = useFavorites();
+  const navigate = useNavigate();
   const favorite = isFavorite(pet.id);
 
-  const handleToggleFavorite = () => {
-    toggleFavorite(pet.id);
-    if (favorite) {
-      toast.info(`${pet.name} removed from favorites.`);
-    } else {
+  const handleToggleFavorite = async () => {
+    const result = await toggleFavorite(pet.id);
+    if (result === 'login-required') {
+      toast.info('Log in to save favorites.');
+      navigate('/login');
+      return;
+    }
+    if (result === 'error') {
+      toast.error('Could not update favorites. Please try again.');
+      return;
+    }
+    if (result === 'added') {
       toast.success(`${pet.name} saved to favorites!`);
+    } else {
+      toast.info(`${pet.name} removed from favorites.`);
     }
   };
 

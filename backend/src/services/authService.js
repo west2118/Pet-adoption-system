@@ -7,6 +7,7 @@ import {
   createUser,
   findUserByEmail,
   findUserById,
+  updateUserProfile,
 } from '../repositories/userRepository.js';
 
 const signToken = (user) =>
@@ -92,6 +93,20 @@ export const login = async (input) => {
 
 export const getMe = async (userId) => {
   const row = await findUserById(userId);
+  if (!row) {
+    throw new AppError('User not found.', 404);
+  }
+  return mapUser(row);
+};
+
+export const updateProfile = async (userId, input) => {
+  const avatarUrl =
+    input.avatarUrl === undefined || input.avatarUrl === null
+      ? input.avatarUrl
+      : input.avatarUrl.trim() === ''
+        ? null
+        : input.avatarUrl.trim();
+  const row = await updateUserProfile(userId, { name: input.name, avatarUrl });
   if (!row) {
     throw new AppError('User not found.', 404);
   }

@@ -1,4 +1,4 @@
-import { getMe, login, signup } from '../services/authService.js';
+import { getMe, login, signup, updateProfile } from '../services/authService.js';
 import { sendSuccess } from '../utils/respond.js';
 
 export const signupUser = async (req, res) => {
@@ -17,4 +17,9 @@ export const loginUser = async (req, res) => {
 export const getCurrentUser = async (req, res) => {
   const user = await getMe(req.user.id);
   return sendSuccess(res, { user });
+};
+
+export const updateCurrentUser = async (req, res) => {
+  const user = await updateProfile(req.user.id, req.body);
+  return sendSuccess(res, { user }, 'Profile updated successfully.');
 };

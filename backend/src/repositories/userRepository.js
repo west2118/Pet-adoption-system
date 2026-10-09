@@ -81,3 +81,25 @@ export const updateUserRole = async (id, role, shelterId = null) => {
   );
   return rows[0] ?? null;
 };
+
+// Self-service profile edit: only name and avatar are user-editable.
+// Undefined fields keep their current value; null avatarUrl clears the photo.
+export const updateUserProfile = async (id, { name, avatarUrl } = {}) => {
+  const sets = ['updated_at = CURRENT_TIMESTAMP'];
+  const values = [];
+  if (name !== undefined) {
+    values.push(name);
+    sets.push(`name = $${values.length}`);
+  }
+  if (avatarUrl !== undefined) {
+    values.push(avatarUrl);
+    sets.push(`avatar_url = $${values.length}`);
+  }
+  if (values.length === 0) return findUserById(id);
+  values.push(id);
+  const { rows } = await pool.query(
+    `UPDATE users SET ${sets.join(', ')} WHERE id = $${values.length} RETURNING *`,
+    values,
+  );
+  return rows[0] ?? null;
+};
