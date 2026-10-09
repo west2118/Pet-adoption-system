@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { toast } from 'react-toastify';
 import { DetailsModal } from '@/components/shared';
-import { WaiverDocument } from './WaiverDocument';
+import { WaiverPrintDocument } from './WaiverPrintDocument';
 import { Button } from '@/components/ui/button';
 import { ApiError } from '@/lib/apiClient';
 import { waiverService } from '@/services/waiverService';
@@ -165,9 +165,15 @@ export const WaiverModal = ({ open, onClose, applicationId, applicantName }: Wai
             </Button>
           </div>
         ) : (
-          <div className="rounded-lg border bg-white p-6">
-            <WaiverDocument waiver={waiver} />
-          </div>
+          <>
+            <div className="rounded-lg border bg-white p-6 print:hidden">
+              <WaiverPrintDocument waiver={waiver} />
+            </div>
+            <p className="mt-3 text-xs text-muted-foreground print:hidden">
+              Tip: in the print dialog, set margins to Default and turn off “Headers and
+              footers” for a clean 2-page PDF.
+            </p>
+          </>
         )}
       </DetailsModal>
 
@@ -175,8 +181,8 @@ export const WaiverModal = ({ open, onClose, applicationId, applicantName }: Wai
           the sole `#waiver-print` the print stylesheet sends to paper. */}
       {open && waiver
         ? createPortal(
-            <div id="waiver-print" className="hidden bg-white p-6 print:block sm:p-10">
-              <WaiverDocument waiver={waiver} />
+            <div id="waiver-print" className="hidden bg-white print:block">
+              <WaiverPrintDocument waiver={waiver} />
             </div>,
             document.body,
           )

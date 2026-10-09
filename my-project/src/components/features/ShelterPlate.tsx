@@ -32,9 +32,6 @@ export const ShelterPlate = ({
       <div className="flex flex-1 flex-col pt-6">
         <div className="flex items-start justify-between gap-4">
           <h3 className="text-lg font-medium leading-snug">{shelter.name}</h3>
-          <span className="shrink-0 font-mono text-[11px] uppercase tracking-[0.18em] text-primary">
-            {shelter.location}
-          </span>
         </div>
 
         <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{shelter.description}</p>

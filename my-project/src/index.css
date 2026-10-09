@@ -344,6 +344,9 @@
  * so the document keeps its layout, then repositioned to the page origin.
  */
 @media print {
+  @page {
+    margin: 11mm 12mm;
+  }
   body * {
     visibility: hidden;
   }
@@ -356,16 +359,22 @@
     left: 0;
     top: 0;
     width: 100%;
+    padding: 0 !important;
     border: none !important;
     border-radius: 0 !important;
   }
   /* Each template is its own printed page. */
   #waiver-print .waiver-page {
     break-after: page;
-    break-inside: avoid;
+    break-inside: auto;
   }
   #waiver-print .waiver-page:last-child {
     break-after: auto;
+  }
+  /* Keep logical blocks whole so page breaks fall in the gaps between them. */
+  #waiver-print table,
+  #waiver-print .waiver-clause {
+    break-inside: avoid;
   }
   .print\:hidden {
     display: none !important;

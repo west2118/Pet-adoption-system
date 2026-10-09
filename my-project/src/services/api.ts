@@ -1,5 +1,6 @@
-import { mockApplications, mockInquiries, mockPets, mockShelters, mockUsers } from '@/data/mockData';
+import { mockApplications, mockInquiries, mockPets, mockShelters, mockUsers, getShelterLocation, publicPets } from '@/data/mockData';
 import { ApiError, apiRequest, apiRequestWithMeta, tokenStore } from '@/lib/apiClient';
+import { ALL_FILTERS } from '@/hooks/usePetFilter';
 import type {
   AdoptionApplication,
   ApplicationStatus,
@@ -14,6 +15,8 @@ export interface PaginatedResult<T> {
   total: number;
   page: number;
   limit: number;
+  /** Total pages for the current filter set (backend-computed). */
+  totalPages?: number;
 }
 
 /**
@@ -76,6 +79,165 @@ export const listPetsByShelter = async (shelterId: string): Promise<Pet[]> => {
     return data.pets;
   } catch {
     return petsStore.filter((p) => p.shelterId === shelterId);
+  }
+};
+
+export interface PetFacets {
+  breeds: string[];
+  temperaments: string[];
+  stats: { listed: number; available: number; adopted: number };
+}
+
+/** Filters the browse page sends to the backend instead of applying itself. */
+export interface PublicPetsQuery {
+  page?: number;
+  search?: string;
+  species?: string;
+  breed?: string;
+  ageGroup?: string;
+  size?: string;
+  gender?: string;
+  temperament?: string;
+  location?: string;
+  status?: string;
+  /** The browse grid only lists pets still looking for a home. */
+  excludeAdopted?: boolean;
+}
+
+/** The facet subset of `PublicPetsQuery` that maps 1:1 onto a query param. */
+type PublicPetFacet =
+  | 'species'
+  | 'breed'
+  | 'ageGroup'
+  | 'size'
+  | 'gender'
+  | 'temperament'
+  | 'location'
+  | 'status';
+
+/**
+ * Page size the backend applies to GET /pets when no `limit` is sent — kept
+ * only for the in-memory demo fallback; the real limit lives on the server.
+ */
+const PUBLIC_PAGE_SIZE = 10;
+
+const FACET_KEYS: PublicPetFacet[] = [
+  'species',
+  'breed',
+  'ageGroup',
+  'size',
+  'gender',
+  'temperament',
+  'location',
+  'status',
+];
+
+/**
+ * Builds the query for a single browse page. `limit` is deliberately never
+ * sent: the backend owns the page size (default 10) and answers with
+ * `meta { page, limit, total, totalPages }`.
+ */
+const toPublicPetsQuery = (options: PublicPetsQuery): string => {
+  const params = new URLSearchParams();
+  params.set('page', String(options.page ?? 1));
+  const search = options.search?.trim();
+  if (search) params.set('search', search);
+  FACET_KEYS.forEach((key) => {
+    const value = options[key];
+    if (typeof value === 'string' && value.trim() !== '' && value !== ALL_FILTERS) {
+      params.set(key, value.trim());
+    }
+  });
+  if (options.excludeAdopted) params.set('excludeAdopted', 'true');
+  return `?${params.toString()}`;
+};
+
+/** Mirrors the backend's public browse filters over the in-memory demo store. */
+const browsableMockPets = (options: PublicPetsQuery): Pet[] => {
+  let list = publicPets([...petsStore]);
+  if (options.excludeAdopted) list = list.filter((p) => p.status !== 'Adopted');
+  const search = options.search?.trim().toLowerCase();
+  if (search) {
+    list = list.filter((p) =>
+      `${p.name} ${p.breed} ${p.species} ${p.description} ${p.temperament.join(' ')}`
+        .toLowerCase()
+        .includes(search),
+    );
+  }
+  FACET_KEYS.forEach((key) => {
+    const value = options[key];
+    if (typeof value !== 'string' || value === '' || value === ALL_FILTERS) return;
+    if (key === 'temperament') {
+      list = list.filter((p) =>
+        p.temperament.some((t) => t.toLowerCase() === value.toLowerCase()),
+      );
+    } else if (key === 'location') {
+      list = list.filter((p) => getShelterLocation(mockShelters, p.shelterId) === value);
+    } else {
+      list = list.filter((p) => (p[key] as string) === value);
+    }
+  });
+  return list;
+};
+
+/**
+ * One page of the public browse grid.
+ *
+ * The backend applies every filter and the 10-per-page limit; this function
+ * only forwards the request and reads `meta` back. Falls back to an
+ * in-memory page of the mock store when the API is unreachable (demo mode).
+ */
+export const listPetsPaginated = async (
+  options: PublicPetsQuery = {},
+): Promise<PaginatedResult<Pet>> => {
+  const page = options.page ?? 1;
+  try {
+    const { data, meta } = await apiRequestWithMeta<PetsListResponse>(
+      `/pets${toPublicPetsQuery(options)}`,
+    );
+    const limit = meta?.limit ?? PUBLIC_PAGE_SIZE;
+    const total = meta?.total ?? data.pets.length;
+    return {
+      items: data.pets,
+      total,
+      page: meta?.page ?? page,
+      limit,
+      totalPages: meta?.totalPages ?? Math.ceil(total / limit),
+    };
+  } catch {
+    const matches = browsableMockPets(options);
+    const start = (page - 1) * PUBLIC_PAGE_SIZE;
+    return {
+      items: matches.slice(start, start + PUBLIC_PAGE_SIZE),
+      total: matches.length,
+      page,
+      limit: PUBLIC_PAGE_SIZE,
+      totalPages: Math.ceil(matches.length / PUBLIC_PAGE_SIZE),
+    };
+  }
+};
+
+/**
+ * Facet dropdown options + hero counts for the browse page.
+ *
+ * Deliberately tiny (DISTINCT values and three counts) so the page can keep
+ * its headline numbers and filter options without downloading every pet.
+ */
+export const getPetFacets = async (): Promise<PetFacets> => {
+  try {
+    return await apiRequest<PetFacets>('/pets/facets');
+  } catch {
+    const visible = publicPets([...petsStore]);
+    const browsable = visible.filter((p) => p.status !== 'Adopted');
+    return {
+      breeds: Array.from(new Set(browsable.map((p) => p.breed))).sort(),
+      temperaments: Array.from(new Set(browsable.flatMap((p) => p.temperament))).sort(),
+      stats: {
+        listed: browsable.length,
+        available: browsable.filter((p) => p.status === 'Available').length,
+        adopted: visible.filter((p) => p.status === 'Adopted').length,
+      },
+    };
   }
 };
 

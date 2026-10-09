@@ -963,21 +963,17 @@ export const ShelterListingsPage = () => {
         }
         icon={editingPet ? Pencil : ListPlus}
         footer={
-          <div className="flex flex-col-reverse gap-2 sm:flex-row">
-            <Button type="submit" form="pet-form" size="sm" className="sm:flex-1">
-              {editingPet ? 'Save changes' : 'Create listing'}
-            </Button>
-            <Button type="button" variant="outline" size="sm" onClick={closeSlide}>
+          <div className="grid grid-cols-2 gap-3">
+            <Button type="button" variant="outline" size="lg" className="w-full" onClick={closeSlide}>
               Cancel
+            </Button>
+            <Button type="submit" form="pet-form" size="lg" className="w-full">
+              {editingPet ? 'Save changes' : 'Create listing'}
             </Button>
           </div>
         }
       >
         <form id="pet-form" onSubmit={handleSubmit} noValidate className="grid gap-3">
-          <p className="text-xs text-muted-foreground">
-            All fields are required (<span className="font-semibold text-destructive">*</span>).
-            Age and age group are calculated automatically from the birthdate.
-          </p>
           <div>
             <Label htmlFor="pet-name">
               Name
@@ -1307,12 +1303,12 @@ export const ShelterListingsPage = () => {
         icon={PawPrint}
         footer={
           detailsPet ? (
-            <div className="flex gap-2">
-              <Button size="sm" className="flex-1" onClick={() => detailsPet && openEdit(detailsPet)}>
-                <Pencil className="size-3.5" /> Edit in slider
-              </Button>
-              <Button size="sm" variant="outline" onClick={() => setDetailsPet(null)}>
+            <div className="grid grid-cols-2 gap-3">
+              <Button type="button" variant="outline" size="lg" className="w-full" onClick={() => setDetailsPet(null)}>
                 Close
+              </Button>
+              <Button type="button" size="lg" className="w-full" onClick={() => detailsPet && openEdit(detailsPet)}>
+                <Pencil className="size-4" /> Edit in slider
               </Button>
             </div>
           ) : undefined

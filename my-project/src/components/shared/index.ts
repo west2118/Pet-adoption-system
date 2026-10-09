@@ -3,6 +3,14 @@ export { SummaryStatGrid } from './SummaryStatGrid';
 export { ChartCard } from './ChartCard';
 export { TableCard } from './TableCard';
 export { TablePagination } from './TablePagination';
+export { Skeleton } from '@/components/ui/Skeleton';
+export {
+  SummaryStatCardSkeleton,
+  SummaryStatGridSkeleton,
+  ChartCardSkeleton,
+  TableCardSkeleton,
+  ShelterOverviewSkeleton,
+} from './SkeletonLoaders';
 export { RecordCard } from './RecordCard';
 export { LocationMapPreview } from './LocationMapPreview';
 export { SectionHeader } from './SectionHeader';

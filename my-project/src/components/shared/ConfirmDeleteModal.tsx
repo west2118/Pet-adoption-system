@@ -51,25 +51,25 @@ export const ConfirmDeleteModal = ({
         Are you sure you want to continue? This permanently removes the record and cannot be
         undone.
       </p>
-      <div className="flex flex-col-reverse gap-2 pt-1 sm:flex-row sm:justify-end">
+      <div className="grid grid-cols-2 gap-3 pt-2">
         <Button
           type="button"
           variant="outline"
-          size="sm"
+          size="lg"
           onClick={onClose}
           disabled={isDeleting}
-          className="sm:min-w-24"
+          className="w-full"
         >
           {cancelLabel}
         </Button>
         <Button
           type="button"
           variant="destructive"
-          size="sm"
+          size="lg"
           onClick={() => void onConfirm()}
           disabled={isDeleting}
           aria-busy={isDeleting}
-          className="sm:min-w-24"
+          className="w-full"
         >
           {isDeleting ? 'Deleting…' : confirmLabel}
         </Button>

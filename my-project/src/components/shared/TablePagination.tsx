@@ -6,8 +6,11 @@ export interface TablePaginationProps {
   totalItems: number;
   pageSize: number;
   onPageChange: (page: number) => void;
-  onPageSizeChange: (pageSize: number) => void;
+  /** Omit when the page size is fixed (e.g. the browse grid's backend limit of 10). */
+  onPageSizeChange?: (pageSize: number) => void;
   pageSizeOptions?: number[];
+  /** Hide the page-size selector — the backend then owns the page size alone. */
+  showPageSize?: boolean;
   label?: string;
 }
 
@@ -18,6 +21,7 @@ export const TablePagination = ({
   onPageChange,
   onPageSizeChange,
   pageSizeOptions = [5, 10, 20, 30, 50],
+  showPageSize = true,
   label = 'items',
 }: TablePaginationProps) => {
   if (totalItems <= 0) return null;
@@ -33,20 +37,23 @@ export const TablePagination = ({
           Showing <span className="font-medium text-foreground">{startIndex + 1}</span>–
           <span className="font-medium text-foreground">{endIndex}</span> of{' '}
           <span className="font-medium text-foreground">{totalItems}</span> {label}
-        </p><select
-          value={pageSize}
-          onChange={(e) => {
-            onPageSizeChange(Number(e.target.value));
-            onPageChange(1);
-          }}
-          className="h-8 rounded-lg border border-input bg-background px-2.5 text-xs font-medium text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
-        >
-          {pageSizeOptions.map((opt) => (
-            <option key={opt} value={opt}>
-              {opt}
-            </option>
-          ))}
-        </select>
+        </p>
+        {showPageSize && (
+          <select
+            value={pageSize}
+            onChange={(e) => {
+              onPageSizeChange?.(Number(e.target.value));
+              onPageChange(1);
+            }}
+            className="h-8 rounded-lg border border-input bg-background px-2.5 text-xs font-medium text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+          >
+            {pageSizeOptions.map((opt) => (
+              <option key={opt} value={opt}>
+                {opt}
+              </option>
+            ))}
+          </select>
+        )}
       </div>
 
       <div className="flex items-center gap-1">

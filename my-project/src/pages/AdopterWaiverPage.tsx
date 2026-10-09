@@ -1,7 +1,7 @@
 import { Printer } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { WaiverDocument } from '@/components/features/WaiverDocument';
+import { WaiverPrintDocument } from '@/components/features/WaiverPrintDocument';
 import { Container } from '@/components/layout/Container';
 import { EmptyState } from '@/components/ui/Feedback';
 import { Button } from '@/components/ui/button';
@@ -74,7 +74,7 @@ export const AdopterWaiverPage = () => {
           </Button>
         </div>
         <div id="waiver-print" className="mb-10 rounded-lg border bg-white p-6 sm:p-10">
-          <WaiverDocument waiver={waiver} />
+          <WaiverPrintDocument waiver={waiver} />
         </div>
       </div>
     </div>

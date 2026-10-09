@@ -2,43 +2,60 @@ import { useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import type { Pet } from '@/types';
 import { Container } from '@/components/layout/Container';
-import { Reveal } from '@/components/shared';
+import { Reveal, TablePagination } from '@/components/shared';
 import { FilterBar } from '@/components/features/FilterBar';
 import { PetsHero } from '@/components/features/PetsHero';
 import { PetsTicker } from '@/components/features/PetsTicker';
 import { PetCard } from '@/components/features/PetCard';
 import { EmptyState, LoadingGrid } from '@/components/ui/Feedback';
 import { Button } from '@/components/ui/button';
-import { usePets, useShelters } from '@/hooks/useData';
+import { useBrowsePetsPage, useHeroPets, usePetFacets, useShelters } from '@/hooks/useData';
 import { usePetFilter } from '@/hooks/usePetFilter';
-import { publicPets } from '@/data/mockData';
+import { cn } from '@/lib/utils';
 
 export const BrowsePetsPage = () => {
-  const { pets, loading, error } = usePets();
   const { shelters } = useShelters();
   const [params] = useSearchParams();
   const presetLocation = params.get('location') ?? 'all';
 
-  const visiblePets = useMemo(() => publicPets(pets), [pets]);
+  // Facet options + hero counts come from the backend in one small request,
+  // so the page never downloads the whole catalogue just to fill dropdowns.
+  const facets = usePetFacets();
+  /** The hero orbit + ticker only ever show a handful of pets. */
+  const heroPets = useHeroPets();
 
-  // Adopted pets have found homes — they never appear in browse results,
-  // only adoptable listings (Available + Fostered) do.
-  const browsablePets = useMemo(
-    () => visiblePets.filter((pet) => pet.status !== 'Adopted'),
-    [visiblePets],
+  // This hook only owns filter *state* — the actual filtering happens in the
+  // backend, which also owns the page size (10 per page).
+  const { filters, updateFilter, clearFilter, resetFilters, activeFilterCount } = usePetFilter(
+    [],
+    shelters,
+    presetLocation,
   );
 
-  const { filters, updateFilter, clearFilter, resetFilters, filteredPets, activeFilterCount } =
-    usePetFilter(browsablePets, shelters, presetLocation);
+  const { pets: pagePets, total, pageSize, page, setPage, loading, error } =
+    useBrowsePetsPage(filters);
 
-  const adoptablePets = useMemo(
-    () => browsablePets.filter((pet) => pet.status === 'Available'),
-    [browsablePets],
-  );
-  const adoptedCount = useMemo(
-    () => visiblePets.filter((pet) => pet.status === 'Adopted').length,
-    [visiblePets],
-  );
+  // Any filter change invalidates the current page, so go back to page 1.
+  const changeFilter = (key: keyof typeof filters, value: string) => {
+    setPage(1);
+    updateFilter(key, value);
+  };
+  const clearOne = (key: keyof typeof filters) => {
+    setPage(1);
+    clearFilter(key);
+  };
+  const resetAll = () => {
+    setPage(1);
+    resetFilters();
+  };
+
+  const goToPage = (next: number) => {
+    setPage(next);
+    document
+      .getElementById('pet-listings')
+      ?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
+
   /** Adoptable animals lead the orbit ring; the rest fill it out behind them. */
   const orbitPets = useMemo(() => {
     const statusRank: Record<Pet['status'], number> = {
@@ -47,20 +64,16 @@ export const BrowsePetsPage = () => {
       Fostered: 2,
       Adopted: 3,
     };
-    return [...browsablePets].sort((a, b) => statusRank[a.status] - statusRank[b.status]);
-  }, [browsablePets]);
+    return heroPets
+      .filter((pet) => pet.status !== 'Adopted')
+      .sort((a, b) => statusRank[a.status] - statusRank[b.status]);
+  }, [heroPets]);
 
-  const breeds = useMemo(
-    () => Array.from(new Set(browsablePets.map((p) => p.breed))).sort(),
-    [browsablePets],
-  );
+  const breeds = facets?.breeds ?? [];
+  const temperaments = facets?.temperaments ?? [];
   const locations = useMemo(
     () => Array.from(new Set(shelters.map((s) => s.location))).sort(),
     [shelters],
-  );
-  const temperaments = useMemo(
-    () => Array.from(new Set(browsablePets.flatMap((p) => p.temperament))).sort(),
-    [browsablePets],
   );
 
   const locationByShelter = useMemo(
@@ -96,10 +109,10 @@ export const BrowsePetsPage = () => {
     <div className="landing-theme">
       <PetsHero
         pets={orbitPets}
-        availableCount={adoptablePets.length}
+        availableCount={facets?.stats.available ?? 0}
         shelterCount={shelters.length}
-        listedCount={browsablePets.length}
-        adoptedCount={adoptedCount}
+        listedCount={facets?.stats.listed ?? 0}
+        adoptedCount={facets?.stats.adopted ?? 0}
       />
 
       <PetsTicker items={tickerItems} />
@@ -113,9 +126,9 @@ export const BrowsePetsPage = () => {
             </span>
 
             <h2 className="mt-6 font-display text-[clamp(2rem,4vw,3.25rem)] leading-[0.95] tracking-tight">
-              {filteredPets.length}{' '}
+              {total}{' '}
               <span className="text-foreground/45">
-                {filteredPets.length === 1 ? 'pet' : 'pets'} ready to meet
+                {total === 1 ? 'pet' : 'pets'} ready to meet
               </span>
             </h2>
 
@@ -130,9 +143,9 @@ export const BrowsePetsPage = () => {
         <Reveal delay={100} className="mt-8">
           <FilterBar
             filters={filters}
-            onChange={updateFilter}
-            onClear={clearFilter}
-            onReset={resetFilters}
+            onChange={changeFilter}
+            onClear={clearOne}
+            onReset={resetAll}
             activeCount={activeFilterCount}
             breeds={breeds}
             locations={locations}
@@ -141,17 +154,17 @@ export const BrowsePetsPage = () => {
         </Reveal>
 
         <div className="mt-8">
-          {loading ? (
+          {loading && pagePets.length === 0 ? (
             <LoadingGrid count={6} />
           ) : error ? (
             <EmptyState title="Could not load pets" description={error} />
-          ) : filteredPets.length === 0 ? (
+          ) : total === 0 ? (
             <EmptyState
               title="No pets match your filters"
               description="Try clearing a filter or searching for a different breed."
               icon="search"
               action={
-                <Button variant="outline" size="sm" onClick={resetFilters}>
+                <Button variant="outline" size="sm" onClick={resetAll}>
                   Clear all filters
                 </Button>
               }
@@ -159,9 +172,12 @@ export const BrowsePetsPage = () => {
           ) : (
             <div
               key={facetSignature}
-              className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3"
+              className={cn(
+                'grid gap-5 transition-opacity sm:grid-cols-2 lg:grid-cols-3',
+                loading && 'opacity-60',
+              )}
             >
-              {filteredPets.map((pet, index) => (
+              {pagePets.map((pet, index) => (
                 <Reveal key={pet.id} delay={Math.min(index, 8) * 70}>
                   <PetCard
                     pet={pet}
@@ -173,6 +189,20 @@ export const BrowsePetsPage = () => {
             </div>
           )}
         </div>
+
+        {/* Backend-owned paging: 10 pets per request, `total` from its meta. */}
+        {total > 0 && (
+          <div className="mt-8">
+            <TablePagination
+              currentPage={page}
+              totalItems={total}
+              pageSize={pageSize}
+              onPageChange={goToPage}
+              showPageSize={false}
+              label="pets"
+            />
+          </div>
+        )}
       </Container>
     </div>
   );

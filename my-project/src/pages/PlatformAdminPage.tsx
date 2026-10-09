@@ -758,12 +758,12 @@ export const PlatformAdminPage = ({ initialSection = 'overview' }: PlatformAdmin
         }
         icon={editingShelter ? Pencil : Plus}
         footer={
-          <div className="flex flex-col-reverse gap-2 sm:flex-row">
-            <Button type="submit" form="shelter-form" size="sm" className="sm:flex-1">
-              {editingShelter ? 'Save changes' : 'Register shelter'}
-            </Button>
-            <Button type="button" variant="outline" size="sm" onClick={closeShelterSlide}>
+          <div className="grid grid-cols-2 gap-3">
+            <Button type="button" variant="outline" size="lg" className="w-full" onClick={closeShelterSlide}>
               Cancel
+            </Button>
+            <Button type="submit" form="shelter-form" size="lg" className="w-full">
+              {editingShelter ? 'Save changes' : 'Register shelter'}
             </Button>
           </div>
         }
@@ -845,16 +845,17 @@ export const PlatformAdminPage = ({ initialSection = 'overview' }: PlatformAdmin
         icon={Building2}
         footer={
           detailsShelter ? (
-            <div className="flex gap-2">
+            <div className="grid grid-cols-2 gap-3">
+              <Button type="button" variant="outline" size="lg" className="w-full" onClick={() => setDetailsShelter(null)}>
+                Close
+              </Button>
               <Button
-                size="sm"
-                className="flex-1"
+                type="button"
+                size="lg"
+                className="w-full"
                 onClick={() => detailsShelter && openEditShelter(detailsShelter)}
               >
-                <Pencil className="size-3.5" /> Edit in slider
-              </Button>
-              <Button size="sm" variant="outline" onClick={() => setDetailsShelter(null)}>
-                Close
+                <Pencil className="size-4" /> Edit in slider
               </Button>
             </div>
           ) : undefined
@@ -1052,7 +1053,7 @@ export const PlatformAdminPage = ({ initialSection = 'overview' }: PlatformAdmin
         }
         icon={PawPrint}
         footer={
-          <Button size="sm" variant="outline" className="w-full" onClick={() => setDetailsPet(null)}>
+          <Button size="lg" variant="outline" className="w-full" onClick={() => setDetailsPet(null)}>
             Close
           </Button>
         }
@@ -1260,12 +1261,12 @@ export const PlatformAdminPage = ({ initialSection = 'overview' }: PlatformAdmin
         }
         icon={editingUser ? Pencil : Plus}
         footer={
-          <div className="flex flex-col-reverse gap-2 sm:flex-row">
-            <Button type="submit" form="user-form" size="sm" className="sm:flex-1">
-              {editingUser ? 'Save changes' : 'Create user'}
-            </Button>
-            <Button type="button" variant="outline" size="sm" onClick={closeUserSlide}>
+          <div className="grid grid-cols-2 gap-3">
+            <Button type="button" variant="outline" size="lg" className="w-full" onClick={closeUserSlide}>
               Cancel
+            </Button>
+            <Button type="submit" form="user-form" size="lg" className="w-full">
+              {editingUser ? 'Save changes' : 'Create user'}
             </Button>
           </div>
         }
@@ -1332,16 +1333,17 @@ export const PlatformAdminPage = ({ initialSection = 'overview' }: PlatformAdmin
         icon={Users}
         footer={
           detailsUser ? (
-            <div className="flex gap-2">
+            <div className="grid grid-cols-2 gap-3">
+              <Button type="button" variant="outline" size="lg" className="w-full" onClick={() => setDetailsUser(null)}>
+                Close
+              </Button>
               <Button
-                size="sm"
-                className="flex-1"
+                type="button"
+                size="lg"
+                className="w-full"
                 onClick={() => detailsUser && openEditUser(detailsUser)}
               >
-                <Pencil className="size-3.5" /> Edit in slider
-              </Button>
-              <Button size="sm" variant="outline" onClick={() => setDetailsUser(null)}>
-                Close
+                <Pencil className="size-4" /> Edit in slider
               </Button>
             </div>
           ) : undefined

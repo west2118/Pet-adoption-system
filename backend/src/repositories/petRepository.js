@@ -28,7 +28,60 @@ export const buildPublicFilters = (filters) => {
     values.push(`%${filters.search}%`);
     conditions.push(`(name ILIKE $${values.length} OR breed ILIKE $${values.length} OR description ILIKE $${values.length})`);
   }
+  // Browse facets: temperament lives in a TEXT[] column, so match any element
+  // case-insensitively — mirrors the old client-side comparison.
+  if (filters.temperament) {
+    values.push(filters.temperament.trim().toLowerCase());
+    conditions.push(
+      `EXISTS (SELECT 1 FROM unnest(temperament) t WHERE lower(t) = $${values.length})`,
+    );
+  }
+  // Location is a shelter property, so resolve it through shelters.location.
+  if (filters.location) {
+    values.push(filters.location);
+    conditions.push(
+      `shelter_id IN (SELECT id FROM shelters WHERE location = $${values.length})`,
+    );
+  }
+  if (filters.excludeAdopted) {
+    conditions.push(`status <> 'Adopted'`);
+  }
   return { conditions, values };
+};
+
+/**
+ * Facet options + hero counts for the browse page.
+ *
+ * One cheap request (DISTINCT + COUNT aggregates over the public set) so the
+ * page never has to download the whole catalogue just to fill its dropdowns
+ * and headline numbers. Scope matches `buildPublicFilters`'s base set, minus
+ * adopted pets — exactly what the grid shows.
+ */
+export const listPetFacets = async () => {
+  const base = `WHERE visibility = 'public' AND status <> 'In Process'`;
+  const browsable = `${base} AND status <> 'Adopted'`;
+
+  const [breeds, temperaments, stats] = await Promise.all([
+    pool.query(`SELECT DISTINCT breed FROM pets ${browsable} ORDER BY breed`),
+    pool.query(
+      `SELECT DISTINCT t AS temperament
+         FROM pets CROSS JOIN unnest(pets.temperament) t
+        ${browsable}
+        ORDER BY 1`,
+    ),
+    pool.query(
+      `SELECT COUNT(*) FILTER (WHERE status <> 'Adopted')::int AS listed,
+              COUNT(*) FILTER (WHERE status = 'Available')::int AS available,
+              COUNT(*) FILTER (WHERE status = 'Adopted')::int AS adopted
+         FROM pets ${base}`,
+    ),
+  ]);
+
+  return {
+    breeds: breeds.rows.map((r) => r.breed),
+    temperaments: temperaments.rows.map((r) => r.temperament),
+    stats: stats.rows[0],
+  };
 };
 
 export const listPublicPets = async (filters, { limit, offset }) => {

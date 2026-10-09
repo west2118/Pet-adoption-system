@@ -1,8 +1,17 @@
-import { useCallback, useEffect, useState } from 'react';
-import { applicationService, petService, shelterService, userService } from '@/services/api';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import {
+  applicationService,
+  getPetFacets,
+  listPetsPaginated,
+  petService,
+  shelterService,
+  userService,
+} from '@/services/api';
+import type { PetFacets } from '@/services/api';
 import { adoptionApplicationService } from '@/services/adoptionApplicationService';
 import { tokenStore } from '@/lib/apiClient';
-import type { AdoptionApplication, Pet, Shelter, User } from '@/types';
+import { ALL_FILTERS } from '@/hooks/usePetFilter';
+import type { AdoptionApplication, Pet, PetFilters, Shelter, User } from '@/types';
 
 export const usePets = () => {
   const [pets, setPets] = useState<Pet[]>([]);
@@ -60,6 +69,133 @@ export const useShelters = () => {
   }, []);
 
   return { shelters, setShelters, loading };
+};
+
+/**
+ * One page of the browse grid, paginated by the backend.
+ *
+ * `filters` come straight from `usePetFilter` and are forwarded to
+ * `GET /pets`, which applies them together with its own 10-per-page limit and
+ * answers with `total` / `totalPages`. The hook only owns the page number and
+ * resets it whenever the filter set changes (the page wraps `setPage` for that).
+ */
+export const useBrowsePetsPage = (filters: PetFilters) => {
+  const [page, setPage] = useState(1);
+  const [result, setResult] = useState<{
+    key: string;
+    pets: Pet[];
+    total: number;
+    limit: number;
+    totalPages: number;
+    error: string | null;
+  } | null>(null);
+
+  // Identifies the request a result belongs to — a changed filter or page
+  // reads as "loading" without any setState inside the effect itself.
+  const requestKey = useMemo(() => `${page}|${JSON.stringify(filters)}`, [page, filters]);
+
+  useEffect(() => {
+    let mounted = true;
+    listPetsPaginated({
+      page,
+      search: filters.search,
+      species: filters.species === ALL_FILTERS ? undefined : filters.species,
+      breed: filters.breed === ALL_FILTERS ? undefined : filters.breed,
+      ageGroup: filters.ageGroup === ALL_FILTERS ? undefined : filters.ageGroup,
+      size: filters.size === ALL_FILTERS ? undefined : filters.size,
+      gender: filters.gender === ALL_FILTERS ? undefined : filters.gender,
+      temperament: filters.temperament === ALL_FILTERS ? undefined : filters.temperament,
+      location: filters.location === ALL_FILTERS ? undefined : filters.location,
+      status: filters.status === ALL_FILTERS ? undefined : filters.status,
+      // The grid only lists pets still looking for a home.
+      excludeAdopted: true,
+    })
+      .then((res) => {
+        if (!mounted) return;
+        const totalPages = res.totalPages ?? Math.max(1, Math.ceil(res.total / res.limit));
+        // A filter change can leave us on a page that no longer exists.
+        if (totalPages > 0 && page > totalPages) {
+          setPage(totalPages);
+          return;
+        }
+        setResult({
+          key: requestKey,
+          pets: res.items,
+          total: res.total,
+          limit: res.limit,
+          totalPages,
+          error: null,
+        });
+      })
+      .catch(() => {
+        if (!mounted) return;
+        setResult({
+          key: requestKey,
+          pets: [],
+          total: 0,
+          limit: 10,
+          totalPages: 1,
+          error: 'Failed to load pets. Please try again.',
+        });
+      });
+    return () => {
+      mounted = false;
+    };
+  }, [filters, page, requestKey]);
+
+  const loading = result?.key !== requestKey;
+
+  return {
+    pets: result?.pets ?? [],
+    total: result?.total ?? 0,
+    pageSize: result?.limit ?? 10,
+    totalPages: result?.totalPages ?? 1,
+    page,
+    setPage,
+    // Keeps the previous page on screen while the next one loads.
+    loading,
+    error: loading ? null : (result?.error ?? null),
+  };
+};
+
+/**
+ * Facet options (breeds, temperaments) and hero counts for the browse page —
+ * one small request instead of downloading the whole catalogue.
+ */
+export const usePetFacets = () => {
+  const [facets, setFacets] = useState<PetFacets | null>(null);
+
+  useEffect(() => {
+    let mounted = true;
+    getPetFacets().then((data) => {
+      if (mounted) setFacets(data);
+    });
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  return facets;
+};
+
+/**
+ * First page of the public catalogue, used by the hero orbit + ticker. They
+ * only ever show a handful of pets, so one 10-row request covers them.
+ */
+export const useHeroPets = () => {
+  const [pets, setPets] = useState<Pet[]>([]);
+
+  useEffect(() => {
+    let mounted = true;
+    listPetsPaginated({ page: 1 }).then((res) => {
+      if (mounted) setPets(res.items);
+    });
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  return pets;
 };
 
 /**

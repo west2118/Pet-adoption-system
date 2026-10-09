@@ -25,9 +25,12 @@ import { Badge } from '@/components/ui/Badge';
 import { Input, Label, Select, Textarea } from '@/components/ui/Form';
 import { Button } from '@/components/ui/button';
 import { EmptyState } from '@/components/ui/Feedback';
+import { WaiverPrintDocument } from '@/components/features/WaiverPrintDocument';
 import { ApiError } from '@/lib/apiClient';
 import { waiverService } from '@/services/waiverService';
-import type { WaiverTemplate, WaiverTemplateStatus } from '@/types';
+import { useAuth } from '@/hooks/useAuth';
+import { usePets, useShelters } from '@/hooks/useData';
+import type { Pet, Shelter, Waiver, WaiverTemplate, WaiverTemplateStatus } from '@/types';
 import { formatDate } from '@/utils/formatters';
 
 const CATEGORY_OPTIONS = [
@@ -52,6 +55,9 @@ const emptyForm = {
 };
 
 export const ShelterEWaiversPage = () => {
+  const { user } = useAuth();
+  const { pets } = usePets();
+  const { shelters } = useShelters();
   const [templates, setTemplates] = useState<WaiverTemplate[]>([]);
   const [totalTemplates, setTotalTemplates] = useState<number>(0);
   const [loading, setLoading] = useState(true);
@@ -90,6 +96,84 @@ export const ShelterEWaiversPage = () => {
   const detailsTemplate = detailsId
     ? (templates.find((t) => t.id === detailsId) ?? null)
     : null;
+
+  const previewShelter: Shelter | null =
+    (user?.shelterId ? shelters.find((s) => s.id === user.shelterId) : undefined) ??
+    shelters[0] ??
+    null;
+
+  /**
+   * Sample waiver backing the PDF-look preview: the real legal form for this
+   * template's category, filled with the shelter's own details plus sample
+   * adopter/pet data (first listing when one exists). Clearly marked as a
+   * preview — nothing here is issued or stored.
+   */
+  const previewWaiver: Waiver | null = (() => {
+    if (!detailsTemplate || !previewShelter) return null;
+    const samplePet: Pet =
+      pets.find((p) => p.shelterId === previewShelter.id) ?? ({
+        id: 'sample-pet',
+        name: 'Sample Pet',
+        species: 'dog',
+        breed: 'Sample Breed',
+        birthdate: '2023-06-01',
+        ageYears: 3,
+        ageGroup: 'adult',
+        size: 'medium',
+        gender: 'male',
+        temperament: ['Friendly'],
+        shelterId: previewShelter.id,
+        visibility: 'public',
+        description: 'Sample preview pet.',
+        medicalHistory: ['Rabies vaccine', 'Vet health check'],
+        behavioralNotes: 'Sample behavioral note.',
+        status: 'Available',
+        imageUrl: '',
+        gallery: [],
+        vaccinated: true,
+        spayedNeutered: true,
+        goodWithKids: true,
+        goodWithPets: true,
+        microchipped: true,
+        dewormed: true,
+        houseTrained: false,
+        goodWithStrangers: false,
+        leashTrained: false,
+        crateTrained: false,
+        litterTrained: false,
+        apartmentFriendly: false,
+        dateAdded: new Date().toISOString().slice(0, 10),
+      } as Pet);
+    const now = new Date().toISOString();
+    return {
+      id: 'sample-waiver',
+      applicationId: 'sample-application',
+      shelterId: previewShelter.id,
+      snapshot: {
+        application: {
+          id: 'sample-application',
+          applicantName: 'Sample Adopter',
+          email: 'sample.adopter@example.com',
+          phone: '+63 900 000 0000',
+          address: '123 Sample Street, Quezon City',
+          status: 'Approved',
+        },
+        pet: samplePet,
+        shelter: previewShelter,
+        templates: [
+          {
+            id: detailsTemplate.id,
+            name: detailsTemplate.name,
+            category: detailsTemplate.category,
+            body: detailsTemplate.body,
+          },
+        ],
+        issuedAt: now,
+      },
+      createdAt: now,
+      updatedAt: now,
+    };
+  })();
 
   const openAdd = () => {
     setEditing(null);
@@ -368,20 +452,21 @@ export const ShelterEWaiversPage = () => {
         }
         icon={editing ? Pencil : Plus}
         footer={
-          <div className="flex flex-col-reverse gap-2 sm:flex-row">
-            <Button type="submit" form="waiver-template-form" size="sm" className="sm:flex-1">
-              {editing ? 'Save changes' : 'Create template'}
-            </Button>
+          <div className="grid grid-cols-2 gap-3">
             <Button
               type="button"
               variant="outline"
-              size="sm"
+              size="lg"
+              className="w-full"
               onClick={() => {
                 setSlideOpen(false);
                 setEditing(null);
               }}
             >
               Cancel
+            </Button>
+            <Button type="submit" form="waiver-template-form" size="lg" className="w-full">
+              {editing ? 'Save changes' : 'Create template'}
             </Button>
           </div>
         }
@@ -454,16 +539,19 @@ export const ShelterEWaiversPage = () => {
         open={detailsTemplate !== null}
         onClose={() => setDetailsId(null)}
         title={detailsTemplate?.name ?? 'Waiver'}
-        description={detailsTemplate?.category}
+        description={
+          detailsTemplate ? `${detailsTemplate.category} · sample PDF preview` : undefined
+        }
         icon={FileSignature}
+        size="lg"
         footer={
           detailsTemplate ? (
-            <div className="flex gap-2">
-              <Button size="sm" className="flex-1" onClick={() => openEdit(detailsTemplate)}>
-                <Pencil className="size-3.5" /> Edit template
-              </Button>
-              <Button size="sm" variant="outline" onClick={() => setDetailsId(null)}>
+            <div className="grid grid-cols-2 gap-3">
+              <Button type="button" variant="outline" size="lg" className="w-full" onClick={() => setDetailsId(null)}>
                 Close
+              </Button>
+              <Button type="button" size="lg" className="w-full" onClick={() => openEdit(detailsTemplate)}>
+                <Pencil className="size-4" /> Edit template
               </Button>
             </div>
           ) : undefined
@@ -476,10 +564,17 @@ export const ShelterEWaiversPage = () => {
                 {detailsTemplate.status}
               </Badge>
               <Badge variant="muted">Updated {formatDate(detailsTemplate.updatedAt)}</Badge>
+              <Badge variant="info">Sample preview — not issued</Badge>
             </div>
-            <div className="rounded-lg border p-3">
-              <p className="text-sm leading-relaxed">{detailsTemplate.body}</p>
-            </div>
+            {previewWaiver ? (
+              <div className="rounded-lg border bg-white p-4 sm:p-6">
+                <WaiverPrintDocument waiver={previewWaiver} />
+              </div>
+            ) : (
+              <div className="rounded-lg border p-3">
+                <p className="text-sm leading-relaxed">{detailsTemplate.body}</p>
+              </div>
+            )}
           </div>
         )}
       </DetailsModal>

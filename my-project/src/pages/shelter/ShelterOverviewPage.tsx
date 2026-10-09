@@ -16,6 +16,7 @@ import { useMemo } from 'react';
 import {
   ChartCard,
   SectionHeader,
+  ShelterOverviewSkeleton,
   SummaryStatCard,
   SummaryStatGrid,
   TableCard,
@@ -61,6 +62,10 @@ export const ShelterOverviewPage = () => {
     recentApplications,
     inventory,
   } = useShelterOverview(myPets, myApplications);
+
+  if (loading) {
+    return <ShelterOverviewSkeleton />;
+  }
 
   return (
     <div className="w-full px-4 py-6 sm:px-6">
