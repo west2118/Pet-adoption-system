@@ -86,6 +86,7 @@ export interface PetFacets {
   breeds: string[];
   temperaments: string[];
   stats: { listed: number; available: number; adopted: number };
+  species: { species: string; count: number }[];
 }
 
 /** Filters the browse page sends to the backend instead of applying itself. */
@@ -100,6 +101,8 @@ export interface PublicPetsQuery {
   temperament?: string;
   location?: string;
   status?: string;
+  /** Scopes the public catalogue to one shelter (shelter profile pets grid). */
+  shelterId?: string;
   /** The browse grid only lists pets still looking for a home. */
   excludeAdopted?: boolean;
 }
@@ -148,6 +151,7 @@ const toPublicPetsQuery = (options: PublicPetsQuery): string => {
       params.set(key, value.trim());
     }
   });
+  if (options.shelterId) params.set('shelterId', options.shelterId);
   if (options.excludeAdopted) params.set('excludeAdopted', 'true');
   return `?${params.toString()}`;
 };
@@ -155,6 +159,7 @@ const toPublicPetsQuery = (options: PublicPetsQuery): string => {
 /** Mirrors the backend's public browse filters over the in-memory demo store. */
 const browsableMockPets = (options: PublicPetsQuery): Pet[] => {
   let list = publicPets([...petsStore]);
+  if (options.shelterId) list = list.filter((p) => p.shelterId === options.shelterId);
   if (options.excludeAdopted) list = list.filter((p) => p.status !== 'Adopted');
   const search = options.search?.trim().toLowerCase();
   if (search) {
@@ -223,20 +228,29 @@ export const listPetsPaginated = async (
  * Deliberately tiny (DISTINCT values and three counts) so the page can keep
  * its headline numbers and filter options without downloading every pet.
  */
-export const getPetFacets = async (): Promise<PetFacets> => {
+export const getPetFacets = async (shelterId?: string): Promise<PetFacets> => {
   try {
-    return await apiRequest<PetFacets>('/pets/facets');
+    const query = shelterId ? `?shelterId=${encodeURIComponent(shelterId)}` : '';
+    return await apiRequest<PetFacets>(`/pets/facets${query}`);
   } catch {
     const visible = publicPets([...petsStore]);
-    const browsable = visible.filter((p) => p.status !== 'Adopted');
+    const scoped = shelterId ? visible.filter((p) => p.shelterId === shelterId) : visible;
+    const browsable = scoped.filter((p) => p.status !== 'Adopted');
+    const speciesCounts = new Map<string, number>();
+    browsable.forEach((p) =>
+      speciesCounts.set(p.species, (speciesCounts.get(p.species) ?? 0) + 1),
+    );
     return {
       breeds: Array.from(new Set(browsable.map((p) => p.breed))).sort(),
       temperaments: Array.from(new Set(browsable.flatMap((p) => p.temperament))).sort(),
       stats: {
         listed: browsable.length,
         available: browsable.filter((p) => p.status === 'Available').length,
-        adopted: visible.filter((p) => p.status === 'Adopted').length,
+        adopted: scoped.filter((p) => p.status === 'Adopted').length,
       },
+      species: Array.from(speciesCounts.entries())
+        .map(([species, count]) => ({ species, count }))
+        .sort((a, b) => b.count - a.count),
     };
   }
 };

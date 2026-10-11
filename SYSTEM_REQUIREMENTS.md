@@ -51,9 +51,11 @@ The application implements a multi-portal architecture serving **three distinct 
   ├── /pets (Catalog)                  ├── /shelter/listings               ├── /admin/shelters
   ├── /pets/:id (Details)              ├── /shelter/applications           ├── /admin/pets
   ├── /shelters (Directory)            ├── /shelter/inquiries              └── /admin/users
-  ├── /favorites                       └── /shelter/profile
+  ├── /favorites                       ├── /shelter/visits
+                                       └── /shelter/profile
   ├── /apply/:petId
  ├── /applications
+ ├── /visits
  ├── /login
  └── /signup
 ```
@@ -65,15 +67,16 @@ The application implements a multi-portal architecture serving **three distinct 
 ### 5.1 Public / Adopter Portal (`PublicLayout` - Top Navigation Bar)
 *Used by general site visitors and registered adopters. Clean, responsive top navbar for effortless navigation.*
 
-* **Layout Header:** Top Navigation Bar with Logo, Links (*Pets*, *Shelters*, *Favorites* badge counter, *My Applications*), and Auth state (Login / Sign Up or Profile Dropdown).
+* **Layout Header:** Top Navigation Bar with Logo, Links (*Pets*, *Shelters*, *Favorites* badge counter, *My Applications*, *My Visits*), and Auth state (Login / Sign Up or Profile Dropdown).
 * **Routes & Key Pages:**
   - `GET /` (`HomePage`): Hero section, featured pets carousel, recent rescue stories, shelter partner highlights, call-to-action banner.
   - `GET /pets` (`BrowsePetsPage`): Interactive public catalog with advanced search and filters (species, breed, age, gender, size, location). *Note: Displays ONLY pets marked as Public visibility.*
-  - `GET /pets/:id` (`PetDetailsPage`): Detailed pet view with photo galleries, medical history, personality traits, shelter contact info, and "Apply to Adopt" trigger.
+  - `GET /pets/:id` (`PetDetailsPage`): Detailed pet view with photo galleries, medical history, personality traits, shelter contact info, "Apply to Adopt" trigger, inquiry form, and "Request a visit" card (preferred slot + message creates a visit thread).
   - `GET /shelters` (`SheltersPage`): Directory of verified partner shelters with location maps, operating hours, and active pet listing counts.
   - `GET /favorites` (`FavoritesPage`): Personal saved watchlist for logged-in users to bookmark pets of interest.
   - `GET /apply/:petId` (`AdoptionFormPage`): Multi-step adoption questionnaire (housing info, yard/fence details, pet experience, references).
   - `GET /applications` (`ApplicationsPage`): User dashboard tracking submitted adoption applications and their current processing status (*Submitted*, *Under Review*, *Approved*, *Rejected*).
+  - `GET /visits` (`VisitsPage`): Meet-and-greet inbox — one thread per pet with the shelter team (preferred slot, proposals, confirmations, cancellations, and messages in a single conversation).
   - `GET /login` & `/signup` (`AuthPages`): User authentication and account registration.
 
 ---
@@ -81,7 +84,7 @@ The application implements a multi-portal architecture serving **three distinct 
 ### 5.2 Shelter Portal (`ShelterLayout` - Shelter Sidebar Navigation)
 *Used by animal shelter managers and rescue staff. Dedicated dashboard layout with a collapsible sidebar for inventory and applicant management.*
 
-* **Layout Sidebar:** Collapsible Sidebar with links (*Dashboard Overview*, *Pet Listings*, *Adoption Applications*, *Inquiries Inbox*, *Shelter Profile*, *Logout*). Both portals (shelter + platform admin) share one sidebar design component with role-specific links.
+* **Layout Sidebar:** Collapsible Sidebar with links (*Dashboard Overview*, *Pet Listings*, *Adoption Applications*, *Inquiries Inbox*, *Visit Requests*, *Shelter Profile*, *Logout*). Both portals (shelter + platform admin) share one sidebar design component with role-specific links.
 * **Routing (parent + children):** `ShelterLayout` is the parent route rendering the sidebar + `<Outlet />`; each page below is a child route (dedicated page component, not tabs inside one page).
 * **Routes & Key Pages:**
   - `GET /shelter` (`ShelterOverviewPage`): At-a-glance dashboard for the shelter, built with summary stats cards, Recharts charts, and data tables:
@@ -98,6 +101,9 @@ The application implements a multi-portal architecture serving **three distinct 
     - Detailed applicant review modal, status workflow updating (*Approve*, *Reject*, *Hold*), and internal staff notes.
   - `GET /shelter/inquiries` (`ShelterInquiriesPage`):
     - Inbox of direct adopter inquiries about the shelter's pets, with reply and mark-resolved actions.
+  - `GET /shelter/visits` (`ShelterVisitsPage`):
+    - Visit scheduling inbox: adopter meet-and-greet threads for the shelter's pets.
+    - Propose/confirm visit slots, message back, and mark visits completed or cancelled — questions, proposals, and confirmations stay in one thread.
   - `GET /shelter/profile` (`ShelterProfilePage`):
     - Manage shelter organization details, logo uploads, address, contact phone/email, operating hours, and adoption policy descriptions.
 
@@ -126,7 +132,7 @@ The application implements a multi-portal architecture serving **three distinct 
 
 The system enforces **Role-Based Access Control (RBAC)** via `ProtectedRoute` wrappers:
 - **Public Routes:** Accessible to all visitors (`/`, `/pets`, `/pets/:id`, `/shelters`, `/login`, `/signup`).
-- **Adopter Protected Routes:** Requires authenticated `adopter` role (`/apply/:petId`, `/applications`, `/favorites`).
+- **Adopter Protected Routes:** Requires authenticated `adopter` role (`/apply/:petId`, `/applications`, `/favorites`, `/visits`).
 - **Shelter Staff Protected Routes:** Requires authenticated `shelter_staff` role (`/shelter/*`).
 - **Platform Admin Protected Routes:** Requires authenticated `platform_admin` role (`/admin/*`).
 

@@ -5,6 +5,7 @@ import { ShelterApplicationsPage } from '@/pages/shelter/ShelterApplicationsPage
 import { ShelterEWaiversPage } from '@/pages/shelter/ShelterEWaiversPage';
 import { WaiverPrintPage } from '@/pages/shelter/WaiverPrintPage';
 import { ShelterInquiriesPage } from '@/pages/shelter/ShelterInquiriesPage';
+import { ShelterVisitsPage } from '@/pages/shelter/ShelterVisitsPage';
 import { ShelterListingsPage } from '@/pages/shelter/ShelterListingsPage';
 import { ShelterOverviewPage } from '@/pages/shelter/ShelterOverviewPage';
 import { ShelterProfilePage } from '@/pages/shelter/ShelterProfilePage';
@@ -21,6 +22,7 @@ export const shelterRoutes: RouteObject = {
         { path: 'shelter/applications', element: <ShelterApplicationsPage /> },
         { path: 'shelter/applications/:appId/waiver', element: <WaiverPrintPage /> },
         { path: 'shelter/inquiries', element: <ShelterInquiriesPage /> },
+        { path: 'shelter/visits', element: <ShelterVisitsPage /> },
         { path: 'shelter/templates/e-waivers', element: <ShelterEWaiversPage /> },
         { path: 'shelter/profile', element: <ShelterProfilePage /> },
       ],

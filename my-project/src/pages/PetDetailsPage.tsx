@@ -6,6 +6,7 @@ import type { Pet, Shelter } from '@/types';
 import { Reveal } from '@/components/shared';
 import { Container } from '@/components/layout/Container';
 import { InquiryForm } from '@/components/features/InquiryForm';
+import { VisitRequestCard } from '@/components/features/VisitRequestCard';
 import { PetCard } from '@/components/features/PetCard';
 import { PetFactStrip, PetRecords } from '@/components/features/PetRecords';
 import { PetHero } from '@/components/features/PetHero';
@@ -241,8 +242,9 @@ export const PetDetailsPage = () => {
                 {pet.name} — meet-and-greets, medical history, or anything else you
                 would like to know.
               </p>
-              <div className="mt-10">
+              <div className="mt-10 grid gap-4">
                 <InquiryForm petId={pet.id} petName={pet.name} />
+                <VisitRequestCard petId={pet.id} petName={pet.name} />
               </div>
             </Reveal>
           </div>

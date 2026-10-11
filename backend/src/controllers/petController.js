@@ -23,9 +23,10 @@ export const listPets = async (req, res) => {
   return sendSuccess(res, { pets }, undefined, buildMeta(page, limit, total));
 };
 
-/** Facet options + hero counts for the browse page (no pagination needed). */
-export const getPetFacets = async (_req, res) => {
-  const facets = await getPublicPetFacets();
+/** Facet options + hero counts (optionally scoped to one shelter, no pagination needed). */
+export const getPetFacets = async (req, res) => {
+  const shelterId = req.query.shelterId || undefined;
+  const facets = await getPublicPetFacets(shelterId);
   return sendSuccess(res, facets);
 };
 

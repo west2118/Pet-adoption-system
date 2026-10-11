@@ -11,7 +11,7 @@ export const getPublicPets = async (filters, pagination) => {
   return { pets: rows.map((r) => mapPet(r)), total };
 };
 
-export const getPublicPetFacets = async () => listPetFacets();
+export const getPublicPetFacets = async (shelterId) => listPetFacets(shelterId);
 
 export const getPublicPetById = async (id) => {
   const row = await findPublicPetById(id);

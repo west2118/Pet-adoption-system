@@ -157,6 +157,7 @@ export const mapWaiverTemplate = (row) => {
     category: row.category,
     body: row.body,
     status: row.status,
+    isDefault: row.is_default ?? false,
     updatedAt: row.updated_at,
   };
 };

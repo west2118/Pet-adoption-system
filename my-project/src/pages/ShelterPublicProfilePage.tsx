@@ -2,15 +2,15 @@ import { useEffect, useMemo, useState } from 'react';
 import { ArrowRight, MapPin } from 'lucide-react';
 import { Link, useParams } from 'react-router-dom';
 import type { Pet, Shelter } from '@/types';
-import { Reveal } from '@/components/shared';
+import { Reveal, TablePagination } from '@/components/shared';
 import { Container } from '@/components/layout/Container';
 import { ShelterContactCard } from '@/components/features/ShelterContactCard';
 import { ShelterProfileHero } from '@/components/features/ShelterProfileHero';
 import { PetCard } from '@/components/features/PetCard';
 import { EmptyState } from '@/components/ui/Feedback';
 import { Button } from '@/components/ui/button';
-import { petService, shelterService } from '@/services/api';
-import { publicPets } from '@/data/mockData';
+import { listPetsPaginated, getPetFacets, shelterService } from '@/services/api';
+import type { PetFacets } from '@/services/api';
 import { cn } from '@/lib/utils';
 
 const frame = 'mx-auto w-full max-w-[1400px] px-6 lg:px-12';
@@ -20,7 +20,12 @@ export const ShelterPublicProfilePage = () => {
   const { id } = useParams<{ id: string }>();
   const [shelter, setShelter] = useState<Shelter | null>(null);
   const [pets, setPets] = useState<Pet[]>([]);
+  const [totalPets, setTotalPets] = useState(0);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+  const [facets, setFacets] = useState<PetFacets | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadingPage, setLoadingPage] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -29,14 +34,26 @@ export const ShelterPublicProfilePage = () => {
       if (!id) return;
       setLoading(true);
       setError(null);
+      setPage(1);
       try {
         const found = await shelterService.getById(id);
-        // Adopters only ever see public listings — private inventory stays hidden.
-        // GET /pets?shelterId= returns only visibility='public' rows for this shelter.
-        const shelterPets = found ? await petService.listByShelter(found.id) : [];
         if (!mounted) return;
-        setShelter(found ?? null);
-        setPets(found ? publicPets(shelterPets) : []);
+        if (!found) {
+          setShelter(null);
+          return;
+        }
+        setShelter(found);
+        // Adopters only ever see public listings — the backend scopes both
+        // the page and the headline counts to this shelter (same base set).
+        const [pageRes, shelterFacets] = await Promise.all([
+          listPetsPaginated({ page: 1, shelterId: found.id, excludeAdopted: true }),
+          getPetFacets(found.id),
+        ]);
+        if (!mounted) return;
+        setPets(pageRes.items);
+        setTotalPets(pageRes.total);
+        setPageSize(pageRes.limit);
+        setFacets(shelterFacets);
       } catch {
         if (mounted) setError('Failed to load this shelter. Please try again.');
       } finally {
@@ -48,20 +65,42 @@ export const ShelterPublicProfilePage = () => {
     };
   }, [id]);
 
-  const availableCount = useMemo(
-    () => pets.filter((pet) => pet.status === 'Available').length,
-    [pets],
-  );
+  useEffect(() => {
+    if (!shelter || page === 1) return;
+    let mounted = true;
+    setLoadingPage(true);
+    listPetsPaginated({ page, shelterId: shelter.id, excludeAdopted: true })
+      .then((res) => {
+        if (!mounted) return;
+        setPets(res.items);
+        setTotalPets(res.total);
+        setPageSize(res.limit);
+      })
+      .catch(() => {
+        if (mounted) setError('Failed to load this shelter’s listings. Please try again.');
+      })
+      .finally(() => {
+        if (mounted) setLoadingPage(false);
+      });
+    return () => {
+      mounted = false;
+    };
+  }, [page, shelter]);
+
+  const goToPage = (next: number) => {
+    setPage(next);
+    document.getElementById(PETS_ANCHOR)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
+
+  const availableCount = facets?.stats.available ?? 0;
 
   const speciesBreakdown = useMemo(() => {
-    const counts = new Map<string, number>();
-    pets.forEach((pet) => counts.set(pet.species, (counts.get(pet.species) ?? 0) + 1));
-    if (counts.size === 0) return '—';
-    return Array.from(counts.entries())
-      .sort((a, b) => b[1] - a[1])
-      .map(([species, count]) => `${count} ${species}${count === 1 ? '' : 's'}`)
+    const species = facets?.species ?? [];
+    if (species.length === 0) return '—';
+    return species
+      .map(({ species: name, count }) => `${count} ${name}${count === 1 ? '' : 's'}`)
       .join(' · ');
-  }, [pets]);
+  }, [facets]);
 
   const visitingDays = useMemo(() => {
     if (!shelter) return '—';
@@ -105,11 +144,11 @@ export const ShelterPublicProfilePage = () => {
     );
   }
 
-  // `totalPets` is the shelter's own headline figure; everything else below is
-  // derived from live public listings, so the two are labelled distinctly.
+  // `totalPets` is the shelter's own headline figure; listing counts come
+  // from the scoped facets so they stay correct while the grid is paged.
   const stats = [
     { value: shelter.totalPets || '—', label: 'pets in care' },
-    { value: pets.length || '—', label: 'listed publicly' },
+    { value: facets?.stats.listed || '—', label: 'listed publicly' },
     { value: availableCount || '—', label: 'available now' },
     { value: visitingDays, label: 'visiting days' },
   ];
@@ -205,7 +244,7 @@ export const ShelterPublicProfilePage = () => {
 
             <Reveal delay={150} className="lg:col-span-5 lg:pb-2">
               <p className="text-lg leading-relaxed text-muted-foreground">
-                {pets.length === 0
+                {totalPets === 0
                   ? `${shelter.name} has no public listings at the moment. New arrivals are added every week.`
                   : `${speciesBreakdown} in ${shelter.location}. Private shelter records are never shown here.`}
               </p>
@@ -219,7 +258,7 @@ export const ShelterPublicProfilePage = () => {
             </Reveal>
           </div>
 
-          {pets.length === 0 ? (
+          {totalPets === 0 ? (
             <EmptyState
               title="No public listings right now"
               description={`${shelter.name} keeps its private inventory separate from the public catalogue.`}
@@ -233,17 +272,37 @@ export const ShelterPublicProfilePage = () => {
               }
             />
           ) : (
-            <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-              {pets.map((pet, index) => (
-                <Reveal key={pet.id} delay={Math.min(index, 8) * 70}>
-                  <PetCard
-                    pet={pet}
-                    className="h-full"
-                    shelterLocation={shelter.location}
-                  />
-                </Reveal>
-              ))}
-            </div>
+            <>
+              <div
+                key={page}
+                className={cn(
+                  'grid gap-5 transition-opacity sm:grid-cols-2 lg:grid-cols-3',
+                  loadingPage && 'opacity-60',
+                )}
+              >
+                {pets.map((pet, index) => (
+                  <Reveal key={pet.id} delay={Math.min(index, 8) * 70}>
+                    <PetCard
+                      pet={pet}
+                      className="h-full"
+                      shelterLocation={shelter.location}
+                    />
+                  </Reveal>
+                ))}
+              </div>
+
+              {/* Backend-owned paging, same component as the browse grid. */}
+              <div className="mt-8">
+                <TablePagination
+                  currentPage={page}
+                  totalItems={totalPets}
+                  pageSize={pageSize}
+                  onPageChange={goToPage}
+                  showPageSize={false}
+                  label="pets"
+                />
+              </div>
+            </>
           )}
         </div>
       </section>

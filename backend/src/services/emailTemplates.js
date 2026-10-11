@@ -180,6 +180,51 @@ const chipFor = (status) => {
 };
 
 const applicationsUrl = (appUrl) => `${appUrl}/applications`;
+const visitsUrl = (appUrl) => `${appUrl}/visits`;
+
+/** New visit request received from an adopter (to the shelter contact). */
+export const visitRequestedHtml = ({ name, petName, preferredSlot, message }) =>
+  renderEmail({
+    preheader: `${name} requested a visit with ${petName}.`,
+    title: 'New visit request',
+    content: [
+      chipFor('Requested'),
+      paragraph(`Hi shelter team,`),
+      paragraph(
+        `<strong>${escapeHtml(name)}</strong> would like to schedule a visit with <strong>${escapeHtml(petName)}</strong>.`,
+      ),
+      paragraph(`<strong>Preferred slot:</strong> ${escapeHtml(preferredSlot)}`),
+      note(`<strong>Their message:</strong> ${escapeHtml(message)}`),
+      paragraph('Reply in the visit thread to propose or confirm a time.'),
+    ].join('\n                '),
+  });
+
+const VISIT_STATUS_TITLES = {
+  proposed: 'A visit time was proposed',
+  confirmed: 'Your visit is confirmed',
+  completed: 'Thanks for visiting',
+  cancelled: 'Your visit was cancelled',
+};
+
+/** Visit status change (to the adopter). */
+export const visitStatusHtml = ({ name, petName, status, slot, reason, appUrl }) =>
+  renderEmail({
+    preheader: `Your visit with ${petName} is now ${String(status).toLowerCase()}.`,
+    title: VISIT_STATUS_TITLES[status] ?? 'Update on your visit',
+    content: [
+      chipFor(status),
+      paragraph(`Hi ${escapeHtml(name)},`),
+      paragraph(
+        `Your visit with <strong>${escapeHtml(petName)}</strong> is now <strong>${escapeHtml(status)}</strong>.`,
+      ),
+      slot ? paragraph(`<strong>When:</strong> ${escapeHtml(slot)}`) : '',
+      reason ? note(`<strong>Note from the shelter:</strong> ${escapeHtml(reason)}`) : '',
+      paragraph('You can follow the conversation in your visits page.'),
+      button(visitsUrl(appUrl), 'View your visits'),
+    ]
+      .filter(Boolean)
+      .join('\n                '),
+  });
 
 /** Applicant submitted an application — acknowledgement with a tracking CTA. */
 export const applicationSubmittedHtml = ({ name, petName, appUrl }) =>

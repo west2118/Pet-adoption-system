@@ -132,6 +132,32 @@ export interface Inquiry {
   resolved?: boolean;
 }
 
+export type VisitStatus = 'requested' | 'proposed' | 'confirmed' | 'completed' | 'cancelled';
+
+/** One meet-and-greet coordination thread for a (pet, adopter) pair. */
+export interface VisitThread {
+  id: string;
+  petId: string;
+  adopterId: string;
+  status: VisitStatus;
+  preferredSlot: string;
+  confirmedSlot?: string | null;
+  cancelReason?: string | null;
+  createdAt: string;
+  updatedAt: string;
+  pet?: { id: string; name: string; imageUrl: string };
+}
+
+export interface VisitMessage {
+  id: string;
+  threadId: string;
+  senderId: string;
+  senderName?: string | null;
+  senderRole?: string | null;
+  body: string;
+  createdAt: string;
+}
+
 export type WaiverTemplateStatus = 'Active' | 'Draft';
 
 export interface WaiverTemplate {
@@ -141,6 +167,8 @@ export interface WaiverTemplate {
   category: string;
   body: string;
   status: WaiverTemplateStatus;
+  /** Platform default: visible to the shelter but locked (no edit/deactivate). */
+  isDefault: boolean;
   updatedAt: string;
 }
 

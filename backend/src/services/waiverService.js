@@ -45,11 +45,15 @@ const DEFAULT_TEMPLATES = [
   },
 ];
 
+const seedDefault = async (shelterId, template) => {
+  await createTemplateRow(shelterId, { ...template, isDefault: true });
+};
+
 export const listWaiverTemplates = async (shelterId, options = {}) => {
   let { rows, total } = await listTemplatesByShelter(shelterId, options);
   if (total === 0 && !options.search && !options.category) {
     for (const t of DEFAULT_TEMPLATES) {
-      await createTemplateRow(shelterId, t);
+      await seedDefault(shelterId, t);
     }
     const res = await listTemplatesByShelter(shelterId, options);
     rows = res.rows;
@@ -70,6 +74,9 @@ export const updateWaiverTemplate = async (id, patch, shelterId) => {
   }
   if (current.shelter_id !== shelterId) {
     throw new AppError('Forbidden. Template belongs to another shelter.', 403);
+  }
+  if (current.is_default) {
+    throw new AppError('Default templates cannot be edited or deactivated.', 403);
   }
   const row = await updateTemplateRow(id, patch);
   return mapWaiverTemplate(row);

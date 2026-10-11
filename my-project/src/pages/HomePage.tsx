@@ -142,7 +142,7 @@ export const HomePage = () => {
   return (
     <div className="landing-theme">
       {/* ---------------------------------------------------------------- HERO */}
-      <section className="relative flex min-h-screen flex-col justify-center overflow-hidden bg-background py-16 lg:py-24">
+      <section className="relative flex min-h-screen flex-col justify-center overflow-hidden bg-background pt-32 pb-16 sm:pt-36 sm:pb-20 lg:py-28">
         {/* Background layer */}
         <div className="absolute inset-0 z-0" aria-hidden="true">
           <GridOverlay />

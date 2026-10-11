@@ -9,6 +9,8 @@ import {
   applicationAutoRejectedHtml,
   shelterApprovedHtml,
   shelterRejectedHtml,
+  visitRequestedHtml,
+  visitStatusHtml,
 } from './emailTemplates.js';
 
 /**
@@ -109,4 +111,29 @@ export const sendApplicationAutoRejectedEmail = async ({ to, name, petName, reas
     to,
     subject: 'Update on your application',
     html: applicationAutoRejectedHtml({ name, petName, reason, appUrl: env.APP_URL }),
+  });
+
+/* ------------------------------------------------------------------ *
+ * Visit scheduling thread notifications (fire-and-forget)
+ * ------------------------------------------------------------------ */
+
+export const sendVisitRequestedEmail = async ({ to, name, petName, preferredSlot, message }) =>
+  send({
+    to,
+    subject: `New visit request for ${petName}`,
+    html: visitRequestedHtml({ name, petName, preferredSlot, message }),
+  });
+
+const VISIT_STATUS_SUBJECTS = {
+  proposed: 'A visit time was proposed',
+  confirmed: 'Your visit is confirmed 🎉',
+  completed: 'Thanks for visiting',
+  cancelled: 'Your visit was cancelled',
+};
+
+export const sendVisitStatusEmail = async ({ to, name, petName, status, slot, reason }) =>
+  send({
+    to,
+    subject: VISIT_STATUS_SUBJECTS[status] ?? 'Update on your visit',
+    html: visitStatusHtml({ name, petName, status, slot, reason, appUrl: env.APP_URL }),
   });

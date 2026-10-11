@@ -1,5 +1,5 @@
 import { cn } from '@/lib/utils';
-import type { ApplicationStatus, PetStatus, PetVisibility } from '@/types';
+import type { ApplicationStatus, PetStatus, PetVisibility, VisitStatus } from '@/types';
 import { Badge } from './Badge';
 
 export const PetStatusBadge = ({ status }: { status: PetStatus }) => {
@@ -39,4 +39,14 @@ export const VisibilityBadge = ({ visibility }: { visibility: PetVisibility }) =
       {visibility === 'public' ? 'Public' : 'Private'}
     </Badge>
   );
+};
+
+export const VisitStatusBadge = ({ status }: { status: VisitStatus }) => {
+  const variant =
+    status === 'confirmed' || status === 'completed'
+      ? 'success'
+      : status === 'proposed' || status === 'requested'
+        ? 'warning'
+        : 'muted';
+  return <Badge variant={variant} className="capitalize">{status}</Badge>;
 };

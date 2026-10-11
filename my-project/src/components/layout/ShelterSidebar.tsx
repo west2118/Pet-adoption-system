@@ -1,4 +1,4 @@
-import { Building2, ClipboardList, FileSignature, FileText, LayoutDashboard, MessageCircleQuestion, PawPrint } from 'lucide-react';
+import { Building2, CalendarClock, ClipboardList, FileSignature, FileText, LayoutDashboard, MessageCircleQuestion, PawPrint } from 'lucide-react';
 import { PortalSidebar } from './PortalSidebar';
 
 interface ShelterSidebarProps {
@@ -18,6 +18,7 @@ export const ShelterSidebar = ({ mobileOpen = false, onClose }: ShelterSidebarPr
         { to: '/shelter/listings', label: 'Listings', icon: PawPrint },
         { to: '/shelter/applications', label: 'Applications', icon: ClipboardList },
         { to: '/shelter/inquiries', label: 'Inquiries', icon: MessageCircleQuestion },
+        { to: '/shelter/visits', label: 'Visits', icon: CalendarClock },
         {
           label: 'Templates',
           icon: FileText,

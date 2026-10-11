@@ -71,4 +71,19 @@ describe('smoke (no database required)', () => {
     const res = await request.get('/api/v1/shelter/overview');
     assert.equal(res.status, 401);
   });
+
+  it('POST /visits without token returns 401', async () => {
+    const res = await request.post('/api/v1/visits').send({});
+    assert.equal(res.status, 401);
+  });
+
+  it('GET /visits/my without token returns 401', async () => {
+    const res = await request.get('/api/v1/visits/my');
+    assert.equal(res.status, 401);
+  });
+
+  it('GET /shelter/visits without token returns 401', async () => {
+    const res = await request.get('/api/v1/shelter/visits');
+    assert.equal(res.status, 401);
+  });
 });

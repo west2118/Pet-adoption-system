@@ -34,9 +34,16 @@ export const findTemplateById = async (id) => {
 
 export const createTemplate = async (shelterId, input) => {
   const { rows } = await pool.query(
-    `INSERT INTO waiver_templates (shelter_id, name, category, body, status)
-     VALUES ($1, $2, $3, $4, $5) RETURNING *`,
-    [shelterId, input.name, input.category ?? 'Adoption', input.body, input.status ?? 'Active'],
+    `INSERT INTO waiver_templates (shelter_id, name, category, body, status, is_default)
+     VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
+    [
+      shelterId,
+      input.name,
+      input.category ?? 'Adoption',
+      input.body,
+      input.status ?? 'Active',
+      input.isDefault ?? false,
+    ],
   );
   return rows[0];
 };

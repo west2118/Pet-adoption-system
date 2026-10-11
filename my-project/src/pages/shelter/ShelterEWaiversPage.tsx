@@ -289,7 +289,7 @@ export const ShelterEWaiversPage = () => {
     <div className="w-full px-4 py-6 sm:px-6">
       <SectionHeader
         title="E-Waivers"
-        subtitle="Waiver templates bundled into the printable e-waiver adopters sign at handover."
+        subtitle="Waiver templates bundled into the printable e-waiver adopters sign at handover. The 5 default templates are locked — templates you create are visible only to your shelter."
       />
 
       <div className="mt-6 space-y-4">
@@ -343,6 +343,11 @@ export const ShelterEWaiversPage = () => {
                       <TableRow key={template.id}>
                         <TableCell>
                           <p className="font-medium">{template.name}</p>
+                          {template.isDefault ? (
+                            <Badge variant="info" className="mt-1">
+                              Default · locked
+                            </Badge>
+                          ) : null}
                         </TableCell>
                         <TableCell className="whitespace-nowrap text-muted-foreground">
                           {template.category}
@@ -366,28 +371,32 @@ export const ShelterEWaiversPage = () => {
                             >
                               <Eye className="size-4" />
                             </Button>
-                            <Button
-                              variant="ghost"
-                              size="icon-sm"
-                              className="text-blue-600 hover:bg-blue-50 hover:text-blue-700 dark:text-blue-400 dark:hover:bg-blue-950/40"
-                              aria-label={`Edit ${template.name}`}
-                              onClick={() => openEdit(template)}
-                            >
-                              <Pencil className="size-4" />
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="icon-sm"
-                              className={
-                                template.status === 'Active'
-                                  ? 'text-muted-foreground'
-                                  : 'text-green-600 hover:bg-green-50 hover:text-green-700 dark:text-green-400 dark:hover:bg-green-950/40'
-                              }
-                              aria-label={`${template.status === 'Active' ? 'Deactivate' : 'Activate'} ${template.name}`}
-                              onClick={() => toggleStatus(template)}
-                            >
-                              <Check className="size-4" />
-                            </Button>
+                            {!template.isDefault && (
+                              <>
+                                <Button
+                                  variant="ghost"
+                                  size="icon-sm"
+                                  className="text-blue-600 hover:bg-blue-50 hover:text-blue-700 dark:text-blue-400 dark:hover:bg-blue-950/40"
+                                  aria-label={`Edit ${template.name}`}
+                                  onClick={() => openEdit(template)}
+                                >
+                                  <Pencil className="size-4" />
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="icon-sm"
+                                  className={
+                                    template.status === 'Active'
+                                      ? 'text-muted-foreground'
+                                      : 'text-green-600 hover:bg-green-50 hover:text-green-700 dark:text-green-400 dark:hover:bg-green-950/40'
+                                  }
+                                  aria-label={`${template.status === 'Active' ? 'Deactivate' : 'Activate'} ${template.name}`}
+                                  onClick={() => toggleStatus(template)}
+                                >
+                                  <Check className="size-4" />
+                                </Button>
+                              </>
+                            )}
                           </div>
                         </TableCell>
                       </TableRow>
@@ -406,9 +415,12 @@ export const ShelterEWaiversPage = () => {
                     title={template.name}
                     subtitle={`${template.category} · ${formatDate(template.updatedAt)}`}
                     badges={
-                      <Badge variant={template.status === 'Active' ? 'success' : 'muted'}>
-                        {template.status}
-                      </Badge>
+                      <>
+                        <Badge variant={template.status === 'Active' ? 'success' : 'muted'}>
+                          {template.status}
+                        </Badge>
+                        {template.isDefault ? <Badge variant="info">Default</Badge> : null}
+                      </>
                     }
                     actions={
                       <>
@@ -421,15 +433,17 @@ export const ShelterEWaiversPage = () => {
                         >
                           <Eye className="size-4" />
                         </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon-sm"
-                          className="text-blue-600 hover:bg-blue-50 hover:text-blue-700 dark:text-blue-400 dark:hover:bg-blue-950/40"
-                          aria-label={`Edit ${template.name}`}
-                          onClick={() => openEdit(template)}
-                        >
-                          <Pencil className="size-4" />
-                        </Button>
+                        {!template.isDefault && (
+                          <Button
+                            variant="ghost"
+                            size="icon-sm"
+                            className="text-blue-600 hover:bg-blue-50 hover:text-blue-700 dark:text-blue-400 dark:hover:bg-blue-950/40"
+                            aria-label={`Edit ${template.name}`}
+                            onClick={() => openEdit(template)}
+                          >
+                            <Pencil className="size-4" />
+                          </Button>
+                        )}
                       </>
                     }
                   >

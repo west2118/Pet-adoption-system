@@ -11,6 +11,7 @@ const links = [
   { to: '/pets', label: 'Browse Pets' },
   { to: '/shelters', label: 'Shelters' },
   { to: '/applications', label: 'My Applications' },
+  { to: '/visits', label: 'My Visits' },
 ];
 
 export const Navbar = () => {
@@ -38,7 +39,9 @@ export const Navbar = () => {
     navigate('/login');
   };
 
-  const visibleLinks = links.filter((l) => l.to !== '/applications' || Boolean(user));
+  const visibleLinks = links.filter(
+    (l) => (l.to !== '/applications' && l.to !== '/visits') || Boolean(user),
+  );
 
   const userInitials = (name: string): string =>
     name

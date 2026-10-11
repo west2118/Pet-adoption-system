@@ -57,23 +57,32 @@ export const buildPublicFilters = (filters) => {
  * and headline numbers. Scope matches `buildPublicFilters`'s base set, minus
  * adopted pets — exactly what the grid shows.
  */
-export const listPetFacets = async () => {
-  const base = `WHERE visibility = 'public' AND status <> 'In Process'`;
+export const listPetFacets = async (shelterId) => {
+  const scope = shelterId ? ` AND shelter_id = $1` : '';
+  const params = shelterId ? [shelterId] : [];
+  const base = `WHERE visibility = 'public' AND status <> 'In Process'${scope}`;
   const browsable = `${base} AND status <> 'Adopted'`;
 
-  const [breeds, temperaments, stats] = await Promise.all([
-    pool.query(`SELECT DISTINCT breed FROM pets ${browsable} ORDER BY breed`),
+  const [breeds, temperaments, stats, species] = await Promise.all([
+    pool.query(`SELECT DISTINCT breed FROM pets ${browsable} ORDER BY breed`, params),
     pool.query(
       `SELECT DISTINCT t AS temperament
          FROM pets CROSS JOIN unnest(pets.temperament) t
         ${browsable}
         ORDER BY 1`,
+      params,
     ),
     pool.query(
       `SELECT COUNT(*) FILTER (WHERE status <> 'Adopted')::int AS listed,
               COUNT(*) FILTER (WHERE status = 'Available')::int AS available,
               COUNT(*) FILTER (WHERE status = 'Adopted')::int AS adopted
          FROM pets ${base}`,
+      params,
+    ),
+    pool.query(
+      `SELECT species, COUNT(*)::int AS count FROM pets
+        ${browsable} GROUP BY species ORDER BY count DESC`,
+      params,
     ),
   ]);
 
@@ -81,6 +90,7 @@ export const listPetFacets = async () => {
     breeds: breeds.rows.map((r) => r.breed),
     temperaments: temperaments.rows.map((r) => r.temperament),
     stats: stats.rows[0],
+    species: species.rows,
   };
 };
 

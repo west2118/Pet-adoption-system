@@ -296,7 +296,7 @@ interface ApiErrorResponse {
 | `POST` | `/api/v1/auth/logout` | Public | Revoke session refresh token and clear auth cookies |
 | `GET` | `/api/v1/auth/me` | Authenticated | Fetch active user profile |
 | **Public Pets Catalog** | | | |
-| `GET` | `/api/v1/pets` | Public | List public pets with filtering & pagination |
+| `GET` | `/api/v1/pets` | Public | List public pets with filtering & pagination (`shelterId`, `status`, …; page size owned by the server) |
 | `GET` | `/api/v1/pets/:id` | Public | Get public pet detail by ID |
 | **Shelters** | | | |
 | `GET` | `/api/v1/shelters` | Public | List partner shelters |
@@ -317,6 +317,16 @@ interface ApiErrorResponse {
 | `POST` | `/api/v1/inquiries` | Public / `adopter` | Submit direct inquiry for a pet |
 | `GET` | `/api/v1/shelter/inquiries` | `shelter_staff` | Fetch inquiries inbox for staff's shelter |
 | `PATCH` | `/api/v1/shelter/inquiries/:id/resolve` | `shelter_staff` | Mark inquiry as resolved |
+| **Visit Scheduling** | | | |
+| `POST` | `/api/v1/visits` | `adopter` | Request a visit (creates the pet/adopter thread + opening message) |
+| `GET` | `/api/v1/visits/my` | `adopter` | List own visit threads (paginated, optional `status`) |
+| `GET` | `/api/v1/visits/:id` | thread participant | Read one thread with its messages |
+| `POST` | `/api/v1/visits/:id/messages` | `adopter` | Post a message to own open thread |
+| `PATCH` | `/api/v1/visits/:id/cancel` | `adopter` | Cancel own open thread |
+| `GET` | `/api/v1/shelter/visits` | `shelter_staff` | List shelter visit threads (paginated, optional `status`) |
+| `GET` | `/api/v1/shelter/visits/:id` | `shelter_staff` | Read one shelter thread with messages |
+| `POST` | `/api/v1/shelter/visits/:id/messages` | `shelter_staff` | Reply in a shelter thread |
+| `PATCH` | `/api/v1/shelter/visits/:id/status` | `shelter_staff` | Move status (`proposed`/`confirmed`/`completed`/`cancelled`, validated transitions) |
 | **Platform Admin Governance** | | | |
 | `GET` | `/api/v1/admin/stats` | `platform_admin` | System-wide overview dashboard KPI stats + shelter summaries + recent applications |
 | `GET` | `/api/v1/admin/users` | `platform_admin` | List all platform registered users |

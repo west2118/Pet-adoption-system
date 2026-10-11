@@ -7,6 +7,8 @@ import { applicationRoutes } from './applicationRoutes.js';
 import { shelterApplicationRoutes } from './shelterApplicationRoutes.js';
 import { inquiryRoutes } from './inquiryRoutes.js';
 import { shelterInquiryRoutes } from './shelterInquiryRoutes.js';
+import { visitRoutes } from './visitRoutes.js';
+import { shelterVisitRoutes } from './shelterVisitRoutes.js';
 import { favoriteRoutes } from './favoriteRoutes.js';
 import { shelterOnboardingRoutes } from './shelterOnboardingRoutes.js';
 import { shelterOverviewRoutes } from './shelterOverviewRoutes.js';
@@ -27,6 +29,8 @@ apiRouter.use('/applications', applicationRoutes);
 apiRouter.use('/shelter/applications', shelterApplicationRoutes);
 apiRouter.use('/inquiries', inquiryRoutes);
 apiRouter.use('/shelter/inquiries', shelterInquiryRoutes);
+apiRouter.use('/visits', visitRoutes);
+apiRouter.use('/shelter/visits', shelterVisitRoutes);
 apiRouter.use('/favorites', favoriteRoutes);
 apiRouter.use('/shelter-onboarding', shelterOnboardingRoutes);
 // Mounted before the broader `/shelter` router so `/overview` resolves here.
