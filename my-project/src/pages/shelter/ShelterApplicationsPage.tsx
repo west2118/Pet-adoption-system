@@ -9,7 +9,15 @@ import {
 } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 import { toast } from 'react-toastify';
-import { DetailsModal, RecordCard, SectionHeader, TableCard, TablePagination } from '@/components/shared';
+import {
+  DetailsModal,
+  RecordCard,
+  RecordCardSkeleton,
+  SectionHeader,
+  TableCard,
+  TablePagination,
+  TableSkeletonRows,
+} from '@/components/shared';
 import { WaiverModal } from '@/components/features/WaiverModal';
 import {
   Table,
@@ -296,9 +304,6 @@ export const ShelterApplicationsPage = () => {
           </Button>
         }
       />
-      {loading && (
-        <p className="mt-4 text-sm text-muted-foreground">Loading applications…</p>
-      )}
 
       <div className="mt-6 space-y-4">
         <TableCard
@@ -306,7 +311,7 @@ export const ShelterApplicationsPage = () => {
           description="Incoming adoption requests for your shelter's pets."
           icon={ClipboardList}
           toolbar={toolbar}
-          isEmpty={applications.length === 0}
+          isEmpty={!loading && applications.length === 0}
           emptyTitle="No applications found"
           emptyDescription="Try a different search or status filter."
           footer={pagination}
@@ -325,7 +330,9 @@ export const ShelterApplicationsPage = () => {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {applications.map((app) => {
+                {loading ? (
+                  <TableSkeletonRows columns={5} rows={5} avatar />
+                ) : applications.map((app) => {
                   const pet = petOf(app.petId);
                   return (
                     <TableRow key={app.id}>
@@ -393,7 +400,9 @@ export const ShelterApplicationsPage = () => {
 
           {/* Mobile: stacked cards */}
           <div className="grid gap-3 p-4 md:hidden">
-            {applications.map((app) => {
+            {loading ? (
+              <RecordCardSkeleton count={3} />
+            ) : applications.map((app) => {
               const pet = petOf(app.petId);
               return (
                 <RecordCard

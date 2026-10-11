@@ -1,6 +1,7 @@
-import type { ShelterSummary } from '@/hooks/usePlatformOverview';
+import type { ShelterSummaryRow } from '@/services/api';
 import { Badge } from '@/components/ui/Badge';
 import { EmptyState } from '@/components/ui/Feedback';
+import { TableSkeletonRows } from '@/components/shared/SkeletonLoaders';
 import {
   Table,
   TableBody,
@@ -11,11 +12,16 @@ import {
 } from '@/components/ui/Table';
 
 interface SheltersSummaryTableProps {
-  shelters: ShelterSummary[];
+  shelters: ShelterSummaryRow[];
+  /** Shows skeleton rows inside the table while the list loads or refreshes. */
+  loading?: boolean;
 }
 
-export const SheltersSummaryTable = ({ shelters }: SheltersSummaryTableProps) => {
-  if (shelters.length === 0) {
+export const SheltersSummaryTable = ({
+  shelters,
+  loading = false,
+}: SheltersSummaryTableProps) => {
+  if (!loading && shelters.length === 0) {
     return (
       <div className="p-5 sm:p-6">
         <EmptyState
@@ -37,7 +43,9 @@ export const SheltersSummaryTable = ({ shelters }: SheltersSummaryTableProps) =>
         </TableRow>
       </TableHeader>
       <TableBody>
-        {shelters.map(({ shelter, petCount, publicPets, pendingApplications, staff }) => (
+        {loading ? (
+          <TableSkeletonRows columns={4} rows={4} avatar />
+        ) : shelters.map(({ shelter, petCount, publicPets, pendingApplications, staff }) => (
           <TableRow key={shelter.id}>
             <TableCell>
               <div className="flex items-center gap-2.5">

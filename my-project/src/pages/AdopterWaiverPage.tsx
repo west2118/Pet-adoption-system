@@ -73,7 +73,7 @@ export const AdopterWaiverPage = () => {
             <Printer className="size-4" /> Print waiver
           </Button>
         </div>
-        <div id="waiver-print" className="mb-10 rounded-lg border bg-white p-6 sm:p-10">
+        <div id="waiver-print" className="waiver-preview mb-10 rounded-lg">
           <WaiverPrintDocument waiver={waiver} />
         </div>
       </div>

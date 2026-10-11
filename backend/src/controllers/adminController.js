@@ -1,4 +1,4 @@
-import { getSystemStats, listAllPets, listAllUsers, setUserRole } from '../services/adminService.js';
+import { getSystemStats, getShelterForAdmin, listAllPets, listAllUsers, listSheltersForAdmin, setUserRole } from '../services/adminService.js';
 import { sendSuccess, buildMeta } from '../utils/respond.js';
 import { parsePagination } from '../validators/commonValidator.js';
 
@@ -29,4 +29,16 @@ export const getAllPets = async (req, res) => {
   const search = req.query.search || undefined;
   const { pets, total } = await listAllPets({ limit, offset, search });
   return sendSuccess(res, { pets }, undefined, buildMeta(page, limit, total));
+};
+
+export const getAdminShelters = async (req, res) => {
+  const { page, limit, offset } = parsePagination(req.query);
+  const search = req.query.search || undefined;
+  const { shelters, total } = await listSheltersForAdmin({ limit, offset, search });
+  return sendSuccess(res, { shelters }, undefined, buildMeta(page, limit, total));
+};
+
+export const getAdminShelter = async (req, res) => {
+  const details = await getShelterForAdmin(req.params.id);
+  return sendSuccess(res, details);
 };

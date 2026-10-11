@@ -1,5 +1,4 @@
-import { pool } from '../config/database.js';
-import { AppError } from '../utils/AppError.js';
+import { pool } from '../config/database.js';import { AppError } from '../utils/AppError.js';
 import { mapShelterApplication, mapShelter, mapUser } from '../utils/mappers.js';
 import {
   createApplication,
@@ -93,13 +92,28 @@ export const approveShelterApplication = async (applicationId) => {
     client.release();
   }
 
-  sendShelterApprovedEmail({
+  const mail = await sendShelterApprovedEmail({
     to: result.application.email,
     name: result.application.name,
     shelterName: result.shelter.name,
-  }).catch(() => {});
+  }).catch(() => ({ sent: false, stubbed: false, error: true }));
+  const emailSent = mail.sent === true;
+  const emailStubbed = mail.stubbed === true;
+  await pool
+    .query(
+      `UPDATE shelter_applications
+          SET email_sent = $2, email_sent_at = CASE WHEN $2 THEN CURRENT_TIMESTAMP ELSE NULL END
+        WHERE id = $1`,
+      [applicationId, emailSent],
+    )
+    .catch(() => {});
 
-  return { shelter: result.shelter, user: result.user };
+  return {
+    shelter: result.shelter,
+    user: result.user,
+    emailSent,
+    emailStubbed,
+  };
 };
 
 export const rejectShelterApplication = async (applicationId, reviewNote) => {
@@ -112,7 +126,6 @@ export const rejectShelterApplication = async (applicationId, reviewNote) => {
   }
 
   const client = await pool.connect();
-  let updated;
   try {
     await client.query('BEGIN');
     await updateApplicationStatus(client, applicationId, 'rejected', reviewNote ?? null);
@@ -123,7 +136,6 @@ export const rejectShelterApplication = async (applicationId, reviewNote) => {
       [row.user_id, reviewNote ?? null],
     );
     await client.query('COMMIT');
-    updated = mapShelterApplication({ ...row, status: 'rejected', review_note: reviewNote ?? null });
   } catch (err) {
     await client.query('ROLLBACK');
     throw err;
@@ -131,11 +143,68 @@ export const rejectShelterApplication = async (applicationId, reviewNote) => {
     client.release();
   }
 
-  sendShelterRejectedEmail({
+  const mail = await sendShelterRejectedEmail({
     to: row.email,
     name: row.name,
     reason: reviewNote,
-  }).catch(() => {});
+  }).catch(() => ({ sent: false, stubbed: false, error: true }));
+  const emailSent = mail.sent === true;
+  const emailStubbed = mail.stubbed === true;
+  await pool
+    .query(
+      `UPDATE shelter_applications
+          SET email_sent = $2, email_sent_at = CASE WHEN $2 THEN CURRENT_TIMESTAMP ELSE NULL END
+        WHERE id = $1`,
+      [applicationId, emailSent],
+    )
+    .catch(() => {});
 
-  return updated;
+  const rejected = mapShelterApplication({
+    ...row,
+    status: 'rejected',
+    review_note: reviewNote ?? null,
+    email_sent: emailSent,
+  });
+  return { application: rejected, emailSent, emailStubbed };
+};
+
+/**
+ * Retries the approve/reject notification email for an already-reviewed
+ * application. Only reviewed applications can be resent.
+ */
+export const resendApplicationEmail = async (applicationId) => {
+  const row = await findApplicationById(applicationId);
+  if (!row) {
+    throw new AppError('Shelter application not found.', 404);
+  }
+  if (row.status === 'pending') {
+    throw new AppError('This application has not been reviewed yet.', 409);
+  }
+
+  const mail =
+    row.status === 'approved'
+      ? await sendShelterApprovedEmail({
+          to: row.email,
+          name: row.name,
+          shelterName: row.name,
+        }).catch(() => ({ sent: false, stubbed: false, error: true }))
+      : await sendShelterRejectedEmail({
+          to: row.email,
+          name: row.name,
+          reason: row.review_note ?? undefined,
+        }).catch(() => ({ sent: false, stubbed: false, error: true }));
+
+  const emailSent = mail.sent === true;
+  const emailStubbed = mail.stubbed === true;
+  await pool
+    .query(
+      `UPDATE shelter_applications
+          SET email_sent = $2, email_sent_at = CASE WHEN $2 THEN CURRENT_TIMESTAMP ELSE NULL END
+        WHERE id = $1`,
+      [applicationId, emailSent],
+    )
+    .catch(() => {});
+
+  const application = mapShelterApplication({ ...row, email_sent: emailSent });
+  return { application, emailSent, emailStubbed };
 };

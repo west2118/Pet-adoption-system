@@ -8,7 +8,7 @@ import {
   XAxis,
   YAxis,
 } from 'recharts';
-import type { TrendPoint } from '@/hooks/useShelterOverview';
+import type { TrendPoint } from './chartTypes';
 import { chartTooltipProps } from './chartTheme';
 
 interface ApplicationsTrendChartProps {

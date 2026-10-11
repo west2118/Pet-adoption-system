@@ -3,6 +3,7 @@ import {
   getMyShelterApplication,
   listShelterApplications,
   rejectShelterApplication,
+  resendApplicationEmail,
   submitShelterApplication,
 } from '../services/shelterApplicationService.js';
 import { sendSuccess, buildMeta } from '../utils/respond.js';
@@ -43,6 +44,22 @@ export const approveApplication = async (req, res) => {
 };
 
 export const rejectApplication = async (req, res) => {
-  const application = await rejectShelterApplication(req.params.id, req.body.reviewNote);
-  return sendSuccess(res, { application }, 'Shelter application rejected.');
+  const { application, emailSent, emailStubbed } = await rejectShelterApplication(
+    req.params.id,
+    req.body.reviewNote,
+  );
+  return sendSuccess(
+    res,
+    { application, emailSent, emailStubbed },
+    'Shelter application rejected.',
+  );
+};
+
+export const resendReviewEmail = async (req, res) => {
+  const { application, emailSent, emailStubbed } = await resendApplicationEmail(req.params.id);
+  return sendSuccess(
+    res,
+    { application, emailSent, emailStubbed },
+    emailSent ? 'Notification email resent.' : 'Email resend attempted.',
+  );
 };

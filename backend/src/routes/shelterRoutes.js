@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { addShelter, editShelter, getAllShelters, getShelter, getShelterStats } from '../controllers/shelterController.js';
+import { addShelter, editShelter, getAllShelters, getShelter, getShelterStats, removeShelter } from '../controllers/shelterController.js';
 import { authenticate } from '../middlewares/authenticate.js';
 import { authorize } from '../middlewares/authorize.js';
 import { validate } from '../middlewares/validate.js';
@@ -26,4 +26,11 @@ shelterRoutes.patch(
   validate(uuidParam, 'params'),
   validate(updateShelterSchema),
   editShelter,
+);
+shelterRoutes.delete(
+  '/:id',
+  authenticate,
+  authorize('platform_admin'),
+  validate(uuidParam, 'params'),
+  removeShelter,
 );

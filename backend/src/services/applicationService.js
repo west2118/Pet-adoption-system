@@ -10,6 +10,12 @@ import {
   listApplicationsByShelter,
 } from '../repositories/applicationRepository.js';
 import { findPetById } from '../repositories/petRepository.js';
+import {
+  sendApplicationSubmittedEmail,
+  sendApplicationUnderReviewEmail,
+  sendApplicationDecisionEmail,
+  sendApplicationAutoRejectedEmail,
+} from './mailerService.js';
 
 export const submitApplication = async (input, applicantId) => {
   const pet = await findPetById(input.petId);
@@ -20,6 +26,14 @@ export const submitApplication = async (input, applicantId) => {
     throw new AppError(`Applications are closed for pets with status '${pet.status}'.`, 400);
   }
   const row = await createApplication(input, applicantId);
+
+  // Fire-and-forget acknowledgement — a mail failure must never fail the submission.
+  sendApplicationSubmittedEmail({
+    to: row.email,
+    name: row.applicant_name,
+    petName: pet.name,
+  }).catch(() => {});
+
   const history = await getApplicationHistory(row.id);
   return mapApplication(row, history);
 };
@@ -45,7 +59,8 @@ export const listShelterApplications = async (shelterId, options = {}) => {
 
 // Auto-rejects every other open application for the same pet inside the
 // same transaction, so accepting one adopter can never leave competitors
-// hanging. Returns the number of applications rejected.
+// hanging. Returns the rejected rows (id, applicant_name, email) so the caller
+// can notify them once the transaction has committed.
 const autoRejectCompetingApplications = async (
   client,
   petId,
@@ -57,7 +72,7 @@ const autoRejectCompetingApplications = async (
     `UPDATE adoption_applications
       SET status = 'Rejected', staff_notes = $1, updated_at = CURRENT_TIMESTAMP
       WHERE pet_id = $2 AND id <> $3 AND status = ANY($4)
-      RETURNING id`,
+      RETURNING id, applicant_name, email`,
     [note, petId, acceptedId, statuses],
   );
   for (const row of rows) {
@@ -66,7 +81,34 @@ const autoRejectCompetingApplications = async (
       [row.id, note],
     );
   }
-  return rows.length;
+  return rows;
+};
+
+/**
+ * Fire-and-forget status notifications. Never awaited and never throws: the
+ * status change is already committed, so a mail hiccup cannot affect it.
+ */
+const notifyApplicationStatusChange = ({ record, petName, newStatus, note, rejectedRows }) => {
+  const applicant = { to: record.email, name: record.applicant_name, petName };
+
+  if (newStatus === 'Under Review') {
+    sendApplicationUnderReviewEmail(applicant).catch(() => {});
+  } else if (newStatus === 'Approved' || newStatus === 'Rejected' || newStatus === 'Adopted') {
+    sendApplicationDecisionEmail({ ...applicant, status: newStatus, note }).catch(() => {});
+  }
+
+  const reason =
+    newStatus === 'Adopted'
+      ? 'This pet has been adopted.'
+      : "Another adopter's application for this pet was accepted.";
+  for (const competitor of rejectedRows) {
+    sendApplicationAutoRejectedEmail({
+      to: competitor.email,
+      name: competitor.applicant_name,
+      petName,
+      reason,
+    }).catch(() => {});
+  }
 };
 
 // Atomic: application status + audit history + pet status move together.
@@ -76,7 +118,7 @@ export const updateApplicationStatus = async (applicationId, shelterId, newStatu
     await client.query('BEGIN');
 
     const appRes = await client.query(
-      `SELECT a.*, p.shelter_id, p.id AS pet_id
+      `SELECT a.*, p.shelter_id, p.id AS pet_id, p.name AS pet_name
        FROM adoption_applications a
        JOIN pets p ON a.pet_id = p.id
        WHERE a.id = $1`,
@@ -102,6 +144,9 @@ export const updateApplicationStatus = async (applicationId, shelterId, newStatu
       [applicationId, newStatus, note ?? null],
     );
 
+    // Competitors closed by this transition — notified after COMMIT.
+    let rejectedRows = [];
+
     if (newStatus === 'Approved') {
       await client.query(
         `UPDATE pets SET status = 'In Process', updated_at = CURRENT_TIMESTAMP WHERE id = $1`,
@@ -109,7 +154,7 @@ export const updateApplicationStatus = async (applicationId, shelterId, newStatu
       );
       // One accepted adopter per pet — every other open application for the
       // same pet is rejected automatically with an audit trail.
-      await autoRejectCompetingApplications(
+      rejectedRows = await autoRejectCompetingApplications(
         client,
         record.pet_id,
         applicationId,
@@ -122,7 +167,7 @@ export const updateApplicationStatus = async (applicationId, shelterId, newStatu
         [record.pet_id],
       );
       // Safety net: nothing may stay open once the pet is adopted.
-      await autoRejectCompetingApplications(
+      rejectedRows = await autoRejectCompetingApplications(
         client,
         record.pet_id,
         applicationId,
@@ -132,6 +177,16 @@ export const updateApplicationStatus = async (applicationId, shelterId, newStatu
     }
 
     await client.query('COMMIT');
+
+    // Only now is the change durable — notifications go out without blocking
+    // the response, and pet_name comes from the join above.
+    notifyApplicationStatusChange({
+      record,
+      petName: record.pet_name,
+      newStatus,
+      note,
+      rejectedRows,
+    });
 
     const updated = await findApplicationById(applicationId);
     const history = await getApplicationHistory(applicationId);

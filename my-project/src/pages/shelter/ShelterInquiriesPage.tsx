@@ -7,7 +7,15 @@ import {
 } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 import { toast } from 'react-toastify';
-import { DetailsModal, RecordCard, SectionHeader, TableCard, TablePagination } from '@/components/shared';
+import {
+  DetailsModal,
+  RecordCard,
+  RecordCardSkeleton,
+  SectionHeader,
+  TableCard,
+  TablePagination,
+  TableSkeletonRows,
+} from '@/components/shared';
 import {
   Table,
   TableBody,
@@ -16,12 +24,16 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/Table';
-import { Input, Textarea, Label } from '@/components/ui/Form';
+import { Input, Select, Textarea, Label } from '@/components/ui/Form';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/Badge';
 import { useAuth } from '@/hooks/useAuth';
 import { usePets, useShelters } from '@/hooks/useData';
-import { listShelterInquiriesPaginated, type Inquiry } from '@/services/api';
+import {
+  listShelterInquiriesPaginated,
+  resolveShelterInquiry,
+  type Inquiry,
+} from '@/services/api';
 import { formatDate } from '@/utils/formatters';
 
 const STATUS_FILTER_OPTIONS = [
@@ -44,7 +56,8 @@ export const ShelterInquiriesPage = () => {
   const [detailsId, setDetailsId] = useState<string | null>(null);
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [replies, setReplies] = useState<Record<string, string>>({});
-  const [resolved, setResolved] = useState<Set<string>>(new Set());
+  /** Local resolution overrides (demo-mode store + reopen, which the API lacks). */
+  const [overrides, setOverrides] = useState<Record<string, boolean>>({});
 
   const myShelterId = user?.shelterId ?? shelters[0]?.id ?? null;
 
@@ -76,18 +89,38 @@ export const ShelterInquiriesPage = () => {
 
   const petOf = (petId: string) => pets.find((p) => p.id === petId);
 
-  const toggleResolved = (id: string) => {
-    setResolved((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) {
-        next.delete(id);
-        toast.info('Inquiry reopened.');
+  /** Server flag first, local override second (covers demo mode + reopen). */
+  const isResolved = (inquiry: Inquiry) =>
+    overrides[inquiry.id] ?? inquiry.resolved ?? false;
+
+  const toggleResolved = async (id: string) => {
+    const current = inquiries.find((i) => i.id === id);
+    const currentlyResolved = current ? isResolved(current) : false;
+    if (currentlyResolved) {
+      // The backend has no reopen endpoint, so reopening stays local.
+      setOverrides((prev) => ({ ...prev, [id]: false }));
+      setInquiries((prev) => prev.map((i) => (i.id === id ? { ...i, resolved: false } : i)));
+      toast.info('Inquiry reopened.');
+      return;
+    }
+    try {
+      const updated = await resolveShelterInquiry(id);
+      if (updated) {
+        setInquiries((prev) =>
+          prev.map((i) => (i.id === id ? { ...i, resolved: true } : i)),
+        );
+        setOverrides((prev) => {
+          const next = { ...prev };
+          delete next[id];
+          return next;
+        });
       } else {
-        next.add(id);
-        toast.success('Inquiry marked as resolved!');
+        setOverrides((prev) => ({ ...prev, [id]: true }));
       }
-      return next;
-    });
+      toast.success('Inquiry marked as resolved!');
+    } catch {
+      toast.error('Failed to update inquiry. Please try again.');
+    }
   };
 
   const sendReply = (id: string) => {
@@ -117,25 +150,16 @@ export const ShelterInquiriesPage = () => {
         />
       </div>
       <div className="flex flex-wrap items-center gap-2">
-        <div className="flex items-center gap-1 rounded-lg border p-0.5">
-          {STATUS_FILTER_OPTIONS.map((option) => (
-            <button
-              key={option.value}
-              type="button"
-              onClick={() => {
-                setStatusFilter(option.value as 'all' | 'open' | 'resolved');
-                setPage(1);
-              }}
-              className={`rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${
-                statusFilter === option.value
-                  ? 'bg-primary text-primary-foreground'
-                  : 'text-muted-foreground hover:bg-muted'
-              }`}
-            >
-              {option.label}
-            </button>
-          ))}
-        </div>
+        <Select
+          aria-label="Filter by status"
+          className="h-9 w-[150px]"
+          value={statusFilter}
+          onChange={(e) => {
+            setStatusFilter(e.target.value as 'all' | 'open' | 'resolved');
+            setPage(1);
+          }}
+          options={STATUS_FILTER_OPTIONS}
+        />
       </div>
     </div>
   );
@@ -161,9 +185,6 @@ export const ShelterInquiriesPage = () => {
         title="Inquiries inbox"
         subtitle="Messages from potential adopters about your pets."
       />
-      {loading && (
-        <p className="mt-4 text-sm text-muted-foreground">Loading inquiries…</p>
-      )}
 
       <div className="mt-6 space-y-4">
         <TableCard
@@ -171,7 +192,7 @@ export const ShelterInquiriesPage = () => {
           description="Direct messages from adopters about your listings."
           icon={MessageCircleQuestion}
           toolbar={toolbar}
-          isEmpty={inquiries.length === 0}
+          isEmpty={!loading && inquiries.length === 0}
           emptyTitle="No inquiries found"
           emptyDescription="Try a different search or filter."
           footer={pagination}
@@ -191,9 +212,11 @@ export const ShelterInquiriesPage = () => {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {inquiries.map((inquiry) => {
+                {loading ? (
+                  <TableSkeletonRows columns={6} rows={5} avatar />
+                ) : inquiries.map((inquiry) => {
                   const pet = petOf(inquiry.petId);
-                  const isResolved = resolved.has(inquiry.id);
+                  const resolved = isResolved(inquiry);
                   return (
                     <TableRow key={inquiry.id}>
                       <TableCell>
@@ -228,8 +251,8 @@ export const ShelterInquiriesPage = () => {
                         {formatDate(inquiry.createdAt)}
                       </TableCell>
                       <TableCell>
-                        <Badge variant={isResolved ? 'success' : 'warning'}>
-                          {isResolved ? 'Resolved' : 'Open'}
+                        <Badge variant={resolved ? 'success' : 'warning'}>
+                          {resolved ? 'Resolved' : 'Open'}
                         </Badge>
                       </TableCell>
                       <TableCell className="text-center">
@@ -243,7 +266,7 @@ export const ShelterInquiriesPage = () => {
                           >
                             <Eye className="size-4" />
                           </Button>
-                          {isResolved ? (
+                          {resolved ? (
                             <Button
                               variant="ghost"
                               size="icon-sm"
@@ -275,9 +298,11 @@ export const ShelterInquiriesPage = () => {
 
           {/* Mobile: stacked cards */}
           <div className="grid gap-3 p-4 md:hidden">
-            {inquiries.map((inquiry) => {
+            {loading ? (
+              <RecordCardSkeleton count={3} />
+            ) : inquiries.map((inquiry) => {
               const pet = petOf(inquiry.petId);
-              const isResolved = resolved.has(inquiry.id);
+              const resolved = isResolved(inquiry);
               return (
                 <RecordCard
                   key={inquiry.id}
@@ -286,8 +311,8 @@ export const ShelterInquiriesPage = () => {
                   title={inquiry.fromName}
                   subtitle={`${pet?.name ?? '—'} · ${formatDate(inquiry.createdAt)}`}
                   badges={
-                    <Badge variant={isResolved ? 'success' : 'warning'}>
-                      {isResolved ? 'Resolved' : 'Open'}
+                    <Badge variant={resolved ? 'success' : 'warning'}>
+                      {resolved ? 'Resolved' : 'Open'}
                     </Badge>
                   }
                   actions={
@@ -301,7 +326,7 @@ export const ShelterInquiriesPage = () => {
                       >
                         <Eye className="size-4" />
                       </Button>
-                      {isResolved ? (
+                      {resolved ? (
                         <Button
                           variant="ghost"
                           size="icon-sm"
@@ -336,8 +361,10 @@ export const ShelterInquiriesPage = () => {
       <DetailsModal
         open={detailsInquiry !== null}
         onClose={() => setDetailsId(null)}
-        title={detailsInquiry?.fromName ?? 'Inquiry'}
-        description={detailsInquiry ? detailsInquiry.fromEmail : undefined}
+        title={detailsInquiry ? `Inquiry from ${detailsInquiry.fromName}` : 'Inquiry'}
+        description={
+          detailsInquiry ? `Received ${formatDate(detailsInquiry.createdAt)}` : undefined
+        }
         icon={MessageCircleQuestion}
         footer={
           detailsInquiry ? (
@@ -355,7 +382,7 @@ export const ShelterInquiriesPage = () => {
                 variant="outline"
                 onClick={() => toggleResolved(detailsInquiry.id)}
               >
-                {resolved.has(detailsInquiry.id) ? 'Reopen' : 'Mark resolved'}
+                {isResolved(detailsInquiry) ? 'Reopen' : 'Mark resolved'}
               </Button>
             </div>
           ) : undefined
@@ -376,16 +403,25 @@ export const ShelterInquiriesPage = () => {
                   {petOf(detailsInquiry.petId)?.name ?? 'Unknown pet'}
                 </p>
                 <p className="truncate text-xs text-muted-foreground">
-                  Received {formatDate(detailsInquiry.createdAt)}
+                  {petOf(detailsInquiry.petId)?.breed ?? 'Pet inquiry'}
                 </p>
               </div>
-              <Badge variant={resolved.has(detailsInquiry.id) ? 'success' : 'warning'}>
-                {resolved.has(detailsInquiry.id) ? 'Resolved' : 'Open'}
+              <Badge variant={isResolved(detailsInquiry) ? 'success' : 'warning'}>
+                {isResolved(detailsInquiry) ? 'Resolved' : 'Open'}
               </Badge>
             </div>
 
             <div className="rounded-lg border p-3">
-              <p className="text-sm">{detailsInquiry.message}</p>
+              <p className="text-xs uppercase tracking-wide text-muted-foreground">From</p>
+              <p className="mt-1 text-sm font-medium">{detailsInquiry.fromName}</p>
+              <p className="text-sm text-muted-foreground">{detailsInquiry.fromEmail}</p>
+            </div>
+
+            <div>
+              <p className="text-xs uppercase tracking-wide text-muted-foreground">Message</p>
+              <p className="mt-1 whitespace-pre-line text-sm leading-relaxed">
+                {detailsInquiry.message}
+              </p>
             </div>
 
             {replies[detailsInquiry.id] ? (

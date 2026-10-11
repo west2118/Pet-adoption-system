@@ -1,4 +1,4 @@
-import { createShelter, getShelterById, getShelterStats as readShelterStats, listShelters, updateShelter } from '../services/shelterService.js';
+import { createShelter, deleteShelter, getShelterById, getShelterStats as readShelterStats, listShelters, updateShelter } from '../services/shelterService.js';
 import { sendSuccess, buildMeta } from '../utils/respond.js';
 import { parsePagination } from '../validators/commonValidator.js';
 
@@ -27,4 +27,9 @@ export const addShelter = async (req, res) => {
 export const editShelter = async (req, res) => {
   const shelter = await updateShelter(req.params.id, req.body, req.user);
   return sendSuccess(res, { shelter }, 'Shelter updated successfully.');
+};
+
+export const removeShelter = async (req, res) => {
+  await deleteShelter(req.params.id);
+  return sendSuccess(res, {}, 'Shelter removed successfully.');
 };

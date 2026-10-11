@@ -11,9 +11,11 @@ import {
   isBlank,
   isEmail,
 } from '@/components/shared';
+import { ApiError } from '@/lib/apiClient';
+import { submitInquiry } from '@/services/api';
 
-export const InquiryForm = ({ petName }: { petName: string }) => {
-  const [sent, setSent] = useState(false);
+export const InquiryForm = ({ petId, petName }: { petId: string; petName: string }) => {
+  const [sending, setSending] = useState(false);
   const [form, setForm] = useState({ name: '', email: '', message: '' });
   const [fieldErrors, setFieldErrors] = useState<Partial<Record<keyof typeof form, string>>>({});
 
@@ -22,7 +24,7 @@ export const InquiryForm = ({ petName }: { petName: string }) => {
     setFieldErrors((prev) => ({ ...prev, [key]: undefined }));
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const next: typeof fieldErrors = {};
     if (isBlank(form.name)) next.name = 'Please enter your name.';
@@ -36,23 +38,25 @@ export const InquiryForm = ({ petName }: { petName: string }) => {
       focusFirstError();
       return;
     }
-    setSent(true);
-    toast.success(`Inquiry about ${petName} sent! The shelter will reply soon.`);
+    setSending(true);
+    try {
+      await submitInquiry({
+        petId,
+        fromName: form.name.trim(),
+        fromEmail: form.email.trim(),
+        message: form.message.trim(),
+      });
+      setForm({ name: '', email: '', message: '' });
+      setFieldErrors({});
+      toast.success(`Inquiry about ${petName} sent! The shelter will reply soon.`);
+    } catch (err) {
+      toast.error(
+        err instanceof ApiError ? err.message : 'Failed to send inquiry. Please try again.',
+      );
+    } finally {
+      setSending(false);
+    }
   };
-
-  if (sent) {
-    return (
-      <Card>
-        <CardContent className="pt-5 text-sm">
-          <p className="font-semibold">Inquiry sent!</p>
-          <p className="mt-1 text-muted-foreground">
-            The shelter will reply about {petName} within 1–2 days. You will also
-            get status updates under My Applications.
-          </p>
-        </CardContent>
-      </Card>
-    );
-  }
 
   return (
     <Card>
@@ -96,8 +100,8 @@ export const InquiryForm = ({ petName }: { petName: string }) => {
               error={fieldErrors.message}
             />
           </div>
-          <Button type="submit" className="w-full" size="sm">
-            <Send className="size-3.5" /> Send inquiry
+          <Button type="submit" className="w-full" size="sm" disabled={sending}>
+            <Send className="size-3.5" /> {sending ? 'Sending…' : 'Send inquiry'}
           </Button>
         </form>
       </CardContent>

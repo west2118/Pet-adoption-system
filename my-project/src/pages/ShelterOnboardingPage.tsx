@@ -113,12 +113,14 @@ export const ShelterOnboardingPage = () => {
     if (isBlank(form.location)) next.location = 'Please enter the city / region.';
     if (isBlank(form.address)) next.address = 'Please enter the full address.';
     if (isBlank(form.phone)) next.phone = 'Please enter a contact phone.';
-    if (!isEmail(form.email)) next.email = 'Enter a valid shelter email.';
+    if (isBlank(form.email)) next.email = 'Please enter the shelter email.';
+    else if (!isEmail(form.email)) next.email = 'Enter a valid shelter email.';
     if (isBlank(form.operatingHours)) next.operatingHours = 'Please enter operating hours.';
     if (isBlank(form.description)) next.description = 'Please describe the shelter.';
     else if (form.description.trim().length < 20)
       next.description = 'Description must be at least 20 characters.';
-    if (!isUrl(form.imageUrl)) next.imageUrl = 'Enter a valid image URL (https://…).';
+    if (isBlank(form.imageUrl)) next.imageUrl = 'Please enter a logo or photo URL.';
+    else if (!isUrl(form.imageUrl)) next.imageUrl = 'Enter a valid image URL (https://…).';
     setFieldErrors(next);
     if (Object.keys(next).length > 0) {
       focusFirstError();
@@ -129,7 +131,7 @@ export const ShelterOnboardingPage = () => {
     try {
       await authService.submitShelterApplication({
         ...form,
-        imageUrl: form.imageUrl.trim() || undefined,
+        imageUrl: form.imageUrl.trim(),
       });
       toast.success('Shelter application submitted! We will email you once reviewed.');
       navigate('/onboarding/shelter/pending', { replace: true });
@@ -179,7 +181,7 @@ export const ShelterOnboardingPage = () => {
       </section>
 
       {/* ------------------------------------------------------------- FORM */}
-      <section className="bg-background pb-20 md:pb-28">
+      <section className="bg-background mt-8 md:mt-14 pb-20 md:pb-28">
         <div className={frame}>
           <div className="grid gap-10 lg:grid-cols-12 lg:gap-12">
             {/* Left — context rail */}
@@ -237,10 +239,11 @@ export const ShelterOnboardingPage = () => {
                 >
                   <div className="space-y-2 sm:col-span-2">
                     <label className={labelClass} htmlFor="ob-name">
-                      Shelter name
+                      Shelter name <span className="text-destructive font-medium ml-0.5">*</span>
                     </label>
                     <ValidatedInput
                       id="ob-name"
+                      required
                       value={form.name}
                       onChange={(e) => set('name', e.target.value)}
                       placeholder="Happy Tails Rescue"
@@ -251,12 +254,13 @@ export const ShelterOnboardingPage = () => {
 
                   <div className="space-y-2">
                     <label className={labelClass} htmlFor="ob-location">
-                      City / region
+                      City / region <span className="text-destructive font-medium ml-0.5">*</span>
                     </label>
                     <div className="relative">
                       <MapPin className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
                       <ValidatedInput
                         id="ob-location"
+                        required
                         value={form.location}
                         onChange={(e) => set('location', e.target.value)}
                         placeholder="Quezon City"
@@ -268,12 +272,13 @@ export const ShelterOnboardingPage = () => {
 
                   <div className="space-y-2">
                     <label className={labelClass} htmlFor="ob-phone">
-                      Contact phone
+                      Contact phone <span className="text-destructive font-medium ml-0.5">*</span>
                     </label>
                     <div className="relative">
                       <Phone className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
                       <ValidatedInput
                         id="ob-phone"
+                        required
                         value={form.phone}
                         onChange={(e) => set('phone', e.target.value)}
                         placeholder="+63 2 8555 0101"
@@ -286,7 +291,7 @@ export const ShelterOnboardingPage = () => {
                   <div className="space-y-2 sm:col-span-2">
                     <div className="flex flex-wrap items-center justify-between gap-3">
                       <label className={labelClass} htmlFor="ob-address">
-                        Full address
+                        Full address <span className="text-destructive font-medium ml-0.5">*</span>
                       </label>
                       <button
                         type="button"
@@ -304,6 +309,7 @@ export const ShelterOnboardingPage = () => {
                     </div>
                     <ValidatedInput
                       id="ob-address"
+                      required
                       value={form.address}
                       onChange={(e) => set('address', e.target.value)}
                       placeholder="123 Bayani St, Quezon City"
@@ -322,13 +328,14 @@ export const ShelterOnboardingPage = () => {
 
                   <div className="space-y-2">
                     <label className={labelClass} htmlFor="ob-email">
-                      Shelter email
+                      Shelter email <span className="text-destructive font-medium ml-0.5">*</span>
                     </label>
                     <div className="relative">
                       <Mail className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
                       <ValidatedInput
                         id="ob-email"
                         type="email"
+                        required
                         value={form.email}
                         onChange={(e) => set('email', e.target.value)}
                         placeholder="hello@happytails.ph"
@@ -340,12 +347,13 @@ export const ShelterOnboardingPage = () => {
 
                   <div className="space-y-2">
                     <label className={labelClass} htmlFor="ob-hours">
-                      Operating hours
+                      Operating hours <span className="text-destructive font-medium ml-0.5">*</span>
                     </label>
                     <div className="relative">
                       <Clock className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
                       <ValidatedInput
                         id="ob-hours"
+                        required
                         value={form.operatingHours}
                         onChange={(e) => set('operatingHours', e.target.value)}
                         placeholder="Mon–Sat, 9:00 AM – 6:00 PM"
@@ -357,10 +365,11 @@ export const ShelterOnboardingPage = () => {
 
                   <div className="space-y-2 sm:col-span-2">
                     <label className={labelClass} htmlFor="ob-desc">
-                      About the shelter
+                      About the shelter <span className="text-destructive font-medium ml-0.5">*</span>
                     </label>
                     <ValidatedTextarea
                       id="ob-desc"
+                      required
                       value={form.description}
                       onChange={(e) => set('description', e.target.value)}
                       placeholder="Describe your mission, the animals you rescue, and your adoption process…"
@@ -371,13 +380,14 @@ export const ShelterOnboardingPage = () => {
 
                   <div className="space-y-2 sm:col-span-2">
                     <label className={labelClass} htmlFor="ob-image">
-                      Logo / photo URL (optional)
+                      Logo / photo URL <span className="text-destructive font-medium ml-0.5">*</span>
                     </label>
                     <div className="relative">
                       <ImageIcon className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
                       <ValidatedInput
                         id="ob-image"
                         type="url"
+                        required
                         value={form.imageUrl}
                         onChange={(e) => set('imageUrl', e.target.value)}
                         placeholder="https://…"

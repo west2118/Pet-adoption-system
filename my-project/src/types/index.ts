@@ -112,6 +112,9 @@ export interface ShelterApplication {
   imageUrl: string;
   status: AccountStatus;
   reviewNote?: string;
+  /** True once the approve/reject notification email was delivered (NULL = not attempted yet). */
+  emailSent?: boolean | null;
+  emailSentAt?: string | null;
   submittedAt: string;
   reviewedAt?: string;
   applicantName?: string | null;

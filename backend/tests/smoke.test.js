@@ -61,4 +61,14 @@ describe('smoke (no database required)', () => {
     const res = await request.get('/api/v1/admin/stats');
     assert.equal(res.status, 401);
   });
+
+  it('GET /admin/shelters without token returns 401', async () => {
+    const res = await request.get('/api/v1/admin/shelters');
+    assert.equal(res.status, 401);
+  });
+
+  it('GET /shelter/overview without token returns 401', async () => {
+    const res = await request.get('/api/v1/shelter/overview');
+    assert.equal(res.status, 401);
+  });
 });

@@ -2,6 +2,7 @@ import { AppError } from '../utils/AppError.js';
 import { mapShelter } from '../utils/mappers.js';
 import {
   createShelter as createShelterRow,
+  deleteShelter as deleteShelterRow,
   findShelterByEmail,
   findShelterById as findShelterRowById,
   getShelterStats as readShelterStats,
@@ -40,8 +41,7 @@ export const createShelter = async (input) => {
   return mapShelter(row, 0, 0);
 };
 
-export const updateShelter = async (id, patch, actor) => {
-  const row = await findShelterRowById(id);
+export const updateShelter = async (id, patch, actor) => {  const row = await findShelterRowById(id);
   if (!row) {
     throw new AppError('Shelter not found.', 404);
   }
@@ -57,4 +57,16 @@ export const updateShelter = async (id, patch, actor) => {
   const updated = await updateShelterRow(id, patch);
   const fresh = await findShelterRowById(id);
   return mapShelter(fresh ?? updated, fresh?.active_listings ?? 0, fresh?.total_pets ?? 0);
+};
+
+/**
+ * Platform-admin removal. Pets cascade (ON DELETE CASCADE); assigned users
+ * are detached (ON DELETE SET NULL) rather than deleted.
+ */
+export const deleteShelter = async (id) => {
+  const row = await findShelterRowById(id);
+  if (!row) {
+    throw new AppError('Shelter not found.', 404);
+  }
+  await deleteShelterRow(id);
 };

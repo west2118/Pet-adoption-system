@@ -41,6 +41,11 @@ export const findShelterByEmail = async (email) => {
   return rows[0] ?? null;
 };
 
+export const deleteShelter = async (id) => {
+  const { rows } = await pool.query('DELETE FROM shelters WHERE id = $1 RETURNING id', [id]);
+  return rows[0] ?? null;
+};
+
 export const createShelter = async (input) => {
   const { rows } = await pool.query(
     `INSERT INTO shelters (name, location, address, phone, email, operating_hours, description, image_url)

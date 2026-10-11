@@ -1,5 +1,5 @@
 import { Bar, BarChart, Cell, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
-import type { ChartPoint } from '@/hooks/useShelterOverview';
+import type { ChartPoint } from './chartTypes';
 import { chartColor, chartTooltipProps } from './chartTheme';
 
 interface ListingsByShelterChartProps {

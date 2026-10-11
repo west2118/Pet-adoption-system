@@ -1,9 +1,10 @@
 import { Router } from 'express';
-import { changeRole, getAllPets, getStats, getUsers } from '../controllers/adminController.js';
+import { changeRole, getAdminShelter, getAdminShelters, getAllPets, getStats, getUsers } from '../controllers/adminController.js';
 import {
   approveApplication,
   getShelterApplications,
   rejectApplication,
+  resendReviewEmail,
 } from '../controllers/shelterApplicationController.js';
 import { authenticate } from '../middlewares/authenticate.js';
 import { authorize } from '../middlewares/authorize.js';
@@ -25,6 +26,8 @@ adminRoutes.patch(
   changeRole,
 );
 adminRoutes.get('/pets', getAllPets);
+adminRoutes.get('/shelters', getAdminShelters);
+adminRoutes.get('/shelters/:id', validate(uuidParam, 'params'), getAdminShelter);
 
 adminRoutes.get('/shelter-applications', getShelterApplications);
 adminRoutes.patch(
@@ -37,4 +40,9 @@ adminRoutes.patch(
   validate(uuidParam, 'params'),
   validate(reviewShelterApplicationSchema),
   rejectApplication,
+);
+adminRoutes.patch(
+  '/shelter-applications/:id/resend-email',
+  validate(uuidParam, 'params'),
+  resendReviewEmail,
 );

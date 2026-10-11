@@ -14,7 +14,7 @@ import {
   Trash2,
   Users,
 } from 'lucide-react';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import type { FormEvent } from 'react';
 import { Link } from 'react-router-dom';
 import { toast } from 'react-toastify';
@@ -22,12 +22,15 @@ import {
   ChartCard,
   DetailsModal,
   RecordCard,
+  RecordCardSkeleton,
   SectionHeader,
   SlideOver,
   SummaryStatCard,
+  SummaryStatCardSkeleton,
   SummaryStatGrid,
   TableCard,
   TablePagination,
+  TableSkeletonRows,
 } from '@/components/shared';
 import { ConfirmDeleteModal } from '@/components/shared/ConfirmDeleteModal';
 import { RecentApplicationsTable } from '@/components/features/RecentApplicationsTable';
@@ -46,11 +49,12 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/Table';
-import { useApplications, usePets, useShelters, useUsers } from '@/hooks/useData';
-import { usePlatformOverview } from '@/hooks/usePlatformOverview';
-import { listAdminPetsPaginated, listUsersPaginated, shelterService, userService } from '@/services/api';
+import { useShelters } from '@/hooks/useData';
+import { getAdminShelter, getAdminStats, listAdminPetsPaginated, listAdminSheltersPaginated, listUsersPaginated, shelterService, userService } from '@/services/api';
+import type { AdminShelterDetails, AdminStats, ShelterSummaryRow } from '@/services/api';
 import type { Pet, Shelter, User, UserRole } from '@/types';
 import { formatDate } from '@/utils/formatters';
+import { ApiError } from '@/lib/apiClient';
 
 type Section = 'overview' | 'shelters' | 'pets' | 'users';
 
@@ -61,19 +65,57 @@ interface PlatformAdminPageProps {
 export const PlatformAdminPage = ({ initialSection = 'overview' }: PlatformAdminPageProps) => {
   // Section is derived straight from the route — NavLink navigation updates it.
   const section = initialSection;
-  const { pets } = usePets();
+  // Shelter directory for filter dropdowns and name lookups (display aids —
+  // never counted for KPIs; those come from GET /admin/stats below).
   const { shelters, setShelters } = useShelters();
-  const { applications } = useApplications();
-  const { users } = useUsers();
 
-  const {
-    stats,
-    platform,
-    listingsByShelter,
-    usersByRole,
-    recentApplications,
-    shelterSummaries,
-  } = usePlatformOverview(pets, applications, shelters, users);
+  // Overview KPIs, summaries, and recents: strictly server-counted
+  // (GET /admin/stats). Dynamic only — failures render an explicit error
+  // state instead of mock-based local figures.
+  const [adminStats, setAdminStats] = useState<AdminStats | null>(null);
+  const [statsError, setStatsError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let mounted = true;
+    getAdminStats()
+      .then((s) => {
+        if (mounted) {
+          setAdminStats(s);
+          setStatsError(null);
+        }
+      })
+      .catch(() => {
+        if (mounted) setStatsError('Failed to load dashboard figures.');
+      });
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  const totalShelters = adminStats?.shelters.total ?? 0;
+  const locations = adminStats?.shelters.locations ?? 0;
+  const totalUsersCount = adminStats?.users.total ?? 0;
+  const adopters = adminStats?.users.adopters ?? 0;
+  const shelterStaff = adminStats?.users.staff ?? 0;
+  const platformAdmins = adminStats?.users.admins ?? 0;
+  const totalPets = adminStats?.pets.total ?? 0;
+  const publicListings = adminStats?.pets.public ?? 0;
+  const privateInventory = adminStats?.pets.private ?? 0;
+  const pendingApplications =
+    (adminStats?.applications.submitted ?? 0) + (adminStats?.applications.under_review ?? 0);
+  const successfulAdoptions = adminStats?.applications.adopted ?? 0;
+  const adoptionRate =
+    !adminStats || adminStats.applications.total === 0
+      ? 0
+      : Math.round(
+        (adminStats.applications.adopted / adminStats.applications.total) * 100,
+      );
+  const usersByRoleData = [
+    { name: 'Adopters', value: adopters },
+    { name: 'Shelter staff', value: shelterStaff },
+    { name: 'Admins', value: platformAdmins },
+  ].filter((point) => point.value > 0);
+  const overviewLoading = adminStats === null && statsError === null;
 
   const shelterName = (shelterId?: string): string =>
     shelters.find((s) => s.id === shelterId)?.name ?? '—';
@@ -89,14 +131,21 @@ export const PlatformAdminPage = ({ initialSection = 'overview' }: PlatformAdmin
   const roleBadgeVariant = (role: UserRole): 'info' | 'warning' | 'muted' =>
     role === 'platform_admin' ? 'info' : role === 'shelter_staff' ? 'warning' : 'muted';
 
-  // Shelters table state (mirrors the shelter portal listings page).
+  // Admin Shelters table: searched, limited, and paged in SQL
+  // (GET /admin/shelters) — never sliced from a capped client list.
+  const [shelterRows, setShelterRows] = useState<ShelterSummaryRow[]>([]);
+  const [totalShelterRows, setTotalShelterRows] = useState(0);
   const [shelterPageSize, setShelterPageSize] = useState(10);
   const [shelterQuery, setShelterQuery] = useState('');
+  const [debouncedShelterQuery, setDebouncedShelterQuery] = useState('');
   const [shelterPage, setShelterPage] = useState(1);
+  const [loadingShelters, setLoadingShelters] = useState(true);
+  const [sheltersError, setSheltersError] = useState<string | null>(null);
   const [shelterSlideOpen, setShelterSlideOpen] = useState(false);
   const [editingShelter, setEditingShelter] = useState<Shelter | null>(null);
-  const [detailsShelter, setDetailsShelter] = useState<Shelter | null>(null);
-  const [pendingDeleteShelter, setPendingDeleteShelter] = useState<Shelter | null>(null);
+  const [detailsShelter, setDetailsShelter] = useState<AdminShelterDetails | null>(null);
+  const [loadingDetailsShelter, setLoadingDetailsShelter] = useState(false);
+  const [pendingDeleteShelter, setPendingDeleteShelter] = useState<ShelterSummaryRow | null>(null);
   const [isDeletingShelter, setIsDeletingShelter] = useState(false);
   const [shelterForm, setShelterForm] = useState({
     name: '',
@@ -109,37 +158,6 @@ export const PlatformAdminPage = ({ initialSection = 'overview' }: PlatformAdmin
     imageUrl: '',
   });
 
-  const shelterPetCounts = useMemo(() => {
-    const map = new Map<string, { total: number; public: number; private: number; pending: number }>();
-    shelters.forEach((s) => {
-      const own = pets.filter((p) => p.shelterId === s.id);
-      const ownIds = new Set(own.map((p) => p.id));
-      map.set(s.id, {
-        total: own.length,
-        public: own.filter((p) => p.visibility === 'public').length,
-        private: own.filter((p) => p.visibility === 'private').length,
-        pending: applications.filter(
-          (a) =>
-            ownIds.has(a.petId) && (a.status === 'Submitted' || a.status === 'Under Review'),
-        ).length,
-      });
-    });
-    return map;
-  }, [shelters, pets, applications]);
-
-  const filteredShelters = useMemo(() => {
-    const q = shelterQuery.trim().toLowerCase();
-    if (!q) return shelters;
-    return shelters.filter((s) =>
-      `${s.name} ${s.location} ${s.email}`.toLowerCase().includes(q),
-    );
-  }, [shelters, shelterQuery]);
-
-  const shelterTotalPages = Math.max(1, Math.ceil(filteredShelters.length / shelterPageSize));
-  const shelterCurrentPage = Math.min(shelterPage, shelterTotalPages);
-  const shelterStartIndex = (shelterCurrentPage - 1) * shelterPageSize;
-  const pagedShelters = filteredShelters.slice(shelterStartIndex, shelterStartIndex + shelterPageSize);
-
   const resetShelterForm = () =>
     setShelterForm({
       name: '',
@@ -151,6 +169,55 @@ export const PlatformAdminPage = ({ initialSection = 'overview' }: PlatformAdmin
       description: '',
       imageUrl: '',
     });
+
+  // Debounced search so each keystroke doesn't fire a request.
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedShelterQuery(shelterQuery.trim());
+      setShelterPage(1);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [shelterQuery]);
+
+  const fetchShelters = useCallback(async () => {
+    setLoadingShelters(true);
+    setSheltersError(null);
+    try {
+      const res = await listAdminSheltersPaginated({
+        page: shelterPage,
+        limit: shelterPageSize,
+        search: debouncedShelterQuery,
+      });
+      setShelterRows(res.items);
+      setTotalShelterRows(res.total);
+    } catch {
+      setSheltersError('Failed to load shelters.');
+    } finally {
+      setLoadingShelters(false);
+    }
+  }, [shelterPage, shelterPageSize, debouncedShelterQuery]);
+
+  useEffect(() => {
+    fetchShelters();
+  }, [fetchShelters]);
+
+  /** Refreshes the shelter dropdown directory after a mutation. */
+  const refreshShelterDirectory = useCallback(async () => {
+    try {
+      setShelters(await shelterService.list());
+    } catch {
+      // Directory options keep their previous values; the table already refetched.
+    }
+  }, [setShelters]);
+
+  const openDetailsShelter = (row: ShelterSummaryRow) => {
+    setDetailsShelter({ ...row, staffList: [] });
+    setLoadingDetailsShelter(true);
+    getAdminShelter(row.shelter.id)
+      .then((details) => setDetailsShelter(details))
+      .catch(() => toast.error('Failed to load shelter details.'))
+      .finally(() => setLoadingDetailsShelter(false));
+  };
 
   const openAddShelter = () => {
     setEditingShelter(null);
@@ -193,31 +260,38 @@ export const PlatformAdminPage = ({ initialSection = 'overview' }: PlatformAdmin
         shelterForm.imageUrl ||
         'https://images.unsplash.com/photo-1548199973-03cce0bbc87b?auto=format&fit=crop&w=800&q=80',
     };
-    if (editingShelter) {
-      const updated = await shelterService.update(editingShelter.id, input);
-      if (updated)
-        setShelters((prev) => prev.map((s) => (s.id === updated.id ? updated : s)));
-      toast.success(`${input.name} updated successfully!`);
+    try {
+      if (editingShelter) {
+        const updated = await shelterService.update(editingShelter.id, input);
+        toast.success(`${updated?.name ?? input.name} updated successfully!`);
+      } else {
+        const created = await shelterService.create(input);
+        toast.success(`${created.name} added successfully!`);
+        resetShelterForm();
+      }
       closeShelterSlide();
-      return;
+      await fetchShelters();
+      await refreshShelterDirectory();
+    } catch (err) {
+      toast.error(
+        err instanceof ApiError ? err.message : 'Failed to save shelter. Please try again.',
+      );
     }
-    const created = await shelterService.create(input);
-    setShelters((prev) => [created, ...prev]);
-    toast.success(`${created.name} added successfully!`);
-    closeShelterSlide();
-    resetShelterForm();
   };
 
   const removeShelter = async (id: string) => {
-    const target = shelters.find((s) => s.id === id);
+    const target = shelterRows.find((r) => r.shelter.id === id);
     setIsDeletingShelter(true);
     try {
       await shelterService.remove(id);
-      setShelters((prev) => prev.filter((s) => s.id !== id));
-      toast.success(target ? `${target.name} removed.` : 'Shelter removed.');
+      toast.success(target ? `${target.shelter.name} removed.` : 'Shelter removed.');
       setPendingDeleteShelter(null);
-    } catch {
-      toast.error('Failed to remove shelter. Please try again.');
+      await fetchShelters();
+      await refreshShelterDirectory();
+    } catch (err) {
+      toast.error(
+        err instanceof ApiError ? err.message : 'Failed to remove shelter. Please try again.',
+      );
     } finally {
       setIsDeletingShelter(false);
     }
@@ -249,13 +323,16 @@ export const PlatformAdminPage = ({ initialSection = 'overview' }: PlatformAdmin
   );
 
   const shelterPagination =
-    filteredShelters.length > 0 ? (
+    totalShelterRows > 0 ? (
       <TablePagination
-        currentPage={shelterCurrentPage}
-        totalItems={filteredShelters.length}
+        currentPage={shelterPage}
+        totalItems={totalShelterRows}
         pageSize={shelterPageSize}
         onPageChange={setShelterPage}
-        onPageSizeChange={setShelterPageSize}
+        onPageSizeChange={(newSize) => {
+          setShelterPageSize(newSize);
+          setShelterPage(1);
+        }}
         label="shelters"
       />
     ) : undefined;
@@ -268,6 +345,9 @@ export const PlatformAdminPage = ({ initialSection = 'overview' }: PlatformAdmin
   const [petShelterFilter, setPetShelterFilter] = useState('all');
   const [petPage, setPetPage] = useState(1);
   const [detailsPet, setDetailsPet] = useState<Pet | null>(null);
+  // Starts true for the first page; refetches (search / page / filter) flip it
+  // back so the table body shows skeleton rows instead of a stale or empty list.
+  const [loadingAdminPets, setLoadingAdminPets] = useState(true);
 
   const fetchAdminPets = useCallback(async () => {
     try {
@@ -280,6 +360,8 @@ export const PlatformAdminPage = ({ initialSection = 'overview' }: PlatformAdmin
       setTotalAdminPets(res.total);
     } catch {
       toast.error('Failed to load pets.');
+    } finally {
+      setLoadingAdminPets(false);
     }
   }, [petPage, petPageSize, petQuery]);
 
@@ -295,6 +377,7 @@ export const PlatformAdminPage = ({ initialSection = 'overview' }: PlatformAdmin
           aria-label="Search pets"
           value={petQuery}
           onChange={(e) => {
+            setLoadingAdminPets(true);
             setPetQuery(e.target.value);
             setPetPage(1);
           }}
@@ -304,9 +387,9 @@ export const PlatformAdminPage = ({ initialSection = 'overview' }: PlatformAdmin
       </div>
       <Select
         aria-label="Filter by shelter"
-        className="h-9 w-[180px]"
-        value={petShelterFilter}
+        className="h-9 w-[180px]" value={petShelterFilter}
         onChange={(e) => {
+          setLoadingAdminPets(true);
           setPetShelterFilter(e.target.value);
           setPetPage(1);
         }}
@@ -324,8 +407,12 @@ export const PlatformAdminPage = ({ initialSection = 'overview' }: PlatformAdmin
         currentPage={petPage}
         totalItems={totalAdminPets}
         pageSize={petPageSize}
-        onPageChange={setPetPage}
+        onPageChange={(next) => {
+          setLoadingAdminPets(true);
+          setPetPage(next);
+        }}
         onPageSizeChange={(newSize) => {
+          setLoadingAdminPets(true);
           setPetPageSize(newSize);
           setPetPage(1);
         }}
@@ -352,6 +439,10 @@ export const PlatformAdminPage = ({ initialSection = 'overview' }: PlatformAdmin
     avatarUrl: '',
   });
 
+  // Starts true for the first page; search / page changes flip it back so the
+  // table body shows skeleton rows instead of a stale or empty list.
+  const [loadingUsers, setLoadingUsers] = useState(true);
+
   const fetchUsers = useCallback(async () => {
     try {
       const res = await listUsersPaginated({
@@ -363,6 +454,8 @@ export const PlatformAdminPage = ({ initialSection = 'overview' }: PlatformAdmin
       setTotalUsers(res.total);
     } catch {
       toast.error('Failed to load users.');
+    } finally {
+      setLoadingUsers(false);
     }
   }, [userPage, userPageSize, userQuery]);
 
@@ -445,9 +538,9 @@ export const PlatformAdminPage = ({ initialSection = 'overview' }: PlatformAdmin
     <div className="relative">
       <Search className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
       <Input
-        aria-label="Search users"
-        value={userQuery}
+        aria-label="Search users" value={userQuery}
         onChange={(e) => {
+          setLoadingUsers(true);
           setUserQuery(e.target.value);
           setUserPage(1);
         }}
@@ -469,8 +562,12 @@ export const PlatformAdminPage = ({ initialSection = 'overview' }: PlatformAdmin
         currentPage={userPage}
         totalItems={totalUsers}
         pageSize={userPageSize}
-        onPageChange={setUserPage}
+        onPageChange={(next) => {
+          setLoadingUsers(true);
+          setUserPage(next);
+        }}
         onPageSizeChange={(newSize) => {
+          setLoadingUsers(true);
           setUserPageSize(newSize);
           setUserPage(1);
         }}
@@ -487,94 +584,132 @@ export const PlatformAdminPage = ({ initialSection = 'overview' }: PlatformAdmin
 
       {section === 'overview' && (
         <div className="mt-6 space-y-4">
-          {/* Summary stats */}
-          <SummaryStatGrid>
-            <SummaryStatCard
-              title="Shelters"
-              value={platform.totalShelters}
-              icon={Building2}
-              subtitle={`${platform.locations} ${
-                platform.locations === 1 ? 'location' : 'locations'
-              }`}
-            />
-            <SummaryStatCard
-              title="Users"
-              value={platform.totalUsers}
-              icon={Users}
-              subtitle={`${platform.adopters} adopters · ${platform.shelterStaff} staff · ${platform.platformAdmins} ${
-                platform.platformAdmins === 1 ? 'admin' : 'admins'
-              }`}
-            />
-            <SummaryStatCard
-              title="Pets"
-              value={stats.totalPets}
-              icon={PawPrint}
-              subtitle={`${stats.publicListings} public · ${stats.privateInventory} private`}
-            />
-            <SummaryStatCard
-              title="Pending applications"
-              value={stats.pendingApplications}
-              icon={Clock3}
-              subtitle="Needs shelter review"
-            />
-            <SummaryStatCard
-              title="Adoptions"
-              value={stats.successfulAdoptions}
-              icon={HeartHandshake}
-              subtitle={`${stats.adoptionRate}% adoption rate`}
-            />
-          </SummaryStatGrid>
+          {statsError ? (
+            <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-5 text-sm">
+              <p className="font-semibold text-destructive">Could not load dashboard figures.</p>
+              <p className="mt-1 text-muted-foreground">
+                {statsError} Check that the backend is running and you are signed in as a
+                platform admin.
+              </p>
+              <Button
+                size="sm"
+                variant="outline"
+                className="mt-3"
+                onClick={() => {
+                  setStatsError(null);
+                  setAdminStats(null);
+                  getAdminStats()
+                    .then((s) => setAdminStats(s))
+                    .catch(() => setStatsError('Failed to load dashboard figures.'));
+                }}
+              >
+                Retry
+              </Button>
+            </div>
+          ) : overviewLoading ? (
+            <SummaryStatGrid>
+              <SummaryStatCardSkeleton />
+              <SummaryStatCardSkeleton />
+              <SummaryStatCardSkeleton />
+              <SummaryStatCardSkeleton />
+              <SummaryStatCardSkeleton />
+            </SummaryStatGrid>
+          ) : (
+            <>
+              {/* Summary stats — strictly server-counted */}
+              <SummaryStatGrid>
+                <SummaryStatCard
+                  title="Shelters"
+                  value={totalShelters}
+                  icon={Building2}
+                  subtitle={`${locations} ${locations === 1 ? 'location' : 'locations'}`}
+                />
+                <SummaryStatCard
+                  title="Users"
+                  value={totalUsersCount}
+                  icon={Users}
+                  subtitle={`${adopters} adopters · ${shelterStaff} staff · ${platformAdmins} ${platformAdmins === 1 ? 'admin' : 'admins'
+                    }`}
+                />
+                <SummaryStatCard
+                  title="Pets"
+                  value={totalPets}
+                  icon={PawPrint}
+                  subtitle={`${publicListings} public · ${privateInventory} private`}
+                />
+                <SummaryStatCard
+                  title="Pending applications"
+                  value={pendingApplications}
+                  icon={Clock3}
+                  subtitle="Needs shelter review"
+                />
+                <SummaryStatCard
+                  title="Adoptions"
+                  value={successfulAdoptions}
+                  icon={HeartHandshake}
+                  subtitle={`${adoptionRate}% adoption rate`}
+                />
+              </SummaryStatGrid>
 
-          {/* Platform distribution & composition */}
-          <div className="grid gap-4 lg:grid-cols-2">
-            <ChartCard
-              title="Listings by shelter"
-              description="Where the platform's inventory lives."
-              icon={Layers}
-            >
-              <ListingsByShelterChart data={listingsByShelter} />
-            </ChartCard>
+              {/* Platform distribution & composition */}
+              <div className="grid gap-4 lg:grid-cols-2">
+                <ChartCard
+                  title="Listings by shelter"
+                  description="Where the platform's inventory lives."
+                  icon={Layers}
+                >
+                  <ListingsByShelterChart data={adminStats?.listingsByShelter ?? []} />
+                </ChartCard>
 
-            <ChartCard
-              title="Users by role"
-              description="Composition of everyone on the platform."
-              icon={PieChart}
-            >
-              <UsersByRoleChart data={usersByRole} />
-            </ChartCard>
-          </div>
+                <ChartCard
+                  title="Users by role"
+                  description="Composition of everyone on the platform."
+                  icon={PieChart}
+                >
+                  <UsersByRoleChart data={usersByRoleData} />
+                </ChartCard>
+              </div>
 
-          {/* Tables */}
-          <TableCard
-            title="Shelters"
-            description="Listings, demand, and staff per partner shelter."
-            icon={Building2}
-            action={
-              <Link to="/admin/shelters">
-                <Button variant="outline" size="sm">
-                  View all <ArrowRight className="size-3.5" />
-                </Button>
-              </Link>
-            }
-            isEmpty={shelterSummaries.length === 0}
-            emptyTitle="No shelters"
-            emptyDescription="Registered partner shelters will appear here."
-            contentClassName="px-0"
-          >
-            <SheltersSummaryTable shelters={shelterSummaries} />
-          </TableCard>
+              {/* Tables */}
+              <TableCard
+                title="Shelters"
+                description="Listings, demand, and staff per partner shelter."
+                icon={Building2}
+                action={
+                  <Link to="/admin/shelters">
+                    <Button variant="outline" size="sm">
+                      View all <ArrowRight className="size-3.5" />
+                    </Button>
+                  </Link>
+                }
+                isEmpty={(adminStats?.shelterSummaries.length ?? 0) === 0}
+                emptyTitle="No shelters"
+                emptyDescription="Registered partner shelters will appear here."
+                contentClassName="px-0"
+              >
+                <SheltersSummaryTable
+                  shelters={adminStats?.shelterSummaries ?? []}
+                  loading={false}
+                />
+              </TableCard>
 
-          <TableCard
-            title="Recent applications"
-            description="Latest adoption requests across the platform."
-            icon={Inbox}
-            isEmpty={recentApplications.length === 0}
-            emptyTitle="No applications yet"
-            emptyDescription="Adoption requests will appear here."
-            contentClassName="px-0"
-          >
-            <RecentApplicationsTable applications={recentApplications} pets={pets} />
-          </TableCard>
+              <TableCard
+                title="Recent applications"
+                description="Latest adoption requests across the platform."
+                icon={Inbox}
+                isEmpty={(adminStats?.recentApplications.length ?? 0) === 0}
+                emptyTitle="No applications yet"
+                emptyDescription="Adoption requests will appear here."
+                contentClassName="px-0"
+              >
+                <RecentApplicationsTable
+                  applications={adminStats?.recentApplications ?? []}
+                  pets={adminStats?.recentPets ?? []}
+                  loading={false}
+                />
+              </TableCard>
+            </>
+          )}
         </div>
       )}
 
@@ -583,12 +718,14 @@ export const PlatformAdminPage = ({ initialSection = 'overview' }: PlatformAdmin
           <TableCard
             title="Shelters"
             description={
-              `${filteredShelters.length} of ${shelters.length} registered shelters`
+              totalShelterRows === 0
+                ? 'Registered partner shelters'
+                : `${shelterRows.length} of ${totalShelterRows} registered shelters`
             }
             icon={Building2}
             action={addShelterButton}
             toolbar={shelterSearchFilter}
-            isEmpty={filteredShelters.length === 0}
+            isEmpty={!loadingShelters && !sheltersError && shelterRows.length === 0}
             emptyTitle="No shelters found"
             emptyDescription="Try a different search, or register a new shelter."
             footer={shelterPagination}
@@ -608,14 +745,16 @@ export const PlatformAdminPage = ({ initialSection = 'overview' }: PlatformAdmin
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {pagedShelters.map((shelter) => {
-                    const counts = shelterPetCounts.get(shelter.id) ?? {
-                      total: 0,
-                      public: 0,
-                      private: 0,
-                      pending: 0,
-                    };
-                    return (
+                  {loadingShelters ? (
+                    <TableSkeletonRows columns={6} rows={6} avatar />
+                  ) : sheltersError ? (
+                    <TableRow>
+                      <TableCell colSpan={6}>
+                        <p className="py-6 text-center text-sm text-destructive">{sheltersError}</p>
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    shelterRows.map(({ shelter, petCount, publicPets, pendingApplications }) => (
                       <TableRow key={shelter.id}>
                         <TableCell>
                           <div className="flex items-center gap-3">
@@ -637,10 +776,10 @@ export const PlatformAdminPage = ({ initialSection = 'overview' }: PlatformAdmin
                           {shelter.phone}
                         </TableCell>
                         <TableCell className="whitespace-nowrap text-muted-foreground">
-                          {counts.total} total · {counts.public} public
+                          {petCount} total · {publicPets} public
                         </TableCell>
                         <TableCell className="text-muted-foreground">
-                          {counts.pending}
+                          {pendingApplications}
                         </TableCell>
                         <TableCell className="text-center">
                           <div className="flex justify-center gap-1">
@@ -649,7 +788,15 @@ export const PlatformAdminPage = ({ initialSection = 'overview' }: PlatformAdmin
                               size="icon-sm"
                               className="text-muted-foreground"
                               aria-label={`View ${shelter.name} details`}
-                              onClick={() => setDetailsShelter(shelter)}
+                              onClick={() =>
+                                openDetailsShelter({
+                                  shelter,
+                                  petCount,
+                                  publicPets,
+                                  pendingApplications,
+                                  staff: 0,
+                                })
+                              }
                             >
                               <Eye className="size-4" />
                             </Button>
@@ -667,29 +814,35 @@ export const PlatformAdminPage = ({ initialSection = 'overview' }: PlatformAdmin
                               size="icon-sm"
                               className="text-muted-foreground"
                               aria-label={`Remove ${shelter.name}`}
-                              onClick={() => setPendingDeleteShelter(shelter)}
+                              onClick={() =>
+                                setPendingDeleteShelter({
+                                  shelter,
+                                  petCount,
+                                  publicPets,
+                                  pendingApplications,
+                                  staff: 0,
+                                })
+                              }
                             >
                               <Trash2 className="size-4" />
                             </Button>
                           </div>
                         </TableCell>
                       </TableRow>
-                    );
-                  })}
+                    ))
+                  )}
                 </TableBody>
               </Table>
             </div>
 
             {/* Mobile: stacked cards */}
             <div className="grid gap-3 p-4 md:hidden">
-              {pagedShelters.map((shelter) => {
-                const counts = shelterPetCounts.get(shelter.id) ?? {
-                  total: 0,
-                  public: 0,
-                  private: 0,
-                  pending: 0,
-                };
-                return (
+              {loadingShelters ? (
+                <RecordCardSkeleton count={3} />
+              ) : sheltersError ? (
+                <p className="py-6 text-center text-sm text-destructive">{sheltersError}</p>
+              ) : (
+                shelterRows.map(({ shelter, petCount, publicPets, pendingApplications }) => (
                   <RecordCard
                     key={shelter.id}
                     imageUrl={shelter.imageUrl}
@@ -698,9 +851,9 @@ export const PlatformAdminPage = ({ initialSection = 'overview' }: PlatformAdmin
                     subtitle={`${shelter.location} · ${shelter.email}`}
                     badges={
                       <>
-                        <Badge variant="muted">{counts.total} pets</Badge>
-                        <Badge variant="success">{counts.public} public</Badge>
-                        <Badge variant="warning">{counts.pending} pending</Badge>
+                        <Badge variant="muted">{petCount} pets</Badge>
+                        <Badge variant="success">{publicPets} public</Badge>
+                        <Badge variant="warning">{pendingApplications} pending</Badge>
                       </>
                     }
                     actions={
@@ -710,7 +863,15 @@ export const PlatformAdminPage = ({ initialSection = 'overview' }: PlatformAdmin
                           size="icon-sm"
                           className="text-muted-foreground"
                           aria-label={`View ${shelter.name} details`}
-                          onClick={() => setDetailsShelter(shelter)}
+                          onClick={() =>
+                            openDetailsShelter({
+                              shelter,
+                              petCount,
+                              publicPets,
+                              pendingApplications,
+                              staff: 0,
+                            })
+                          }
                         >
                           <Eye className="size-4" />
                         </Button>
@@ -728,7 +889,15 @@ export const PlatformAdminPage = ({ initialSection = 'overview' }: PlatformAdmin
                           size="icon-sm"
                           className="text-muted-foreground"
                           aria-label={`Remove ${shelter.name}`}
-                          onClick={() => setPendingDeleteShelter(shelter)}
+                          onClick={() =>
+                            setPendingDeleteShelter({
+                              shelter,
+                              petCount,
+                              publicPets,
+                              pendingApplications,
+                              staff: 0,
+                            })
+                          }
                         >
                           <Trash2 className="size-4" />
                         </Button>
@@ -739,8 +908,8 @@ export const PlatformAdminPage = ({ initialSection = 'overview' }: PlatformAdmin
                       {shelter.phone} · {shelter.operatingHours}
                     </p>
                   </RecordCard>
-                );
-              })}
+                ))
+              )}
             </div>
           </TableCard>
         </div>
@@ -840,8 +1009,8 @@ export const PlatformAdminPage = ({ initialSection = 'overview' }: PlatformAdmin
       <DetailsModal
         open={detailsShelter !== null}
         onClose={() => setDetailsShelter(null)}
-        title={detailsShelter?.name ?? 'Shelter details'}
-        description={detailsShelter?.location}
+        title={detailsShelter?.shelter.name ?? 'Shelter details'}
+        description={detailsShelter?.shelter.location}
         icon={Building2}
         footer={
           detailsShelter ? (
@@ -853,7 +1022,7 @@ export const PlatformAdminPage = ({ initialSection = 'overview' }: PlatformAdmin
                 type="button"
                 size="lg"
                 className="w-full"
-                onClick={() => detailsShelter && openEditShelter(detailsShelter)}
+                onClick={() => detailsShelter && openEditShelter(detailsShelter.shelter)}
               >
                 <Pencil className="size-4" /> Edit in slider
               </Button>
@@ -864,68 +1033,56 @@ export const PlatformAdminPage = ({ initialSection = 'overview' }: PlatformAdmin
         {detailsShelter && (
           <div className="space-y-4">
             <img
-              src={detailsShelter.imageUrl}
-              alt={detailsShelter.name}
+              src={detailsShelter.shelter.imageUrl}
+              alt={detailsShelter.shelter.name}
               className="h-48 w-full rounded-lg border object-cover"
             />
-            {(() => {
-              const counts = shelterPetCounts.get(detailsShelter.id) ?? {
-                total: 0,
-                public: 0,
-                private: 0,
-                pending: 0,
-              };
-              const staff = users.filter((u) => u.shelterId === detailsShelter.id);
-              return (
-                <>
-                  <div className="flex flex-wrap gap-1.5">
-                    <Badge variant="muted">{counts.total} pets</Badge>
-                    <Badge variant="success">{counts.public} public</Badge>
-                    <Badge variant="muted">{counts.private} private</Badge>
-                    <Badge variant="warning">{counts.pending} pending</Badge>
-                    <Badge variant="info">{staff.length} staff</Badge>
-                  </div>
-                  <dl className="grid grid-cols-2 gap-2 text-sm">
-                    <div className="rounded-lg border p-2.5">
-                      <dt className="text-xs text-muted-foreground">Email</dt>
-                      <dd className="break-all font-medium">{detailsShelter.email}</dd>
-                    </div>
-                    <div className="rounded-lg border p-2.5">
-                      <dt className="text-xs text-muted-foreground">Phone</dt>
-                      <dd className="font-medium">{detailsShelter.phone}</dd>
-                    </div>
-                    <div className="rounded-lg border p-2.5">
-                      <dt className="text-xs text-muted-foreground">Address</dt>
-                      <dd className="font-medium">{detailsShelter.address}</dd>
-                    </div>
-                    <div className="rounded-lg border p-2.5">
-                      <dt className="text-xs text-muted-foreground">Hours</dt>
-                      <dd className="font-medium">{detailsShelter.operatingHours}</dd>
-                    </div>
-                  </dl>
-                  <div>
-                    <h3 className="text-sm font-semibold">About</h3>
-                    <p className="mt-1 text-sm leading-relaxed text-muted-foreground">
-                      {detailsShelter.description}
-                    </p>
-                  </div>
-                  <div>
-                    <h3 className="text-sm font-semibold">Assigned staff</h3>
-                    {staff.length === 0 ? (
-                      <p className="mt-1 text-sm text-muted-foreground">No staff assigned.</p>
-                    ) : (
-                      <ul className="mt-1 space-y-1 text-sm text-muted-foreground">
-                        {staff.map((u) => (
-                          <li key={u.id}>
-                            {u.name} · {u.email}
-                          </li>
-                        ))}
-                      </ul>
-                    )}
-                  </div>
-                </>
-              );
-            })()}
+            <div className="flex flex-wrap gap-1.5">
+              <Badge variant="muted">{detailsShelter.petCount} pets</Badge>
+              <Badge variant="success">{detailsShelter.publicPets} public</Badge>
+              <Badge variant="warning">{detailsShelter.pendingApplications} pending</Badge>
+              <Badge variant="info">{detailsShelter.staff} staff</Badge>
+            </div>
+            <dl className="grid grid-cols-2 gap-2 text-sm">
+              <div className="rounded-lg border p-2.5">
+                <dt className="text-xs text-muted-foreground">Email</dt>
+                <dd className="break-all font-medium">{detailsShelter.shelter.email}</dd>
+              </div>
+              <div className="rounded-lg border p-2.5">
+                <dt className="text-xs text-muted-foreground">Phone</dt>
+                <dd className="font-medium">{detailsShelter.shelter.phone}</dd>
+              </div>
+              <div className="rounded-lg border p-2.5">
+                <dt className="text-xs text-muted-foreground">Address</dt>
+                <dd className="font-medium">{detailsShelter.shelter.address}</dd>
+              </div>
+              <div className="rounded-lg border p-2.5">
+                <dt className="text-xs text-muted-foreground">Hours</dt>
+                <dd className="font-medium">{detailsShelter.shelter.operatingHours}</dd>
+              </div>
+            </dl>
+            <div>
+              <h3 className="text-sm font-semibold">About</h3>
+              <p className="mt-1 text-sm leading-relaxed text-muted-foreground">
+                {detailsShelter.shelter.description}
+              </p>
+            </div>
+            <div>
+              <h3 className="text-sm font-semibold">Assigned staff</h3>
+              {loadingDetailsShelter ? (
+                <p className="mt-1 text-sm text-muted-foreground">Loading staff…</p>
+              ) : detailsShelter.staffList.length === 0 ? (
+                <p className="mt-1 text-sm text-muted-foreground">No staff assigned.</p>
+              ) : (
+                <ul className="mt-1 space-y-1 text-sm text-muted-foreground">
+                  {detailsShelter.staffList.map((u) => (
+                    <li key={u.id}>
+                      {u.name} · {u.email}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
           </div>
         )}
       </DetailsModal>
@@ -937,7 +1094,7 @@ export const PlatformAdminPage = ({ initialSection = 'overview' }: PlatformAdmin
             description={`${adminPetsList.length} of ${totalAdminPets} pets across every shelter`}
             icon={PawPrint}
             toolbar={petSearchFilter}
-            isEmpty={adminPetsList.length === 0}
+            isEmpty={!loadingAdminPets && adminPetsList.length === 0}
             emptyTitle="No pets found"
             emptyDescription="Try a different search or shelter filter."
             footer={petPagination}
@@ -958,7 +1115,9 @@ export const PlatformAdminPage = ({ initialSection = 'overview' }: PlatformAdmin
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {adminPetsList.map((pet) => (
+                  {loadingAdminPets ? (
+                    <TableSkeletonRows columns={7} rows={6} avatar />
+                  ) : adminPetsList.map((pet) => (
                     <TableRow key={pet.id}>
                       <TableCell>
                         <div className="flex items-center gap-3">
@@ -1009,7 +1168,9 @@ export const PlatformAdminPage = ({ initialSection = 'overview' }: PlatformAdmin
 
             {/* Mobile: stacked cards */}
             <div className="grid gap-3 p-4 md:hidden">
-              {adminPetsList.map((pet) => (
+              {loadingAdminPets ? (
+                <RecordCardSkeleton count={3} />
+              ) : adminPetsList.map((pet) => (
                 <RecordCard
                   key={pet.id}
                   imageUrl={pet.imageUrl}
@@ -1106,7 +1267,7 @@ export const PlatformAdminPage = ({ initialSection = 'overview' }: PlatformAdmin
             icon={Users}
             action={addUserButton}
             toolbar={userSearchFilter}
-            isEmpty={usersList.length === 0}
+            isEmpty={!loadingUsers && usersList.length === 0}
             emptyTitle="No users found"
             emptyDescription="Try a different search, or add a new user."
             footer={userPagination}
@@ -1124,7 +1285,9 @@ export const PlatformAdminPage = ({ initialSection = 'overview' }: PlatformAdmin
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {usersList.map((user) => (
+                  {loadingUsers ? (
+                    <TableSkeletonRows columns={4} rows={6} avatar />
+                  ) : usersList.map((user) => (
                     <TableRow key={user.id}>
                       <TableCell>
                         <div className="flex items-center gap-3">
@@ -1194,7 +1357,9 @@ export const PlatformAdminPage = ({ initialSection = 'overview' }: PlatformAdmin
 
             {/* Mobile: stacked cards */}
             <div className="grid gap-3 p-4 md:hidden">
-              {usersList.map((user) => (
+              {loadingUsers ? (
+                <RecordCardSkeleton count={3} />
+              ) : usersList.map((user) => (
                 <RecordCard
                   key={user.id}
                   imageUrl={user.avatarUrl}
@@ -1404,11 +1569,11 @@ export const PlatformAdminPage = ({ initialSection = 'overview' }: PlatformAdmin
         open={pendingDeleteShelter !== null}
         onClose={() => (isDeletingShelter ? undefined : setPendingDeleteShelter(null))}
         onConfirm={() => {
-          if (pendingDeleteShelter) void removeShelter(pendingDeleteShelter.id);
+          if (pendingDeleteShelter) void removeShelter(pendingDeleteShelter.shelter.id);
         }}
         title="Delete shelter?"
-        description="This permanently removes the shelter and its assignment."
-        itemName={pendingDeleteShelter?.name}
+        description="This permanently removes the shelter, its listings, and its applications. Assigned staff accounts are kept but detached."
+        itemName={pendingDeleteShelter?.shelter.name}
         confirmLabel="Delete shelter"
         isDeleting={isDeletingShelter}
       />

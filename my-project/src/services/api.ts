@@ -488,13 +488,11 @@ export const getShelterStats = async (): Promise<ShelterStats> => {
 export const createShelter = async (
   input: Omit<Shelter, 'id' | 'totalPets'>,
 ): Promise<Shelter> => {
-  await delay();
-  const shelter: Shelter = {
-    ...input,
-    id: `s${Date.now()}`,
-    totalPets: 0,
-  };
-  sheltersStore = [shelter, ...sheltersStore];
+  const { shelter } = await apiRequest<{ shelter: Shelter }>('/shelters', {
+    method: 'POST',
+    body: input,
+    auth: 'full',
+  });
   return shelter;
 };
 
@@ -502,14 +500,18 @@ export const updateShelter = async (
   id: string,
   patch: Partial<Shelter>,
 ): Promise<Shelter | undefined> => {
-  await delay();
-  sheltersStore = sheltersStore.map((s) => (s.id === id ? { ...s, ...patch } : s));
-  return sheltersStore.find((s) => s.id === id);
+  const { shelter } = await apiRequest<{ shelter: Shelter }>(
+    `/shelters/${encodeURIComponent(id)}`,
+    { method: 'PATCH', body: patch, auth: 'full' },
+  );
+  return shelter;
 };
 
 export const removeShelter = async (id: string): Promise<void> => {
-  await delay();
-  sheltersStore = sheltersStore.filter((s) => s.id !== id);
+  await apiRequest(`/shelters/${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+    auth: 'full',
+  });
 };
 
 export const shelterService = {
@@ -645,6 +647,121 @@ export const userService = {
   remove: removeUser,
 };
 
+/** Server-counted platform totals backing the admin overview cards. */
+export interface AdminStats {
+  shelters: { total: number; locations: number };
+  users: { total: number; adopters: number; staff: number; admins: number };
+  pets: { total: number; public: number; private: number };
+  applications: {
+    total: number;
+    submitted: number;
+    under_review: number;
+    approved: number;
+    rejected: number;
+    adopted: number;
+  };
+  shelterSummaries: ShelterSummaryRow[];
+  listingsByShelter: { name: string; value: number }[];
+  recentApplications: AdoptionApplication[];
+  recentPets: Pet[];
+}
+
+export interface ShelterSummaryRow {
+  shelter: Shelter;
+  petCount: number;
+  publicPets: number;
+  pendingApplications: number;
+  staff: number;
+}
+
+/**
+ * Platform-wide KPIs counted in SQL (GET /admin/stats). Dynamic only — no
+ * mock fallback: counting local arrays produced wrong dashboard figures, so
+ * failures throw and the UI renders an explicit error state instead.
+ */
+export const getAdminStats = async (): Promise<AdminStats> => {
+  const data = await apiRequest<{ stats: AdminStats }>('/admin/stats', { auth: 'full' });
+  return data.stats;
+};
+
+/**
+ * Admin Shelters table page (GET /admin/shelters). Search, limit, and paging
+ * are enforced in SQL — the table never slices a capped client list.
+ */
+export const listAdminSheltersPaginated = async (options: {
+  page?: number;
+  limit?: number;
+  search?: string;
+} = {}): Promise<PaginatedResult<ShelterSummaryRow>> => {
+  const page = options.page ?? 1;
+  const limit = options.limit ?? 10;
+  const queryParams = new URLSearchParams();
+  queryParams.set('page', String(page));
+  queryParams.set('limit', String(limit));
+  if (options.search) queryParams.set('search', options.search);
+
+  const { data, meta } = await apiRequestWithMeta<{ shelters: ShelterSummaryRow[] }>(
+    `/admin/shelters?${queryParams.toString()}`,
+    { auth: 'full' },
+  );
+  return {
+    items: data.shelters,
+    total: meta?.total ?? data.shelters.length,
+    page: meta?.page ?? page,
+    limit: meta?.limit ?? limit,
+  };
+};
+
+/** Shelter-portal overview aggregates (GET /shelter/overview, JWT-scoped). */
+export interface ShelterOverviewData {
+  stats: {
+    totalPets: number;
+    publicListings: number;
+    privateInventory: number;
+    pendingApplications: number;
+    openListings: number;
+    successfulAdoptions: number;
+    adoptionRate: number;
+  };
+  applicationsTrend: { month: string; applications: number; approved: number }[];
+  petsBySpecies: { name: string; value: number }[];
+  listingsByStatus: { name: string; value: number }[];
+  applicationsByStatus: { status: ApplicationStatus; count: number }[];
+  recentApplications: AdoptionApplication[];
+  recentPets: Pet[];
+  inventory: Pet[];
+}
+
+export const getShelterOverview = async (): Promise<ShelterOverviewData> => {
+  const data = await apiRequest<{ overview: ShelterOverviewData }>('/shelter/overview', {
+    auth: 'full',
+  });
+  return data.overview;
+};
+
+/** Single shelter with counts + assigned staff for the admin details modal. */
+export interface AdminShelterDetails extends ShelterSummaryRow {
+  staffList: { id: string; name: string; email: string }[];
+}
+
+export const getAdminShelter = async (id: string): Promise<AdminShelterDetails> => {
+  const data = await apiRequest<{
+    shelter: Shelter;
+    petCount: number;
+    publicPets: number;
+    pendingApplications: number;
+    staff: { id: string; name: string; email: string }[];
+  }>(`/admin/shelters/${encodeURIComponent(id)}`, { auth: 'full' });
+  return {
+    shelter: data.shelter,
+    petCount: data.petCount,
+    publicPets: data.publicPets,
+    pendingApplications: data.pendingApplications,
+    staff: data.staff.length,
+    staffList: data.staff,
+  };
+};
+
 export const listApplications = async (): Promise<AdoptionApplication[]> => {
   await delay();
   return [...applicationsStore];
@@ -742,9 +859,70 @@ interface ShelterInquiriesResponse {
   inquiries: Inquiry[];
 }
 
+interface InquiryResponse {
+  inquiry: Inquiry;
+}
+
+export interface SubmitInquiryInput {
+  petId: string;
+  fromName: string;
+  fromEmail: string;
+  message: string;
+}
+
+let inquiriesStore: Inquiry[] = [...mockInquiries];
+
 /**
- * Shelter inbox (paginated). The backend scopes rows by the staff JWT, so
- * `shelterId` is only used by the mock fallback in demo mode.
+ * Public inquiry submit (adopter → shelter). The backend stores the row
+ * against the pet, so the owning shelter sees it in its inbox. In demo
+ * mode (unreachable API) the message is kept in the local store so the
+ * shelter inbox still shows it.
+ */
+export const submitInquiry = async (input: SubmitInquiryInput): Promise<Inquiry> => {
+  try {
+    const data = await apiRequest<InquiryResponse>('/inquiries', {
+      method: 'POST',
+      body: input,
+    });
+    return data.inquiry;
+  } catch (err) {
+    if (!shouldFallbackToMock(err)) throw err;
+    const inquiry: Inquiry = {
+      ...input,
+      id: `i${Date.now()}`,
+      createdAt: new Date().toISOString().slice(0, 10),
+      resolved: false,
+    };
+    inquiriesStore = [inquiry, ...inquiriesStore];
+    return inquiry;
+  }
+};
+
+/**
+ * Mark a shelter inbox inquiry as resolved. Falls back to the local store
+ * in demo mode (the backend has no reopen endpoint, so reopening stays
+ * a local-only affordance).
+ */
+export const resolveShelterInquiry = async (id: string): Promise<Inquiry | undefined> => {
+  if (sessionStore.has()) {
+    try {
+      const data = await apiRequest<InquiryResponse>(
+        `/shelter/inquiries/${encodeURIComponent(id)}/resolve`,
+        { method: 'PATCH', auth: 'full' },
+      );
+      return data.inquiry;
+    } catch (err) {
+      if (!shouldFallbackToMock(err)) throw err;
+    }
+  }
+  inquiriesStore = inquiriesStore.map((i) => (i.id === id ? { ...i, resolved: true } : i));
+  return inquiriesStore.find((i) => i.id === id);
+};
+
+/**
+ * Shelter inbox (paginated). The backend scopes rows to the staff member's
+ * shelter via the JWT (inquiries JOIN pets on the shelter's own listings),
+ * so `shelterId` is only used by the mock fallback in demo mode.
  */
 export const listShelterInquiriesPaginated = async (options: {
   page?: number;
@@ -779,10 +957,13 @@ export const listShelterInquiriesPaginated = async (options: {
   }
 
   const search = (options.search ?? '').trim().toLowerCase();
-  const filtered = mockInquiries.filter((inquiry) => {
+  const filtered = inquiriesStore.filter((inquiry) => {
     if (options.shelterId) {
       const pet = petsStore.find((p) => p.id === inquiry.petId);
       if (!pet || pet.shelterId !== options.shelterId) return false;
+    }
+    if (options.resolved !== undefined && (inquiry.resolved ?? false) !== options.resolved) {
+      return false;
     }
     if (search === '') return true;
     const petName = petsStore.find((p) => p.id === inquiry.petId)?.name ?? '';

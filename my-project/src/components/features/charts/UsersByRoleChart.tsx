@@ -1,5 +1,5 @@
 import { Cell, Legend, Pie, PieChart, ResponsiveContainer, Tooltip } from 'recharts';
-import type { ChartPoint } from '@/hooks/useShelterOverview';
+import type { ChartPoint } from './chartTypes';
 import { chartColor, chartTooltipProps } from './chartTheme';
 
 interface UsersByRoleChartProps {

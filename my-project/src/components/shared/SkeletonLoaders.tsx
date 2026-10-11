@@ -1,4 +1,5 @@
 import { Skeleton } from '@/components/ui/Skeleton';
+import { TableCell, TableRow } from '@/components/ui/Table';
 import { cn } from '@/lib/utils';
 
 interface SummaryStatCardSkeletonProps {
@@ -119,6 +120,94 @@ export const TableCardSkeleton = ({ rowsCount = 4, className }: TableCardSkeleto
         ))}
       </div>
     </div>
+  );
+};
+
+interface TableSkeletonRowsProps {
+  /** Number of placeholder rows to show (roughly the page size). */
+  rows?: number;
+  /** Number of columns in the table header. */
+  columns?: number;
+  /** First column holds an image + two text lines (avatar-style cell). */
+  avatar?: boolean;
+  className?: string;
+}
+
+/**
+ * Placeholder rows rendered INSIDE a <TableBody> while data loads or refreshes,
+ * so the table itself (headers included) stays on screen instead of being
+ * replaced by a "Loading…" note outside the table.
+ */
+export const TableSkeletonRows = ({
+  rows = 5,
+  columns = 4,
+  avatar = false,
+  className,
+}: TableSkeletonRowsProps) => {
+  const widths = ['w-5/6', 'w-2/3', 'w-3/4', 'w-1/2', 'w-2/3', 'w-3/5'];
+
+  return (
+    <>
+      {Array.from({ length: rows }).map((_, rowIndex) => (
+        <TableRow
+          key={`skeleton-row-${rowIndex}`}
+          className={cn('hover:bg-transparent', className)}
+        >
+          {Array.from({ length: columns }).map((_, colIndex) => (
+            <TableCell key={`skeleton-cell-${colIndex}`}>
+              {avatar && colIndex === 0 ? (
+                <div className="flex items-center gap-3">
+                  <Skeleton className="size-10 shrink-0 rounded-lg" />
+                  <div className="min-w-0 space-y-1.5">
+                    <Skeleton className="h-3.5 w-28" />
+                    <Skeleton className="h-3 w-20" />
+                  </div>
+                </div>
+              ) : (
+                <Skeleton
+                  className={cn('h-3.5', widths[(rowIndex + colIndex) % widths.length])}
+                />
+              )}
+            </TableCell>
+          ))}
+        </TableRow>
+      ))}
+    </>
+  );
+};
+
+interface RecordCardSkeletonProps {
+  /** Number of placeholder cards (the small-screen stacked list). */
+  count?: number;
+  /** Extra classes applied to every placeholder card. */
+  className?: string;
+}
+
+/**
+ * Mobile stacked-card counterpart to TableSkeletonRows. Renders bare cards so
+ * it drops straight into an existing card list container.
+ */
+export const RecordCardSkeleton = ({ count = 3, className }: RecordCardSkeletonProps) => {
+  return (
+    <>
+      {Array.from({ length: count }).map((_, i) => (
+        <div key={i} className={cn('rounded-xl border bg-card p-4', className)}>
+          <div className="flex items-start gap-3">
+            <Skeleton className="size-12 shrink-0 rounded-lg" />
+            <div className="min-w-0 flex-1 space-y-1.5">
+              <Skeleton className="h-4 w-1/2" />
+              <Skeleton className="h-3 w-1/3" />
+              <Skeleton className="h-5 w-16 rounded-full" />
+            </div>
+            <div className="flex shrink-0 items-center gap-1">
+              <Skeleton className="size-7 rounded-md" />
+              <Skeleton className="size-7 rounded-md" />
+            </div>
+          </div>
+          <Skeleton className="mt-3 h-3 w-2/3" />
+        </div>
+      ))}
+    </>
   );
 };
 

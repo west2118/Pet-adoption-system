@@ -318,9 +318,15 @@ interface ApiErrorResponse {
 | `GET` | `/api/v1/shelter/inquiries` | `shelter_staff` | Fetch inquiries inbox for staff's shelter |
 | `PATCH` | `/api/v1/shelter/inquiries/:id/resolve` | `shelter_staff` | Mark inquiry as resolved |
 | **Platform Admin Governance** | | | |
-| `GET` | `/api/v1/admin/stats` | `platform_admin` | System-wide overview dashboard KPI stats |
+| `GET` | `/api/v1/admin/stats` | `platform_admin` | System-wide overview dashboard KPI stats + shelter summaries + recent applications |
 | `GET` | `/api/v1/admin/users` | `platform_admin` | List all platform registered users |
 | `PATCH` | `/api/v1/admin/users/:id/role` | `platform_admin` | Reassign user role (`adopter`, `shelter_staff`, `platform_admin`) |
+| `GET` | `/api/v1/admin/shelters` | `platform_admin` | Paginated shelters with search + per-row pet/pending/staff counts |
+| `GET` | `/api/v1/admin/shelters/:id` | `platform_admin` | Single shelter with counts + assigned staff list |
+| **Shelter Overview** | | | |
+| `GET` | `/api/v1/shelter/overview` | `shelter_staff` | Shelter-scoped dashboard: KPIs, trends, breakdowns, recent applications, inventory |
+| **Shelters** | | | |
+| `DELETE` | `/api/v1/shelters/:id` | `platform_admin` | Remove shelter (pets cascade, staff detached) |
 
 ---
 
@@ -771,3 +777,37 @@ When migrating from local Node/Express + PostgreSQL to Supabase Cloud:
 - [ ] Multi-table mutations (e.g., application approval + pet status update) execute inside a database transaction (`BEGIN ... COMMIT / ROLLBACK`).
 - [ ] Sensitive user data (passwords) is hashed using bcrypt/argon2 with salt rounds >= 10.
 - [ ] Sensitive credentials/secrets are NEVER committed to version control (`.env` in `.gitignore`).
+
+---
+
+## 12. Dashboard Aggregation Rule (Server-Computed KPIs)
+
+Dashboard summary stats and chart series **MUST be aggregated in SQL** and served
+by dedicated endpoints — the frontend displays, never counts:
+
+- `GET /api/v1/admin/stats` → platform KPIs (`shelters {total, locations}`,
+  `users {total, adopters, staff, admins}`, `pets {total, public, private}`,
+  `applications {total, submitted, under_review, approved, rejected, adopted}`)
+  plus `shelterSummaries[]` (`{shelter, petCount, publicPets, pendingApplications, staff}`),
+  `listingsByShelter[]`, and `recentApplications[]` + `recentPets[]`.
+- `GET /api/v1/shelter/overview` → shelter-scoped equivalent (JWT `shelterId`
+  via `requireShelter`): `stats`, `applicationsTrend[]`, `petsBySpecies[]`,
+  `listingsByStatus[]`, `applicationsByStatus[]`, `recentApplications[]` +
+  `recentPets[]`, `inventory[]` (newest 5).
+- `GET /api/v1/admin/shelters?page&limit&search` → paginated admin Shelters table
+  with per-row counts (search across name/location/email via `ILIKE`).
+
+Rationale: client-side lists come from mock stores, page caps (`limit=100`),
+and tenant-scoped queries — counting them produces wrong KPIs (e.g. mock user
+totals, shelter-scoped pending counts on the platform dashboard).
+
+Related conventions:
+- Paginated lists always return the `meta {page, limit, total, totalPages}`
+  envelope via `buildMeta`; filtering/sorting/page-size enforcement lives in
+  the repository (`WHERE` + `LIMIT/OFFSET`), never in `.slice()` on the client.
+- Read-only aggregate endpoints need no transaction; keep each dashboard to a
+  single round trip with `Promise.all` fan-out inside the repository/service.
+- No mock-data fallbacks on dashboard paths: service functions `throw` and the
+  UI renders an explicit error state instead of plausible-but-wrong figures.
+- Status/species display labels (`"Dogs"`, `"Sep 26"`, `"Under Review"`) are
+  mapped in the **service layer** so every consumer renders identical strings.

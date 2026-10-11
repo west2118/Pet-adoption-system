@@ -10,13 +10,16 @@ import {
 } from '@/components/ui/Table';
 import { PetStatusBadge, VisibilityBadge } from '@/components/ui/StatusBadge';
 import { EmptyState } from '@/components/ui/Feedback';
+import { TableSkeletonRows } from '@/components/shared/SkeletonLoaders';
 
 interface InventoryTableProps {
   pets: Pet[];
+  /** Shows skeleton rows inside the table while the list loads or refreshes. */
+  loading?: boolean;
 }
 
-export const InventoryTable = ({ pets }: InventoryTableProps) => {
-  if (pets.length === 0) {
+export const InventoryTable = ({ pets, loading = false }: InventoryTableProps) => {
+  if (!loading && pets.length === 0) {
     return (
       <div className="p-5 sm:p-6">
         <EmptyState
@@ -39,7 +42,9 @@ export const InventoryTable = ({ pets }: InventoryTableProps) => {
         </TableRow>
       </TableHeader>
       <TableBody>
-        {pets.map((pet) => (
+        {loading ? (
+          <TableSkeletonRows columns={5} rows={5} avatar />
+        ) : pets.map((pet) => (
           <TableRow key={pet.id}>
             <TableCell>
               <div className="flex items-center gap-2.5">

@@ -242,7 +242,7 @@ export const PetDetailsPage = () => {
                 would like to know.
               </p>
               <div className="mt-10">
-                <InquiryForm petName={pet.name} />
+                <InquiryForm petId={pet.id} petName={pet.name} />
               </div>
             </Reveal>
           </div>

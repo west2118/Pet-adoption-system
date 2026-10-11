@@ -10,17 +10,21 @@ import {
 } from '@/components/ui/Table';
 import { ApplicationStatusBadge } from '@/components/ui/StatusBadge';
 import { EmptyState } from '@/components/ui/Feedback';
+import { TableSkeletonRows } from '@/components/shared/SkeletonLoaders';
 
 interface RecentApplicationsTableProps {
   applications: AdoptionApplication[];
   pets: Pet[];
+  /** Shows skeleton rows inside the table while the list loads or refreshes. */
+  loading?: boolean;
 }
 
 export const RecentApplicationsTable = ({
   applications,
   pets,
+  loading = false,
 }: RecentApplicationsTableProps) => {
-  if (applications.length === 0) {
+  if (!loading && applications.length === 0) {
     return (
       <div className="p-5 sm:p-6">
         <EmptyState
@@ -42,7 +46,9 @@ export const RecentApplicationsTable = ({
         </TableRow>
       </TableHeader>
       <TableBody>
-        {applications.map((application) => {
+        {loading ? (
+          <TableSkeletonRows columns={4} rows={4} avatar />
+        ) : applications.map((application) => {
           const pet = pets.find((p) => p.id === application.petId);
           return (
             <TableRow key={application.id}>

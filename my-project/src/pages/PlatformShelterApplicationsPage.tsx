@@ -1,7 +1,13 @@
 import { Building2, Check, Clock, Inbox, Mail, MapPin, Phone, X } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 import { toast } from 'react-toastify';
-import { DetailsModal, SectionHeader, TableCard, TablePagination } from '@/components/shared';
+import {
+  DetailsModal,
+  SectionHeader,
+  TableCard,
+  TablePagination,
+  TableSkeletonRows,
+} from '@/components/shared';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/button';
 import { Label, Textarea } from '@/components/ui/Form';
@@ -61,8 +67,16 @@ export const PlatformShelterApplicationsPage = () => {
     setWorking(true);
     setActionError(null);
     try {
-      await shelterApplicationService.approve(reviewing.id);
-      toast.success(`${reviewing.name} approved! Shelter account is now active.`);
+      const { emailSent, emailStubbed } = await shelterApplicationService.approve(reviewing.id);
+      if (emailSent) {
+        toast.success(`${reviewing.name} approved! Notification email sent to ${reviewing.email}.`);
+      } else if (emailStubbed) {
+        toast.warning(
+          `${reviewing.name} approved, but no email was delivered (email service not configured).`,
+        );
+      } else {
+        toast.warning(`${reviewing.name} approved, but the notification email failed to send.`);
+      }
       closeReview();
       await load();
     } catch (err) {
@@ -79,12 +93,51 @@ export const PlatformShelterApplicationsPage = () => {
     setWorking(true);
     setActionError(null);
     try {
-      await shelterApplicationService.reject(reviewing.id, note.trim() || undefined);
-      toast.success(`${reviewing.name} application rejected.`);
+      const { emailSent, emailStubbed } = await shelterApplicationService.reject(
+        reviewing.id,
+        note.trim() || undefined,
+      );
+      if (emailSent) {
+        toast.success(`${reviewing.name} rejected. Notification email sent to ${reviewing.email}.`);
+      } else if (emailStubbed) {
+        toast.warning(
+          `${reviewing.name} rejected, but no email was delivered (email service not configured).`,
+        );
+      } else {
+        toast.warning(`${reviewing.name} rejected, but the notification email failed to send.`);
+      }
       closeReview();
       await load();
     } catch (err) {
       const message = err instanceof ApiError ? err.message : 'Failed to reject.';
+      setActionError(message);
+      toast.error(message);
+    } finally {
+      setWorking(false);
+    }
+  };
+
+  const handleResendEmail = async () => {
+    if (!reviewing) return;
+    setWorking(true);
+    setActionError(null);
+    try {
+      const { emailSent, emailStubbed } = await shelterApplicationService.resendEmail(
+        reviewing.id,
+      );
+      if (emailSent) {
+        toast.success(`Notification email resent to ${reviewing.email}.`);
+      } else if (emailStubbed) {
+        toast.warning('Email service not configured — no email was delivered.');
+      } else {
+        toast.warning('Resend attempted, but the email failed to send.');
+      }
+      setReviewing((prev) =>
+        prev ? { ...prev, emailSent, emailSentAt: emailSent ? new Date().toISOString() : prev.emailSentAt } : prev,
+      );
+      await load();
+    } catch (err) {
+      const message = err instanceof ApiError ? err.message : 'Failed to resend email.';
       setActionError(message);
       toast.error(message);
     } finally {
@@ -130,9 +183,7 @@ export const PlatformShelterApplicationsPage = () => {
           emptyDescription="New shelter sign-ups will appear here for review."
           contentClassName="px-0"
         >
-          {loading ? (
-            <p className="p-5 text-sm text-muted-foreground">Loading applications…</p>
-          ) : error ? (
+          {error ? (
             <p className="p-5 text-sm text-destructive">{error}</p>
           ) : (
             <Table>
@@ -147,7 +198,9 @@ export const PlatformShelterApplicationsPage = () => {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {applications.map((app) => (
+                {loading ? (
+                  <TableSkeletonRows rows={6} columns={6} avatar />
+                ) : applications.map((app) => (
                   <TableRow key={app.id}>
                     <TableCell className="font-medium">{app.name}</TableCell>
                     <TableCell>
@@ -159,17 +212,34 @@ export const PlatformShelterApplicationsPage = () => {
                     <TableCell>{app.location}</TableCell>
                     <TableCell>{formatDate(app.submittedAt)}</TableCell>
                     <TableCell>
-                      <Badge
-                        variant={
-                          app.status === 'approved'
-                            ? 'success'
-                            : app.status === 'rejected'
-                              ? 'destructive'
-                              : 'warning'
-                        }
-                      >
-                        {app.status}
-                      </Badge>
+                      <div className="flex flex-col items-start gap-1">
+                        <Badge
+                          variant={
+                            app.status === 'approved'
+                              ? 'success'
+                              : app.status === 'rejected'
+                                ? 'destructive'
+                                : 'warning'
+                          }
+                        >
+                          {app.status}
+                        </Badge>
+                        {app.status !== 'pending' ? (
+                          <span
+                            className="inline-flex items-center gap-1 text-xs text-muted-foreground"
+                            title={
+                              app.emailSent
+                                ? `Notification email delivered${app.emailSentAt ? ` on ${formatDate(app.emailSentAt)}` : ''}`
+                                : 'Notification email was not delivered'
+                            }
+                          >
+                            <Mail
+                              className={`size-3 ${app.emailSent ? 'text-green-600' : 'text-destructive'}`}
+                            />
+                            {app.emailSent ? 'Email sent' : 'Email not sent'}
+                          </span>
+                        ) : null}
+                      </div>
                     </TableCell>
                     <TableCell className="text-right">
                       <Button size="sm" variant="outline" onClick={() => setReviewing(app)}>
@@ -212,9 +282,33 @@ export const PlatformShelterApplicationsPage = () => {
               </Button>
             </div>
           ) : (
-            <Badge variant={reviewing?.status === 'approved' ? 'success' : 'destructive'}>
-              {reviewing?.status}
-            </Badge>
+            <div className="flex flex-wrap items-center gap-3">
+              <Badge variant={reviewing?.status === 'approved' ? 'success' : 'destructive'}>
+                {reviewing?.status}
+              </Badge>
+              {reviewing && (
+                <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
+                  <Mail
+                    className={`size-3 ${reviewing.emailSent ? 'text-green-600' : 'text-destructive'}`}
+                  />
+                  {reviewing.emailSent
+                    ? `Notification email sent${reviewing.emailSentAt ? ` · ${formatDate(reviewing.emailSentAt)}` : ''}`
+                    : 'Notification email not delivered'}
+                </span>
+              )}
+              {reviewing && !reviewing.emailSent && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={handleResendEmail}
+                  disabled={working}
+                  className="ml-auto"
+                >
+                  <Mail className="size-3.5" />
+                  {working ? 'Sending…' : 'Resend email'}
+                </Button>
+              )}
+            </div>
           )
         }
       >

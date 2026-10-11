@@ -5,10 +5,12 @@ import { toast } from 'react-toastify';
 import {
   DetailsModal,
   RecordCard,
+  RecordCardSkeleton,
   SectionHeader,
   SlideOver,
   TableCard,
   TablePagination,
+  TableSkeletonRows,
   ValidatedInput,
   focusFirstError,
   isBlank,
@@ -308,9 +310,7 @@ export const ShelterEWaiversPage = () => {
           }
           contentClassName="px-0"
         >
-          {loading ? (
-            <p className="p-6 text-sm text-muted-foreground">Loading templates…</p>
-          ) : loadError ? (
+          {loadError ? (
             <div className="p-6">
               <EmptyState
                 title="Could not load templates"
@@ -337,7 +337,9 @@ export const ShelterEWaiversPage = () => {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {templates.map((template) => (
+                    {loading ? (
+                      <TableSkeletonRows columns={5} rows={5} />
+                    ) : templates.map((template) => (
                       <TableRow key={template.id}>
                         <TableCell>
                           <p className="font-medium">{template.name}</p>
@@ -396,7 +398,9 @@ export const ShelterEWaiversPage = () => {
 
               {/* Mobile: stacked cards */}
               <div className="grid gap-3 p-4 md:hidden">
-                {templates.map((template) => (
+                {loading ? (
+                  <RecordCardSkeleton count={4} />
+                ) : templates.map((template) => (
                   <RecordCard
                     key={template.id}
                     title={template.name}
@@ -543,7 +547,7 @@ export const ShelterEWaiversPage = () => {
           detailsTemplate ? `${detailsTemplate.category} · sample PDF preview` : undefined
         }
         icon={FileSignature}
-        size="lg"
+        size="xl"
         footer={
           detailsTemplate ? (
             <div className="grid grid-cols-2 gap-3">
@@ -567,7 +571,7 @@ export const ShelterEWaiversPage = () => {
               <Badge variant="info">Sample preview — not issued</Badge>
             </div>
             {previewWaiver ? (
-              <div className="rounded-lg border bg-white p-4 sm:p-6">
+              <div className="waiver-preview">
                 <WaiverPrintDocument waiver={previewWaiver} />
               </div>
             ) : (

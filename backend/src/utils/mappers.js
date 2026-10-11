@@ -102,6 +102,8 @@ export const mapShelterApplication = (row) => {
     imageUrl: row.image_url ?? '',
     status: row.status,
     reviewNote: row.review_note ?? undefined,
+    emailSent: row.email_sent ?? null,
+    emailSentAt: row.email_sent_at ?? undefined,
     submittedAt: row.submitted_at,
     reviewedAt: row.reviewed_at ?? undefined,
   };

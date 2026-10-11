@@ -23,6 +23,7 @@ export const WaiverPrintPage = () => {
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [editingTemplates, setEditingTemplates] = useState(false);
 
   useEffect(() => {
     let mounted = true;
@@ -64,6 +65,7 @@ export const WaiverPrintPage = () => {
     try {
       const created = await waiverService.generateForApplication(appId, selected);
       setWaiver(created);
+      setEditingTemplates(false);
       toast.success('E-waiver generated!');
     } catch (err) {
       toast.error(err instanceof ApiError ? err.message : 'Failed to generate waiver.');
@@ -105,7 +107,7 @@ export const WaiverPrintPage = () => {
         >
           ← Back to applications
         </Link>
-        {waiver && (
+        {waiver && !editingTemplates && (
           <Button size="sm" onClick={() => window.print()}>
             <Printer className="size-4" /> Print waiver
           </Button>
@@ -118,7 +120,8 @@ export const WaiverPrintPage = () => {
             <FileSignature className="size-5" /> Generate e-waiver
           </h1>
           <p className="mt-2 text-sm text-muted-foreground">
-            Select the templates to bundle into this adoption's waiver. Only Active
+            Check the templates to bundle into this adoption's waiver — the preview below
+            shows each checked template starting on its own printed page. Only Active
             templates are pre-selected.
           </p>
           <div className="mt-4 space-y-2">
@@ -147,9 +150,83 @@ export const WaiverPrintPage = () => {
             {generating ? 'Generating…' : 'Generate & preview waiver'}
           </Button>
         </div>
+      ) : editingTemplates ? (
+        <div className="mx-auto max-w-2xl rounded-lg border bg-card p-6">
+          <h1 className="flex items-center gap-2 text-xl font-semibold">
+            <FileSignature className="size-5" /> Change templates
+          </h1>
+          <p className="mt-2 text-sm text-muted-foreground">
+            Check the templates to bundle into this adoption's waiver. Regenerating
+            replaces the preview with the new selection.
+          </p>
+          <div className="mt-4 space-y-2">
+            {templates.map((t) => (
+              <label
+                key={t.id}
+                className="flex cursor-pointer items-start gap-3 rounded-lg border p-3 text-sm hover:bg-muted/50"
+              >
+                <input
+                  type="checkbox"
+                  checked={selected.includes(t.id)}
+                  onChange={() => toggle(t.id)}
+                  className="mt-1 size-4 accent-orange-600"
+                />
+                <span>
+                  <span className="font-medium">{t.name}</span>{' '}
+                  <span className="text-xs text-muted-foreground">
+                    ({t.category} · {t.status})
+                  </span>
+                  <span className="mt-1 line-clamp-2 block text-muted-foreground">
+                    {t.body}
+                  </span>
+                </span>
+              </label>
+            ))}
+          </div>
+          <Button
+            className="mt-4 w-full"
+            onClick={handleGenerate}
+            disabled={generating || selected.length === 0}
+          >
+            {generating ? 'Generating…' : 'Regenerate & preview waiver'}
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="mt-2 w-full"
+            onClick={() => setEditingTemplates(false)}
+            disabled={generating}
+          >
+            Back to preview
+          </Button>
+        </div>
       ) : (
-        <div id="waiver-print" className="rounded-lg border bg-white p-6 sm:p-10">
-          <WaiverPrintDocument waiver={waiver} />
+        <div className="mx-auto max-w-3xl space-y-4">
+          <div className="rounded-lg border bg-card p-4 print:hidden">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                Previewing {waiver.snapshot.templates.length} template
+                {waiver.snapshot.templates.length === 1 ? '' : 's'} · each starts on a new
+                printed page
+              </p>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  setSelected(waiver.snapshot.templates.map((t) => t.id));
+                  setEditingTemplates(true);
+                }}
+              >
+                Change templates
+              </Button>
+            </div>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Included: {waiver.snapshot.templates.map((t) => t.name).join(' · ')}
+            </p>
+          </div>
+          <div id="waiver-print" className="waiver-preview rounded-lg">
+            <WaiverPrintDocument waiver={waiver} />
+          </div>
         </div>
       )}
     </div>

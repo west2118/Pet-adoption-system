@@ -37,19 +37,57 @@ export const listShelterApplicationsPaginated = async (options: {
   };
 };
 
-export const approveShelterApplication = async (id: string): Promise<void> => {
-  await apiRequest(`/admin/shelter-applications/${id}/approve`, {
-    method: 'PATCH',
-    auth: 'full',
-  });
+export interface ReviewEmailStatus {
+  emailSent: boolean;
+  emailStubbed: boolean;
+}
+
+export const approveShelterApplication = async (id: string): Promise<ReviewEmailStatus> => {
+  const data = await apiRequest<ReviewEmailStatus>(
+    `/admin/shelter-applications/${id}/approve`,
+    {
+      method: 'PATCH',
+      auth: 'full',
+    },
+  );
+  return {
+    emailSent: data.emailSent ?? false,
+    emailStubbed: data.emailStubbed ?? false,
+  };
 };
 
-export const rejectShelterApplication = async (id: string, reviewNote?: string): Promise<void> => {
-  await apiRequest(`/admin/shelter-applications/${id}/reject`, {
-    method: 'PATCH',
-    auth: 'full',
-    body: { reviewNote },
-  });
+export const rejectShelterApplication = async (
+  id: string,
+  reviewNote?: string,
+): Promise<ReviewEmailStatus> => {
+  const data = await apiRequest<ReviewEmailStatus>(
+    `/admin/shelter-applications/${id}/reject`,
+    {
+      method: 'PATCH',
+      auth: 'full',
+      body: { reviewNote },
+    },
+  );
+  return {
+    emailSent: data.emailSent ?? false,
+    emailStubbed: data.emailStubbed ?? false,
+  };
+};
+
+export const resendShelterApplicationEmail = async (
+  id: string,
+): Promise<ReviewEmailStatus> => {
+  const data = await apiRequest<ReviewEmailStatus>(
+    `/admin/shelter-applications/${id}/resend-email`,
+    {
+      method: 'PATCH',
+      auth: 'full',
+    },
+  );
+  return {
+    emailSent: data.emailSent ?? false,
+    emailStubbed: data.emailStubbed ?? false,
+  };
 };
 
 export const shelterApplicationService = {
@@ -57,4 +95,5 @@ export const shelterApplicationService = {
   listPaginated: listShelterApplicationsPaginated,
   approve: approveShelterApplication,
   reject: rejectShelterApplication,
+  resendEmail: resendShelterApplicationEmail,
 };

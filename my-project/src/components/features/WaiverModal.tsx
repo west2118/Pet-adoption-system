@@ -32,6 +32,7 @@ export const WaiverModal = ({ open, onClose, applicationId, applicantName }: Wai
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [editingTemplates, setEditingTemplates] = useState(false);
 
   // State starts fresh on every open (the caller keys this modal by
   // application id), so the effect only performs the async load.
@@ -75,6 +76,7 @@ export const WaiverModal = ({ open, onClose, applicationId, applicantName }: Wai
     try {
       const created = await waiverService.generateForApplication(applicationId, selected);
       setWaiver(created);
+      setEditingTemplates(false);
       toast.success('E-waiver generated!');
     } catch (err) {
       toast.error(err instanceof ApiError ? err.message : 'Failed to generate waiver.');
@@ -93,7 +95,7 @@ export const WaiverModal = ({ open, onClose, applicationId, applicantName }: Wai
           applicantName ? `Handover documents for ${applicantName}.` : 'Handover documents.'
         }
         icon={FileSignature}
-        size="lg"
+        size="xl"
         footer={
           <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
             <Button
@@ -111,6 +113,7 @@ export const WaiverModal = ({ open, onClose, applicationId, applicantName }: Wai
                 type="button"
                 size="sm"
                 onClick={() => window.print()}
+                disabled={editingTemplates}
                 className="sm:min-w-24"
               >
                 <Printer className="size-3.5" /> Print waiver
@@ -164,14 +167,83 @@ export const WaiverModal = ({ open, onClose, applicationId, applicantName }: Wai
               {generating ? 'Generating…' : 'Generate & preview waiver'}
             </Button>
           </div>
+        ) : editingTemplates ? (
+          <div>
+            <p className="text-sm text-muted-foreground">
+              Check the templates to bundle into this adoption's waiver. Regenerating
+              replaces the preview below with the new selection.
+            </p>
+            <div className="mt-4 space-y-2">
+              {templates.map((t) => (
+                <label
+                  key={t.id}
+                  className="flex cursor-pointer items-start gap-3 rounded-lg border p-3 text-sm hover:bg-muted/50"
+                >
+                  <input
+                    type="checkbox"
+                    checked={selected.includes(t.id)}
+                    onChange={() => toggle(t.id)}
+                    className="mt-1 size-4 accent-orange-600"
+                  />
+                  <span>
+                    <span className="font-medium">{t.name}</span>{' '}
+                    <span className="text-xs text-muted-foreground">
+                      ({t.category} · {t.status})
+                    </span>
+                    <span className="mt-1 line-clamp-2 block text-muted-foreground">{t.body}</span>
+                  </span>
+                </label>
+              ))}
+            </div>
+            <Button
+              className="mt-4 w-full"
+              onClick={handleGenerate}
+              disabled={generating || selected.length === 0}
+            >
+              {generating ? 'Generating…' : 'Regenerate & preview waiver'}
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="mt-2 w-full"
+              onClick={() => setEditingTemplates(false)}
+              disabled={generating}
+            >
+              Back to preview
+            </Button>
+          </div>
         ) : (
           <>
-            <div className="rounded-lg border bg-white p-6 print:hidden">
+            <div className="rounded-lg border bg-muted/40 p-3 print:hidden">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  Previewing {waiver.snapshot.templates.length} template
+                  {waiver.snapshot.templates.length === 1 ? '' : 's'} · each starts on a new
+                  printed page
+                </p>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    setSelected(waiver.snapshot.templates.map((t) => t.id));
+                    setEditingTemplates(true);
+                  }}
+                >
+                  Change templates
+                </Button>
+              </div>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Included: {waiver.snapshot.templates.map((t) => t.name).join(' · ')}
+              </p>
+            </div>
+            <div className="waiver-preview mt-3 print:hidden">
               <WaiverPrintDocument waiver={waiver} />
             </div>
             <p className="mt-3 text-xs text-muted-foreground print:hidden">
-              Tip: in the print dialog, set margins to Default and turn off “Headers and
-              footers” for a clean 2-page PDF.
+              PDF preview — each sheet below is exactly one printed page. Printing
+              produces the same pages without these grey margins.
             </p>
           </>
         )}

@@ -13,7 +13,16 @@ import {
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { FormEvent, ReactNode } from 'react';
 import { toast } from 'react-toastify';
-import { DetailsModal, RecordCard, SectionHeader, SlideOver, TableCard, TablePagination } from '@/components/shared';
+import {
+  DetailsModal,
+  RecordCard,
+  RecordCardSkeleton,
+  SectionHeader,
+  SlideOver,
+  TableCard,
+  TablePagination,
+  TableSkeletonRows,
+} from '@/components/shared';
 import { ConfirmDeleteModal } from '@/components/shared/ConfirmDeleteModal';
 import { PetStatusBadge, VisibilityBadge } from '@/components/ui/StatusBadge';
 import {
@@ -800,9 +809,6 @@ export const ShelterListingsPage = () => {
             : 'Manage your public listings and private inventory.'
         }
       />
-      {loadingListings && (
-        <p className="mt-4 text-sm text-muted-foreground">Loading listings…</p>
-      )}
 
       <div className="mt-6 space-y-4">
         <TableCard
@@ -811,7 +817,7 @@ export const ShelterListingsPage = () => {
           icon={PawPrint}
           action={addPetButton}
           toolbar={searchFilter}
-          isEmpty={pets.length === 0}
+          isEmpty={!loadingListings && pets.length === 0}
           emptyTitle="No listings found"
           emptyDescription={
             myShelter
@@ -835,7 +841,9 @@ export const ShelterListingsPage = () => {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {pets.map((pet) => (
+                {loadingListings ? (
+                  <TableSkeletonRows columns={6} rows={6} avatar />
+                ) : pets.map((pet) => (
                   <TableRow key={pet.id}>
                     <TableCell>
                       <div className="flex items-center gap-3">
@@ -901,7 +909,9 @@ export const ShelterListingsPage = () => {
 
           {/* Mobile: stacked cards */}
           <div className="grid gap-3 p-4 md:hidden">
-            {pets.map((pet) => (
+            {loadingListings ? (
+              <RecordCardSkeleton count={3} />
+            ) : pets.map((pet) => (
               <RecordCard
                 key={pet.id}
                 imageUrl={pet.imageUrl}

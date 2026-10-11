@@ -9,6 +9,12 @@ import { TransportWaiverDocument } from './TransportWaiverDocument';
  * Print dispatcher: renders the matching legal form for each bundled waiver
  * template category, so one printout covers the whole handover bundle.
  *
+ * Each rendered form is wrapped in its own `.waiver-template` boundary that
+ * always starts on a fresh printed sheet: every `.waiver-page` forces
+ * `break-after: page` except the very last page of the last template
+ * (see `index.css`). This keeps Template 1 Page 2 from ever merging onto
+ * the same sheet as Template 2 Page 1.
+ *
  * - Adoption (or an unrecognized bundle) → Pet Adoption Liability Waiver
  * - Foster → Foster Care Agreement & Volunteer Contract
  * - Medical → Medical Disclosure & Health History Acknowledgment
@@ -62,16 +68,73 @@ export const WaiverPrintDocument = ({ waiver }: { waiver: Waiver }) => {
   const showMedia = categories.has('Media');
   const showTransport = categories.has('Logistics');
   const showForms = showLiability || showFoster || showMedical || showMedia || showTransport;
+  const hasAppendix = waiver.snapshot.templates.some((t) => !FORM_CATEGORIES.has(t.category));
+
+  /** Ordered template sections in this bundle — each prints starting on a fresh sheet. */
+  const sections = [
+    showLiability
+      ? { key: 'Adoption', label: 'Adoption — Liability Waiver & Release', Doc: LiabilityWaiverDocument }
+      : null,
+    showFoster
+      ? { key: 'Foster', label: 'Foster — Care Agreement & Volunteer Contract', Doc: FosterCareAgreementDocument }
+      : null,
+    showMedical
+      ? { key: 'Medical', label: 'Medical — Disclosure & Health History', Doc: MedicalDisclosureDocument }
+      : null,
+    showMedia
+      ? { key: 'Media', label: 'Media — Photo, Media & Story Release', Doc: MediaReleaseDocument }
+      : null,
+    showTransport
+      ? { key: 'Logistics', label: 'Logistics — Transport Agreement & Waiver', Doc: TransportWaiverDocument }
+      : null,
+    !showForms ? { key: 'Adoption', label: 'Adoption — Liability Waiver & Release', Doc: LiabilityWaiverDocument } : null,
+  ].filter((s): s is NonNullable<typeof s> => s !== null);
+
+  const namesFor = (category: string) =>
+    waiver.snapshot.templates
+      .filter((t) => t.category === category)
+      .map((t) => t.name);
 
   return (
-    <>
-      {showLiability ? <LiabilityWaiverDocument waiver={waiver} /> : null}
-      {showFoster ? <FosterCareAgreementDocument waiver={waiver} /> : null}
-      {showMedical ? <MedicalDisclosureDocument waiver={waiver} /> : null}
-      {showMedia ? <MediaReleaseDocument waiver={waiver} /> : null}
-      {showTransport ? <TransportWaiverDocument waiver={waiver} /> : null}
-      {!showForms ? <LiabilityWaiverDocument waiver={waiver} /> : null}
-      <AdditionalTermsPage waiver={waiver} />
-    </>
+    <div className="waiver-bundle">
+      {sections.map(({ key, label, Doc }, i) => {
+        const isLast = i === sections.length - 1 && !hasAppendix;
+        const names = namesFor(key);
+        return (
+          <div
+            key={key}
+            className="waiver-template"
+            data-template={key}
+            data-last={isLast ? 'true' : 'false'}
+          >
+            <div className="waiver-template-label print:hidden" aria-hidden="true">
+              <span className="waiver-template-label-index">
+                Template {i + 1} of {sections.length + (hasAppendix ? 1 : 0)}
+              </span>
+              <span className="waiver-template-label-title">{label}</span>
+              {names.length > 0 ? (
+                <span className="waiver-template-label-names">{names.join('; ')}</span>
+              ) : null}
+              <span className="waiver-template-label-hint">Starts on a new printed page</span>
+            </div>
+            <Doc waiver={waiver} />
+          </div>
+        );
+      })}
+      {hasAppendix ? (
+        <div className="waiver-template" data-template="Appendix" data-last="true">
+          <div className="waiver-template-label print:hidden" aria-hidden="true">
+            <span className="waiver-template-label-index">
+              Template {sections.length + 1} of {sections.length + 1}
+            </span>
+            <span className="waiver-template-label-title">
+              Appendix — Additional Terms &amp; Acknowledgments
+            </span>
+            <span className="waiver-template-label-hint">Starts on a new printed page</span>
+          </div>
+          <AdditionalTermsPage waiver={waiver} />
+        </div>
+      ) : null}
+    </div>
   );
 };

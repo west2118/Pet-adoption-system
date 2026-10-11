@@ -363,13 +363,35 @@
     border: none !important;
     border-radius: 0 !important;
   }
-  /* Each template is its own printed page. */
+  /* Each template starts on a fresh sheet: every page forces a break
+     except the very last page of the last template. Scoped to
+     `.waiver-template[data-last="true"]` (instead of `:last-child`) so an
+     inner last-page never accidentally suppresses the break between
+     Template 1 Page 2 and Template 2 Page 1. */
   #waiver-print .waiver-page {
     break-after: page;
     break-inside: auto;
   }
-  #waiver-print .waiver-page:last-child {
+  #waiver-print .waiver-template {
     break-after: auto;
+    break-inside: auto;
+  }
+  #waiver-print .waiver-template[data-last='true'] .waiver-page:last-child {
+    break-after: auto;
+  }
+  /* Strip the on-screen paper-sheet styling so print is clean ink on paper. */
+  #waiver-print.waiver-preview {
+    background: #fff !important;
+    border: none !important;
+    border-radius: 0 !important;
+    padding: 0 !important;
+  }
+  #waiver-print .waiver-page {
+    border: none !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+    padding: 0 !important;
+    max-width: none !important;
   }
   /* Keep logical blocks whole so page breaks fall in the gaps between them. */
   #waiver-print table,
@@ -381,9 +403,83 @@
   }
 }
 
-/* On screen the per-template pages stack as separated sheets. */
-#waiver-print .waiver-page + .waiver-page {
-  margin-top: 2.5rem;
-  border-top: 1px dashed var(--border);
-  padding-top: 2.5rem;
+/* Screen PDF-like preview: each printed `.waiver-page` renders as its own
+   paper sheet inside a grey `.waiver-preview` viewer, so the on-screen
+   preview matches the printed PDF page-for-page. Labels sit above the
+   sheets (never touching the document title) and are hidden in print. */
+.waiver-preview {
+  background: var(--muted);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  /* Tight viewer padding so sheets render at near-print width (≈800px),
+     keeping table line-breaks identical to the printed PDF. */
+  padding: 1rem 0.5rem;
+}
+@media (min-width: 640px) {
+  .waiver-preview {
+    padding: 1.5rem 1rem;
+  }
+}
+.waiver-preview .waiver-template + .waiver-template {
+  margin-top: 1.5rem;
+}
+.waiver-preview .waiver-page {
+  background: #fff;
+  color: #0f172a;
+  max-width: 800px;
+  margin-inline: auto;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  box-shadow:
+    0 1px 2px oklch(0.145 0 0 / 8%),
+    0 8px 24px -12px oklch(0.145 0 0 / 25%);
+  /* Same inner padding as the printed page content area. */
+  padding: 2rem 2rem 1.5rem;
+}
+@media (max-width: 639px) {
+  .waiver-preview .waiver-page {
+    padding: 1.25rem 1rem;
+  }
+}
+.waiver-preview .waiver-page + .waiver-page {
+  margin-top: 1rem;
+}
+.waiver-template-label {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem 0.5rem;
+  max-width: 800px;
+  margin: 0 auto 0.6rem;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted-foreground);
+}
+.waiver-template-label-title {
+  color: var(--foreground);
+}
+.waiver-template-label-index {
+  border-radius: 9999px;
+  background: var(--background);
+  border: 1px solid var(--border);
+  padding: 0.15rem 0.6rem;
+  color: var(--foreground);
+  white-space: nowrap;
+}
+.waiver-template-label-names {
+  display: block;
+  flex-basis: 100%;
+  font-weight: 500;
+  text-transform: none;
+  letter-spacing: normal;
+  color: var(--muted-foreground);
+}
+.waiver-template-label-hint {
+  margin-left: auto;
+  font-weight: 500;
+  text-transform: none;
+  letter-spacing: normal;
+  white-space: nowrap;
 }

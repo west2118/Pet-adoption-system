@@ -12,7 +12,8 @@ import {
   TrendingUp,
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
-import { useMemo } from 'react';
+import { useEffect, useState } from 'react';
+import { toast } from 'react-toastify';
 import {
   ChartCard,
   SectionHeader,
@@ -28,44 +29,69 @@ import { PetsBySpeciesChart } from '@/components/features/charts/PetsBySpeciesCh
 import { ApplicationsByStatusChart } from '@/components/features/charts/ApplicationsByStatusChart';
 import { ListingsByStatusChart } from '@/components/features/charts/ListingsByStatusChart';
 import { Button } from '@/components/ui/button';
-import { useApplications, usePets, useShelters } from '@/hooks/useData';
-import { useAuth } from '@/hooks/useAuth';
-import { useShelterOverview } from '@/hooks/useShelterOverview';
+import { getShelterOverview } from '@/services/api';
+import type { ShelterOverviewData } from '@/services/api';
 
 export const ShelterOverviewPage = () => {
-  const { user } = useAuth();
-  const { pets, loading } = usePets();
-  const { shelters } = useShelters();
-  const { applications } = useApplications();
+  // Every figure below is counted in SQL (GET /shelter/overview, JWT-scoped).
+  // Dynamic only — failures render an explicit error, never local mock math.
+  const [overview, setOverview] = useState<ShelterOverviewData | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
-  // Stats, charts, and recent lists cover this shelter's own pets only —
-  // other shelters' records never leak into the overview.
-  const myShelterId = user?.shelterId ?? shelters[0]?.id ?? null;
-  const myPets = useMemo(
-    () => (myShelterId ? pets.filter((p) => p.shelterId === myShelterId) : pets),
-    [pets, myShelterId],
-  );
-  const myPetIds = useMemo(() => new Set(myPets.map((p) => p.id)), [myPets]);
-  const myApplications = useMemo(
-    () =>
-      myShelterId
-        ? applications.filter((a) => myPetIds.has(a.petId))
-        : applications,
-    [applications, myPetIds, myShelterId],
-  );
-  const {
-    stats,
-    applicationsTrend,
-    petsBySpecies,
-    applicationsByStatus,
-    listingsByStatus,
-    recentApplications,
-    inventory,
-  } = useShelterOverview(myPets, myApplications);
+  useEffect(() => {
+    let mounted = true;
+    getShelterOverview()
+      .then((data) => {
+        if (mounted) {
+          setOverview(data);
+          setError(null);
+        }
+      })
+      .catch(() => {
+        if (mounted) setError('Failed to load shelter overview.');
+      });
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
-  if (loading) {
+  if (!overview && !error) {
     return <ShelterOverviewSkeleton />;
   }
+
+  if (!overview) {
+    return (
+      <div className="w-full px-4 py-6 sm:px-6">
+        <SectionHeader
+          title="Shelter overview"
+          subtitle="A snapshot of your listings, applications, and adoption performance."
+        />
+        <div className="mt-6 rounded-lg border border-destructive/30 bg-destructive/5 p-5 text-sm">
+          <p className="font-semibold text-destructive">Could not load the overview.</p>
+          <p className="mt-1 text-muted-foreground">
+            {error} Check that the backend is running and your staff account has a
+            shelter assigned.
+          </p>
+          <Button
+            size="sm"
+            variant="outline"
+            className="mt-3"
+            onClick={() => {
+              setError(null);
+              setOverview(null);
+              getShelterOverview()
+                .then((data) => setOverview(data))
+                .catch(() => setError('Failed to load shelter overview.'));
+            }}
+          >
+            Retry
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  const { stats } = overview;
 
   return (
     <div className="w-full px-4 py-6 sm:px-6">
@@ -110,7 +136,7 @@ export const ShelterOverviewPage = () => {
           icon={TrendingUp}
           className="lg:col-span-2"
         >
-          <ApplicationsTrendChart data={applicationsTrend} />
+          <ApplicationsTrendChart data={overview.applicationsTrend} />
         </ChartCard>
 
         <ChartCard
@@ -118,7 +144,7 @@ export const ShelterOverviewPage = () => {
           description="Distribution across your inventory."
           icon={PieChart}
         >
-          <PetsBySpeciesChart data={petsBySpecies} />
+          <PetsBySpeciesChart data={overview.petsBySpecies} />
         </ChartCard>
       </div>
 
@@ -128,7 +154,7 @@ export const ShelterOverviewPage = () => {
           description="Where every request currently stands."
           icon={ClipboardList}
         >
-          <ApplicationsByStatusChart data={applicationsByStatus} />
+          <ApplicationsByStatusChart data={overview.applicationsByStatus} />
         </ChartCard>
 
         <ChartCard
@@ -136,7 +162,7 @@ export const ShelterOverviewPage = () => {
           description="Availability of your pet inventory."
           icon={Layers}
         >
-          <ListingsByStatusChart data={listingsByStatus} />
+          <ListingsByStatusChart data={overview.listingsByStatus} />
         </ChartCard>
       </div>
 
@@ -152,22 +178,21 @@ export const ShelterOverviewPage = () => {
             </Button>
           </Link>
         }
-        isEmpty={recentApplications.length === 0}
+        isEmpty={overview.recentApplications.length === 0}
         emptyTitle="No applications yet"
         emptyDescription="Incoming adoption requests will appear here."
         contentClassName="px-0"
         className="mt-4"
       >
-        <RecentApplicationsTable applications={recentApplications} pets={pets} />
+        <RecentApplicationsTable
+          applications={overview.recentApplications}
+          pets={overview.recentPets}
+        />
       </TableCard>
 
       <TableCard
         title="Inventory"
-        description={
-          loading
-            ? 'Loading listings…'
-            : `Showing ${inventory.length} of ${stats.totalPets} pets in your shelter.`
-        }
+        description={`Showing ${overview.inventory.length} newest of ${stats.totalPets} pets in your shelter.`}
         icon={Package}
         action={
           <Link to="/shelter/listings">
@@ -179,7 +204,7 @@ export const ShelterOverviewPage = () => {
         contentClassName="px-0"
         className="mt-4"
       >
-        <InventoryTable pets={inventory} />
+        <InventoryTable pets={overview.inventory} />
       </TableCard>
     </div>
   );

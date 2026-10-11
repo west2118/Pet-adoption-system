@@ -8,6 +8,7 @@ import { cn } from '@/lib/utils';
 const sizeClasses = {
   md: 'max-w-lg',
   lg: 'max-w-2xl',
+  xl: 'max-w-4xl',
 } as const;
 
 interface DetailsModalProps {
