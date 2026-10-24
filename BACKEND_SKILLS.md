@@ -125,7 +125,7 @@ CREATE TYPE pet_size_type AS ENUM ('small', 'medium', 'large');
 CREATE TYPE gender_type AS ENUM ('male', 'female');
 CREATE TYPE pet_status_type AS ENUM ('Available', 'In Process', 'Adopted', 'Fostered');
 CREATE TYPE pet_visibility_type AS ENUM ('public', 'private');
-CREATE TYPE application_status_type AS ENUM ('Submitted', 'Under Review', 'Approved', 'Rejected', 'Adopted');
+CREATE TYPE application_status_type AS ENUM ('Submitted', 'Under Review', 'Approved', 'Rejected', 'Cancelled', 'Adopted');
 CREATE TYPE housing_type AS ENUM ('house', 'apartment', 'condo', 'other');
 
 -- 1. Shelters Table
@@ -220,6 +220,9 @@ CREATE TABLE inquiries (
   from_email VARCHAR(255) NOT NULL,
   message TEXT NOT NULL,
   resolved BOOLEAN NOT NULL DEFAULT false,
+  emailed_at TIMESTAMPTZ,
+  email_subject VARCHAR(255),
+  email_message TEXT,
   created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -311,22 +314,24 @@ interface ApiErrorResponse {
 | **Adoption Applications** | | | |
 | `POST` | `/api/v1/applications` | `adopter` | Submit adoption application for a pet |
 | `GET` | `/api/v1/applications/my` | `adopter` | Get logged-in user's submitted applications |
+| `GET` | `/api/v1/applications/my/stats` | `adopter` | Status counters for own applications |
+| `PATCH` | `/api/v1/applications/:id/cancel` | `adopter` | Withdraw an open application (`Cancelled`) + optional reason; emails the applicant |
 | `GET` | `/api/v1/shelter/applications` | `shelter_staff` | List applications submitted to staff's shelter |
-| `PATCH` | `/api/v1/shelter/applications/:id/status` | `shelter_staff` | Update status (`Approved`, `Rejected`, `Hold`) + staff note |
+| `PATCH` | `/api/v1/shelter/applications/:id/status` | `shelter_staff` | Update status (`Approved`, `Rejected`, `Cancelled` for an approved adoption, `Adopted`) + note; emails the applicant |
 | **Inquiries** | | | |
 | `POST` | `/api/v1/inquiries` | Public / `adopter` | Submit direct inquiry for a pet |
 | `GET` | `/api/v1/shelter/inquiries` | `shelter_staff` | Fetch inquiries inbox for staff's shelter |
-| `PATCH` | `/api/v1/shelter/inquiries/:id/resolve` | `shelter_staff` | Mark inquiry as resolved |
-| **Visit Scheduling** | | | |
-| `POST` | `/api/v1/visits` | `adopter` | Request a visit (creates the pet/adopter thread + opening message) |
-| `GET` | `/api/v1/visits/my` | `adopter` | List own visit threads (paginated, optional `status`) |
-| `GET` | `/api/v1/visits/:id` | thread participant | Read one thread with its messages |
-| `POST` | `/api/v1/visits/:id/messages` | `adopter` | Post a message to own open thread |
-| `PATCH` | `/api/v1/visits/:id/cancel` | `adopter` | Cancel own open thread |
-| `GET` | `/api/v1/shelter/visits` | `shelter_staff` | List shelter visit threads (paginated, optional `status`) |
-| `GET` | `/api/v1/shelter/visits/:id` | `shelter_staff` | Read one shelter thread with messages |
-| `POST` | `/api/v1/shelter/visits/:id/messages` | `shelter_staff` | Reply in a shelter thread |
-| `PATCH` | `/api/v1/shelter/visits/:id/status` | `shelter_staff` | Move status (`proposed`/`confirmed`/`completed`/`cancelled`, validated transitions) |
+| `POST` | `/api/v1/shelter/inquiries/:id/email` | `shelter_staff` | Send a one-time reply email to the inquirer |
+| `PATCH` | `/api/v1/shelter/inquiries/:id/resolve` | `shelter_staff` | Mark inquiry as resolved (legacy; the inbox uses the email action) |
+| **Visit Requests** | | | |
+| `POST` | `/api/v1/visits` | `adopter` | Request a visit (one request per pet per adopter; no conversation) |
+| `GET` | `/api/v1/visits/my` | `adopter` | List own visit requests (paginated, optional `status`) |
+| `GET` | `/api/v1/visits/my/stats` | `adopter` | Status counters for own visit requests |
+| `GET` | `/api/v1/visits/my/pet/:petId` | `adopter` | The adopter's existing request for one pet (or `null`) |
+| `PATCH` | `/api/v1/visits/:id/cancel` | `adopter` | Cancel own open request |
+| `GET` | `/api/v1/shelter/visits` | `shelter_staff` | List shelter visit requests (paginated, optional `status`) |
+| `GET` | `/api/v1/shelter/visits/:id` | `shelter_staff` | Read one visit request |
+| `PATCH` | `/api/v1/shelter/visits/:id/status` | `shelter_staff` | Approve (`confirmed`), decline (`cancelled`), or `completed`; emails the adopter |
 | **Platform Admin Governance** | | | |
 | `GET` | `/api/v1/admin/stats` | `platform_admin` | System-wide overview dashboard KPI stats + shelter summaries + recent applications |
 | `GET` | `/api/v1/admin/users` | `platform_admin` | List all platform registered users |

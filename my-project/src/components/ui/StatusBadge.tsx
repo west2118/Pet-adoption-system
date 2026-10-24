@@ -29,7 +29,9 @@ export const ApplicationStatusBadge = ({ status }: { status: ApplicationStatus }
         ? 'warning'
         : status === 'Rejected'
           ? 'destructive'
-          : 'info';
+          : status === 'Cancelled'
+            ? 'muted'
+            : 'info';
   return <Badge variant={variant}>{status}</Badge>;
 };
 
@@ -45,7 +47,7 @@ export const VisitStatusBadge = ({ status }: { status: VisitStatus }) => {
   const variant =
     status === 'confirmed' || status === 'completed'
       ? 'success'
-      : status === 'proposed' || status === 'requested'
+      : status === 'requested'
         ? 'warning'
         : 'muted';
   return <Badge variant={variant} className="capitalize">{status}</Badge>;

@@ -16,6 +16,8 @@ export const mockShelters: Shelter[] = [
       'A non-profit rescue focused on rehabilitating stray dogs and cats across Metro Manila.',
     imageUrl: img('photo-1548199973-03cce0bbc87b'),
     totalPets: 42,
+    latitude: 14.676,
+    longitude: 121.0437,
   },
   {
     id: 's2',
@@ -29,6 +31,8 @@ export const mockShelters: Shelter[] = [
       'Cebu-based shelter specializing in senior pets and special-needs adoptions.',
     imageUrl: img('photo-1450778869180-41d0601e046e'),
     totalPets: 28,
+    latitude: 10.3157,
+    longitude: 123.8854,
   },
   {
     id: 's3',
@@ -42,6 +46,8 @@ export const mockShelters: Shelter[] = [
       'Family-run haven for cats, rabbits, and small animals looking for gentle homes.',
     imageUrl: img('photo-1514888286974-6c03e2ca1dba'),
     totalPets: 19,
+    latitude: 7.1907,
+    longitude: 125.4553,
   },
 ];
 

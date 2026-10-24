@@ -1,12 +1,10 @@
 import { ArrowRight, CalendarClock, RefreshCw } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { toast } from 'react-toastify';
 import { BlurText, GridOverlay, Reveal, TablePagination } from '@/components/shared';
 import { VisitCard } from '@/components/features/VisitCard';
 import { EmptyState } from '@/components/ui/Feedback';
 import { Button } from '@/components/ui/button';
-import { useAuth } from '@/hooks/useAuth';
 import { ApiError } from '@/lib/apiClient';
 import { getMyVisitSummary, listMyVisits } from '@/services/visitService';
 import type { VisitSummary } from '@/services/visitService';
@@ -22,7 +20,6 @@ const SUMMARY_ORDER = [
 ] as const;
 
 export const VisitsPage = () => {
-  const { user } = useAuth();
   // The list is paged by the backend; the summary band reads its own
   // endpoint so the counters stay right across every page.
   const [threads, setThreads] = useState<VisitThread[]>([]);
@@ -97,8 +94,8 @@ export const VisitsPage = () => {
             delay={200}
             className="mx-auto mt-10 max-w-3xl justify-center text-center text-2xl leading-relaxed text-muted-foreground md:text-3xl"
           >
-            Requested, proposed, confirmed, completed. Follow every meet-and-greet
-            as the shelter team responds.
+            Requested, confirmed, completed. Follow every meet-and-greet as the
+            shelter team approves it — the decision arrives by email.
           </BlurText>
         </div>
       </section>
@@ -174,12 +171,7 @@ export const VisitsPage = () => {
               <>
                 <div className="space-y-6">
                   {threads.map((thread) => (
-                    <VisitCard
-                      key={thread.id}
-                      thread={thread}
-                      currentUserId={user?.id}
-                      onChanged={refresh}
-                    />
+                    <VisitCard key={thread.id} thread={thread} onChanged={refresh} />
                   ))}
                 </div>
 

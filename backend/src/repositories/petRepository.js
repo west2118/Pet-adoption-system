@@ -2,6 +2,20 @@ import { pool } from '../config/database.js';
 
 const selectPets = 'SELECT * FROM pets';
 
+/**
+ * Haversine distance in kilometres from ($latParam, $lngParam) to the joined
+ * shelter row (`s`). Postgres returns numeric, which pg hands back as a string;
+ * the mapper converts it to a number for the API.
+ */
+const distanceFromSql = (latParam, lngParam) => `(6371 * acos(
+  LEAST(1, GREATEST(-1,
+    sin(radians(${latParam})) * sin(radians(s.latitude)) +
+    cos(radians(${latParam})) * cos(radians(s.latitude)) *
+    cos(radians(s.longitude) - radians(${lngParam}))
+  ))
+))`;
+
+
 export const buildPublicFilters = (filters) => {
   // In-process pets (accepted application, adoption underway) are hidden from
   // every public surface — adopters browse adoptable pets only. Adopted pets
@@ -96,12 +110,44 @@ export const listPetFacets = async (shelterId) => {
 
 export const listPublicPets = async (filters, { limit, offset }) => {
   const { conditions, values } = buildPublicFilters(filters);
+  const params = [...values];
+  const hasOrigin =
+    Number.isFinite(filters.latitude) &&
+    Number.isFinite(filters.longitude) &&
+    Math.abs(filters.latitude) <= 90 &&
+    Math.abs(filters.longitude) <= 180;
+
+  let join = '';
+  let distanceSelect = '';
+  let orderBy = 'p.created_at DESC';
+
+  if (hasOrigin) {
+    join = 'JOIN shelters s ON s.id = p.shelter_id';
+    // Origin parameters go after every facet value so facets keep their indexes.
+    params.push(filters.latitude, filters.longitude);
+    const latParam = `$${params.length - 1}`;
+    const lngParam = `$${params.length}`;
+    const distance = distanceFromSql(latParam, lngParam);
+
+    distanceSelect = `, ROUND((${distance})::numeric, 2) AS distance_km`;
+    conditions.push('s.latitude IS NOT NULL', 's.longitude IS NOT NULL');
+
+    if (Number.isFinite(filters.radiusKm) && filters.radiusKm > 0) {
+      params.push(filters.radiusKm);
+      conditions.push(`(${distance}) <= $${params.length}`);
+    }
+    if (filters.sortByDistance) {
+      orderBy = 'distance_km ASC NULLS LAST, p.created_at DESC';
+    }
+  }
+
   const where = `WHERE ${conditions.join(' AND ')}`;
+  const from = `FROM pets p ${join}`;
   const { rows } = await pool.query(
-    `${selectPets} ${where} ORDER BY created_at DESC LIMIT $${values.length + 1} OFFSET $${values.length + 2}`,
-    [...values, limit, offset],
+    `SELECT p.*${distanceSelect} ${from} ${where} ORDER BY ${orderBy} LIMIT $${params.length + 1} OFFSET $${params.length + 2}`,
+    [...params, limit, offset],
   );
-  const count = await pool.query(`SELECT COUNT(*)::int AS total FROM pets ${where}`, values);
+  const count = await pool.query(`SELECT COUNT(*)::int AS total ${from} ${where}`, params);
   return { rows, total: count.rows[0].total };
 };
 

@@ -9,6 +9,7 @@ export type ApplicationStatus =
   | 'Under Review'
   | 'Approved'
   | 'Rejected'
+  | 'Cancelled'
   | 'Adopted';
 
 export type UserRole = 'adopter' | 'shelter_staff' | 'platform_admin';
@@ -49,6 +50,8 @@ export interface Pet {
   litterTrained?: boolean;
   apartmentFriendly?: boolean;
   dateAdded: string;
+  /** Straight-line distance to the visitor, present only on nearby queries. */
+  distanceKm?: number;
 }
 
 export interface Shelter {
@@ -64,6 +67,9 @@ export interface Shelter {
   totalPets: number;
   /** Public + Available listings count (provided by GET /shelters). */
   activeListings?: number;
+  /** Shelter coordinates used for "Near me" distance sorting. */
+  latitude?: number | null;
+  longitude?: number | null;
 }
 
 export interface AdoptionApplication {
@@ -82,6 +88,8 @@ export interface AdoptionApplication {
   submittedAt: string;
   updatedAt: string;
   staffNotes?: string;
+  /** Joined pet summary so the card still renders when the pet is not public. */
+  pet?: { id: string; name: string; imageUrl: string; breed?: string };
   history: { status: ApplicationStatus; date: string; note?: string }[];
 }
 
@@ -128,13 +136,18 @@ export interface Inquiry {
   fromEmail: string;
   message: string;
   createdAt: string;
-  /** Server-tracked resolution (backend only) — the shelter inbox also keeps a local override set. */
+  /** Server-tracked resolution (backend only) — emailing an inquiry resolves it. */
   resolved?: boolean;
+  /** Set once the shelter has successfully emailed the inquirer. */
+  emailedAt?: string;
+  /** Subject/body of the reply that was sent (read-only in the details modal). */
+  emailSubject?: string;
+  emailMessage?: string;
 }
 
-export type VisitStatus = 'requested' | 'proposed' | 'confirmed' | 'completed' | 'cancelled';
+export type VisitStatus = 'requested' | 'confirmed' | 'completed' | 'cancelled';
 
-/** One meet-and-greet coordination thread for a (pet, adopter) pair. */
+/** One meet-and-greet request for a (pet, adopter) pair. */
 export interface VisitThread {
   id: string;
   petId: string;
@@ -146,16 +159,8 @@ export interface VisitThread {
   createdAt: string;
   updatedAt: string;
   pet?: { id: string; name: string; imageUrl: string };
-}
-
-export interface VisitMessage {
-  id: string;
-  threadId: string;
-  senderId: string;
-  senderName?: string | null;
-  senderRole?: string | null;
-  body: string;
-  createdAt: string;
+  /** Present on shelter views so staff know who to decide on. */
+  adopter?: { id: string; name: string; email?: string | null };
 }
 
 export type WaiverTemplateStatus = 'Active' | 'Draft';
@@ -183,7 +188,14 @@ export interface WaiverSnapshot {
   };
   pet: Pet;
   shelter: Shelter;
-  templates: { id: string; name: string; category: string; body: string }[];
+  templates: {
+    id: string;
+    name: string;
+    category: string;
+    body: string;
+    /** Locked platform template vs. shelter-authored template. */
+    isDefault?: boolean;
+  }[];
   issuedAt: string;
 }
 

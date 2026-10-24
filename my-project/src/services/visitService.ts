@@ -1,22 +1,22 @@
 import { apiRequest, apiRequestWithMeta } from '@/lib/apiClient';
 import type { PaginatedResult } from '@/services/api';
-import type { VisitMessage, VisitStatus, VisitThread } from '@/types';
+import type { VisitStatus, VisitThread } from '@/types';
 
 /**
- * Visit scheduling threads (meet-and-greet coordination). Dynamic only —
- * every call hits the API; failures throw for explicit error states.
+ * Visit requests (meet-and-greet coordination). There is no conversation:
+ * the shelter approves or declines and the adopter is emailed the decision.
+ * Dynamic only — every call hits the API; failures throw for explicit error
+ * states.
  */
 
 export interface RequestVisitInput {
   petId: string;
   preferredSlot: string;
-  message: string;
 }
 
 export interface VisitSummary {
   total: number;
   requested: number;
-  proposed: number;
   confirmed: number;
   completed: number;
   cancelled: number;
@@ -29,14 +29,21 @@ export const getMyVisitSummary = async (): Promise<VisitSummary> => {
   return data.summary;
 };
 
-export const requestVisit = async (
-  input: RequestVisitInput,
-): Promise<{ thread: VisitThread; messages: VisitMessage[] }> => {
-  const data = await apiRequest<{ thread: VisitThread; messages: VisitMessage[] }>(
-    '/visits',
-    { method: 'POST', body: input, auth: 'full' },
+export const requestVisit = async (input: RequestVisitInput): Promise<VisitThread> => {
+  const data = await apiRequest<{ thread: VisitThread }>('/visits', {
+    method: 'POST',
+    body: input,
+    auth: 'full',
+  });
+  return data.thread;
+};
+
+export const getMyVisitForPet = async (petId: string): Promise<VisitThread | null> => {
+  const data = await apiRequest<{ visit: VisitThread | null }>(
+    `/visits/my/pet/${encodeURIComponent(petId)}`,
+    { auth: 'full' },
   );
-  return data;
+  return data.visit;
 };
 
 export const listMyVisits = async (options: {
@@ -61,19 +68,6 @@ export const listMyVisits = async (options: {
     page: meta?.page ?? page,
     limit: meta?.limit ?? limit,
   };
-};
-
-export const getMyVisit = async (
-  id: string,
-): Promise<{ thread: VisitThread; messages: VisitMessage[] }> =>
-  apiRequest(`/visits/${encodeURIComponent(id)}`, { auth: 'full' });
-
-export const postMyVisitMessage = async (id: string, body: string): Promise<VisitMessage> => {
-  const data = await apiRequest<{ message: VisitMessage }>(
-    `/visits/${encodeURIComponent(id)}/messages`,
-    { method: 'POST', body: { body }, auth: 'full' },
-  );
-  return data.message;
 };
 
 export const cancelMyVisit = async (id: string, cancelReason?: string): Promise<VisitThread> => {
@@ -108,20 +102,12 @@ export const listShelterVisits = async (options: {
   };
 };
 
-export const getShelterVisit = async (
-  id: string,
-): Promise<{ thread: VisitThread; messages: VisitMessage[] }> =>
-  apiRequest(`/shelter/visits/${encodeURIComponent(id)}`, { auth: 'full' });
-
-export const postShelterVisitMessage = async (
-  id: string,
-  body: string,
-): Promise<VisitMessage> => {
-  const data = await apiRequest<{ message: VisitMessage }>(
-    `/shelter/visits/${encodeURIComponent(id)}/messages`,
-    { method: 'POST', body: { body }, auth: 'full' },
+export const getShelterVisit = async (id: string): Promise<VisitThread> => {
+  const data = await apiRequest<{ thread: VisitThread }>(
+    `/shelter/visits/${encodeURIComponent(id)}`,
+    { auth: 'full' },
   );
-  return data.message;
+  return data.thread;
 };
 
 export const updateShelterVisitStatus = async (
@@ -137,12 +123,10 @@ export const updateShelterVisitStatus = async (
 
 export const visitService = {
   request: requestVisit,
+  getMineForPet: getMyVisitForPet,
   listMine: listMyVisits,
-  getMine: getMyVisit,
-  postMyMessage: postMyVisitMessage,
   cancelMine: cancelMyVisit,
   listForShelter: listShelterVisits,
   getForShelter: getShelterVisit,
-  postShelterMessage: postShelterVisitMessage,
   updateStatus: updateShelterVisitStatus,
 };

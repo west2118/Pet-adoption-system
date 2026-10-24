@@ -1,4 +1,4 @@
-import { Check, Eye, FileSignature, Pencil, Plus, Search } from 'lucide-react';
+import { Check, Eye, FileSignature, Lock, Pencil, Plus, Search } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 import type { FormEvent } from 'react';
 import { toast } from 'react-toastify';
@@ -7,7 +7,6 @@ import {
   RecordCard,
   RecordCardSkeleton,
   SectionHeader,
-  SlideOver,
   TableCard,
   TablePagination,
   TableSkeletonRows,
@@ -24,14 +23,17 @@ import {
   TableRow,
 } from '@/components/ui/Table';
 import { Badge } from '@/components/ui/Badge';
-import { Input, Label, Select, Textarea } from '@/components/ui/Form';
+import { Input, Label, Select } from '@/components/ui/Form';
 import { Button } from '@/components/ui/button';
 import { EmptyState } from '@/components/ui/Feedback';
+import { CustomWaiverTemplateDocument } from '@/components/features/CustomWaiverTemplateDocument';
 import { WaiverPrintDocument } from '@/components/features/WaiverPrintDocument';
+import { WaiverTemplateEditor } from '@/components/features/WaiverTemplateEditor';
 import { ApiError } from '@/lib/apiClient';
 import { waiverService } from '@/services/waiverService';
 import { useAuth } from '@/hooks/useAuth';
 import { usePets, useShelters } from '@/hooks/useData';
+import { formatWaiverBodyPreview } from '@/lib/waiverContent';
 import type { Pet, Shelter, Waiver, WaiverTemplate, WaiverTemplateStatus } from '@/types';
 import { formatDate } from '@/utils/formatters';
 
@@ -68,8 +70,9 @@ export const ShelterEWaiversPage = () => {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const [detailsId, setDetailsId] = useState<string | null>(null);
-  const [slideOpen, setSlideOpen] = useState(false);
+  const [editorOpen, setEditorOpen] = useState(false);
   const [editing, setEditing] = useState<WaiverTemplate | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
   const [form, setForm] = useState(emptyForm);
   const [formErrors, setFormErrors] = useState<{ name?: string; body?: string }>({});
 
@@ -92,6 +95,9 @@ export const ShelterEWaiversPage = () => {
   }, [page, pageSize, query]);
 
   useEffect(() => {
+    // Fetches remote data whenever the page/filter changes; the loading flag
+    // is set by the fetch itself rather than derived during render.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchTemplates();
   }, [fetchTemplates]);
 
@@ -105,13 +111,14 @@ export const ShelterEWaiversPage = () => {
     null;
 
   /**
-   * Sample waiver backing the PDF-look preview: the real legal form for this
-   * template's category, filled with the shelter's own details plus sample
-   * adopter/pet data (first listing when one exists). Clearly marked as a
-   * preview — nothing here is issued or stored.
+   * Sample waiver backing the PDF-look preview and the editor's live preview:
+   * the shelter's own details plus sample adopter/pet data (first listing when
+   * one exists). Clearly marked as a preview — nothing is issued or stored.
    */
-  const previewWaiver: Waiver | null = (() => {
-    if (!detailsTemplate || !previewShelter) return null;
+  const buildSampleWaiver = (
+    template: Pick<WaiverTemplate, 'id' | 'name' | 'category' | 'body' | 'isDefault'>,
+  ): Waiver | null => {
+    if (!previewShelter) return null;
     const samplePet: Pet =
       pets.find((p) => p.shelterId === previewShelter.id) ?? ({
         id: 'sample-pet',
@@ -164,10 +171,11 @@ export const ShelterEWaiversPage = () => {
         shelter: previewShelter,
         templates: [
           {
-            id: detailsTemplate.id,
-            name: detailsTemplate.name,
-            category: detailsTemplate.category,
-            body: detailsTemplate.body,
+            id: template.id,
+            name: template.name,
+            category: template.category,
+            body: template.body,
+            isDefault: template.isDefault,
           },
         ],
         issuedAt: now,
@@ -175,13 +183,24 @@ export const ShelterEWaiversPage = () => {
       createdAt: now,
       updatedAt: now,
     };
-  })();
+  };
+
+  const previewWaiver = detailsTemplate ? buildSampleWaiver(detailsTemplate) : null;
+
+  const editorTemplate = {
+    id: editing?.id ?? 'preview-template',
+    name: form.name.trim() || 'Untitled waiver template',
+    category: form.category,
+    body: form.body,
+    isDefault: false,
+  };
+  const editorPreviewWaiver = buildSampleWaiver(editorTemplate);
 
   const openAdd = () => {
     setEditing(null);
     setForm(emptyForm);
     setFormErrors({});
-    setSlideOpen(true);
+    setEditorOpen(true);
   };
 
   const openEdit = (template: WaiverTemplate) => {
@@ -194,7 +213,7 @@ export const ShelterEWaiversPage = () => {
       status: template.status,
     });
     setFormErrors({});
-    setSlideOpen(true);
+    setEditorOpen(true);
   };
 
   const toggleStatus = async (template: WaiverTemplate) => {
@@ -210,6 +229,7 @@ export const ShelterEWaiversPage = () => {
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
+    if (isSaving) return;
     const errors: { name?: string; body?: string } = {};
     if (isBlank(form.name)) errors.name = 'Please enter the template name.';
     if (isBlank(form.body)) errors.body = 'Please enter the waiver text.';
@@ -221,6 +241,7 @@ export const ShelterEWaiversPage = () => {
       focusFirstError();
       return;
     }
+    setIsSaving(true);
     try {
       if (editing) {
         const updated = await waiverService.updateTemplate(editing.id, {
@@ -241,11 +262,13 @@ export const ShelterEWaiversPage = () => {
         setTemplates((prev) => [...prev, created]);
         toast.success(`"${created.name}" created successfully!`);
       }
-      setSlideOpen(false);
+      setEditorOpen(false);
       setEditing(null);
       await fetchTemplates();
     } catch (err) {
       toast.error(err instanceof ApiError ? err.message : 'Failed to save template.');
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -289,7 +312,7 @@ export const ShelterEWaiversPage = () => {
     <div className="w-full px-4 py-6 sm:px-6">
       <SectionHeader
         title="E-Waivers"
-        subtitle="Waiver templates bundled into the printable e-waiver adopters sign at handover. The 5 default templates are locked — templates you create are visible only to your shelter."
+        subtitle="Waiver templates bundled into the printable e-waiver adopters sign at handover. The 5 platform defaults are locked; templates your shelter creates are private to your shelter and can use formatted headings, lists, notices, and tables."
       />
 
       <div className="mt-6 space-y-4">
@@ -347,7 +370,12 @@ export const ShelterEWaiversPage = () => {
                             <Badge variant="info" className="mt-1">
                               Default · locked
                             </Badge>
-                          ) : null}
+                          ) : (
+                            <Badge variant="muted" className="mt-1 gap-1">
+                              <Lock className="size-3" aria-hidden="true" /> Private to your
+                              shelter
+                            </Badge>
+                          )}
                         </TableCell>
                         <TableCell className="whitespace-nowrap text-muted-foreground">
                           {template.category}
@@ -419,7 +447,13 @@ export const ShelterEWaiversPage = () => {
                         <Badge variant={template.status === 'Active' ? 'success' : 'muted'}>
                           {template.status}
                         </Badge>
-                        {template.isDefault ? <Badge variant="info">Default</Badge> : null}
+                        {template.isDefault ? (
+                          <Badge variant="info">Default</Badge>
+                        ) : (
+                          <Badge variant="muted">
+                            <Lock className="size-3" aria-hidden="true" /> Private
+                          </Badge>
+                        )}
                       </>
                     }
                     actions={
@@ -447,7 +481,9 @@ export const ShelterEWaiversPage = () => {
                       </>
                     }
                   >
-                    <p className="line-clamp-2 text-sm text-muted-foreground">{template.body}</p>
+                    <p className="line-clamp-2 text-sm text-muted-foreground">
+                      {formatWaiverBodyPreview(template.body)}
+                    </p>
                   </RecordCard>
                 ))}
               </div>
@@ -456,19 +492,21 @@ export const ShelterEWaiversPage = () => {
         </TableCard>
       </div>
 
-      <SlideOver
-        open={slideOpen}
+      <DetailsModal
+        open={editorOpen}
         onClose={() => {
-          setSlideOpen(false);
+          if (isSaving) return;
+          setEditorOpen(false);
           setEditing(null);
         }}
         title={editing ? `Edit ${editing.name}` : 'Add waiver template'}
         description={
           editing
             ? 'Update the template below. Already-issued waivers keep their original text.'
-            : 'New templates can be bundled into e-waivers at handover.'
+            : 'Compose a formatted waiver, then bundle it into e-waivers at handover.'
         }
         icon={editing ? Pencil : Plus}
+        size="2xl"
         footer={
           <div className="grid grid-cols-2 gap-3">
             <Button
@@ -476,20 +514,39 @@ export const ShelterEWaiversPage = () => {
               variant="outline"
               size="lg"
               className="w-full"
+              disabled={isSaving}
               onClick={() => {
-                setSlideOpen(false);
+                setEditorOpen(false);
                 setEditing(null);
               }}
             >
               Cancel
             </Button>
-            <Button type="submit" form="waiver-template-form" size="lg" className="w-full">
-              {editing ? 'Save changes' : 'Create template'}
+            <Button
+              type="submit"
+              form="waiver-template-form"
+              size="lg"
+              className="w-full"
+              disabled={isSaving}
+              aria-busy={isSaving}
+            >
+              {isSaving ? 'Saving…' : editing ? 'Save changes' : 'Create template'}
             </Button>
           </div>
         }
       >
-        <form id="waiver-template-form" onSubmit={handleSubmit} noValidate className="grid gap-3">
+        <form id="waiver-template-form" onSubmit={handleSubmit} noValidate className="space-y-4">
+          <div className="flex items-start gap-2.5 rounded-lg border border-teal-200 bg-teal-50 px-3 py-2 text-xs text-teal-900 dark:border-teal-900/60 dark:bg-teal-950/40 dark:text-teal-200">
+            <Lock className="mt-0.5 size-3.5 shrink-0" aria-hidden="true" />
+            <p>
+              <span className="font-semibold">
+                Private to {previewShelter?.name ?? 'your shelter'}.
+              </span>{' '}
+              Only staff signed in to this shelter can see, edit, or bundle this template. Other
+              shelters never see it.
+            </p>
+          </div>
+
           <div>
             <Label htmlFor="waiver-name">Name</Label>
             <ValidatedInput
@@ -524,34 +581,40 @@ export const ShelterEWaiversPage = () => {
               />
             </div>
           </div>
-          <div>
-            <Label htmlFor="waiver-body">Waiver text</Label>
-            <Textarea
-              id="waiver-body"
-              value={form.body}
-              onChange={(e) => {
-                setForm({ ...form, body: e.target.value });
-                setFormErrors((p) => ({ ...p, body: undefined }));
-              }}
-              placeholder="The full waiver wording adopters agree to… (min. 10 characters)"
-              required
-              minLength={10}
-              rows={8}
-              aria-invalid={Boolean(formErrors.body)}
-              className={
-                formErrors.body
-                  ? 'border-destructive focus-visible:border-destructive focus-visible:ring-destructive/40'
-                  : undefined
-              }
-            />
-            {formErrors.body && (
-              <p role="alert" className="mt-1 text-[13px] text-destructive">
-                {formErrors.body}
+
+          <div className="grid gap-4 lg:grid-cols-2">
+            <div className="min-w-0">
+              <Label htmlFor="waiver-body">Template content</Label>
+              <WaiverTemplateEditor
+                id="waiver-body"
+                value={form.body}
+                onChange={(body) => {
+                  setForm({ ...form, body });
+                  setFormErrors((p) => ({ ...p, body: undefined }));
+                }}
+                error={formErrors.body}
+              />
+            </div>
+            <div className="min-w-0">
+              <div className="mb-1.5 flex items-center justify-between gap-2">
+                <span className="text-sm font-medium">Live document preview</span>
+                <span className="text-xs text-muted-foreground">Reflects your formatting</span>
+              </div>
+              <div className="waiver-preview max-h-[520px] overflow-y-auto">
+                <CustomWaiverTemplateDocument
+                  template={editorTemplate}
+                  waiver={editorPreviewWaiver}
+                  preview
+                />
+              </div>
+              <p className="mt-1.5 text-xs text-muted-foreground">
+                Sample adopter, pet, and shelter details are shown. Saved templates keep this
+                layout in every issued e-waiver.
               </p>
-            )}
+            </div>
           </div>
         </form>
-      </SlideOver>
+      </DetailsModal>
 
       <DetailsModal
         open={detailsTemplate !== null}
@@ -564,14 +627,39 @@ export const ShelterEWaiversPage = () => {
         size="xl"
         footer={
           detailsTemplate ? (
-            <div className="grid grid-cols-2 gap-3">
-              <Button type="button" variant="outline" size="lg" className="w-full" onClick={() => setDetailsId(null)}>
-                Close
-              </Button>
-              <Button type="button" size="lg" className="w-full" onClick={() => openEdit(detailsTemplate)}>
-                <Pencil className="size-4" /> Edit template
-              </Button>
-            </div>
+            detailsTemplate.isDefault ? (
+              <div className="flex justify-end">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="lg"
+                  className="w-full sm:w-auto sm:min-w-32"
+                  onClick={() => setDetailsId(null)}
+                >
+                  Close
+                </Button>
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 gap-3">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="lg"
+                  className="w-full"
+                  onClick={() => setDetailsId(null)}
+                >
+                  Close
+                </Button>
+                <Button
+                  type="button"
+                  size="lg"
+                  className="w-full"
+                  onClick={() => openEdit(detailsTemplate)}
+                >
+                  <Pencil className="size-4" /> Edit template
+                </Button>
+              </div>
+            )
           ) : undefined
         }
       >
@@ -582,15 +670,28 @@ export const ShelterEWaiversPage = () => {
                 {detailsTemplate.status}
               </Badge>
               <Badge variant="muted">Updated {formatDate(detailsTemplate.updatedAt)}</Badge>
+              {detailsTemplate.isDefault ? (
+                <Badge variant="info">
+                  <Lock className="size-3" aria-hidden="true" /> Platform default · locked
+                </Badge>
+              ) : (
+                <Badge variant="muted">
+                  <Lock className="size-3" aria-hidden="true" /> Private to your shelter
+                </Badge>
+              )}
               <Badge variant="info">Sample preview — not issued</Badge>
             </div>
             {previewWaiver ? (
               <div className="waiver-preview">
-                <WaiverPrintDocument waiver={previewWaiver} />
+                <WaiverPrintDocument waiver={previewWaiver} preview />
               </div>
-            ) : (
+            ) : detailsTemplate.isDefault ? (
               <div className="rounded-lg border p-3">
                 <p className="text-sm leading-relaxed">{detailsTemplate.body}</p>
+              </div>
+            ) : (
+              <div className="waiver-preview">
+                <CustomWaiverTemplateDocument template={detailsTemplate} preview />
               </div>
             )}
           </div>

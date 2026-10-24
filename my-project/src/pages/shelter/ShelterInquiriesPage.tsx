@@ -1,10 +1,4 @@
-import {
-  Check,
-  Eye,
-  MessageCircleQuestion,
-  RotateCcw,
-  Search,
-} from 'lucide-react';
+import { Eye, Mail, MessageCircleQuestion, Search } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 import { toast } from 'react-toastify';
 import {
@@ -12,6 +6,7 @@ import {
   RecordCard,
   RecordCardSkeleton,
   SectionHeader,
+  SlideOver,
   TableCard,
   TablePagination,
   TableSkeletonRows,
@@ -24,14 +19,15 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/Table';
-import { Input, Select, Textarea, Label } from '@/components/ui/Form';
+import { Input, Label, Select, Textarea } from '@/components/ui/Form';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/Badge';
 import { useAuth } from '@/hooks/useAuth';
 import { usePets, useShelters } from '@/hooks/useData';
+import { ApiError } from '@/lib/apiClient';
 import {
+  emailShelterInquiry,
   listShelterInquiriesPaginated,
-  resolveShelterInquiry,
   type Inquiry,
 } from '@/services/api';
 import { formatDate } from '@/utils/formatters';
@@ -54,10 +50,12 @@ export const ShelterInquiriesPage = () => {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const [detailsId, setDetailsId] = useState<string | null>(null);
-  const [drafts, setDrafts] = useState<Record<string, string>>({});
-  const [replies, setReplies] = useState<Record<string, string>>({});
-  /** Local resolution overrides (demo-mode store + reopen, which the API lacks). */
-  const [overrides, setOverrides] = useState<Record<string, boolean>>({});
+
+  // Reply compose dialog (kept separate so the details modal stays read-only).
+  const [emailingId, setEmailingId] = useState<string | null>(null);
+  const [emailSubject, setEmailSubject] = useState('');
+  const [emailMessage, setEmailMessage] = useState('');
+  const [sendingEmail, setSendingEmail] = useState(false);
 
   const myShelterId = user?.shelterId ?? shelters[0]?.id ?? null;
 
@@ -86,52 +84,62 @@ export const ShelterInquiriesPage = () => {
   }, [fetchInquiries]);
 
   const detailsInquiry = inquiries.find((i) => i.id === detailsId) ?? null;
+  const emailingInquiry = inquiries.find((i) => i.id === emailingId) ?? null;
 
   const petOf = (petId: string) => pets.find((p) => p.id === petId);
 
-  /** Server flag first, local override second (covers demo mode + reopen). */
-  const isResolved = (inquiry: Inquiry) =>
-    overrides[inquiry.id] ?? inquiry.resolved ?? false;
-
-  const toggleResolved = async (id: string) => {
-    const current = inquiries.find((i) => i.id === id);
-    const currentlyResolved = current ? isResolved(current) : false;
-    if (currentlyResolved) {
-      // The backend has no reopen endpoint, so reopening stays local.
-      setOverrides((prev) => ({ ...prev, [id]: false }));
-      setInquiries((prev) => prev.map((i) => (i.id === id ? { ...i, resolved: false } : i)));
-      toast.info('Inquiry reopened.');
-      return;
-    }
-    try {
-      const updated = await resolveShelterInquiry(id);
-      if (updated) {
-        setInquiries((prev) =>
-          prev.map((i) => (i.id === id ? { ...i, resolved: true } : i)),
-        );
-        setOverrides((prev) => {
-          const next = { ...prev };
-          delete next[id];
-          return next;
-        });
-      } else {
-        setOverrides((prev) => ({ ...prev, [id]: true }));
-      }
-      toast.success('Inquiry marked as resolved!');
-    } catch {
-      toast.error('Failed to update inquiry. Please try again.');
-    }
+  const openEmailCompose = (inquiry: Inquiry) => {
+    const pet = petOf(inquiry.petId);
+    setEmailingId(inquiry.id);
+    setEmailSubject(pet ? `Your inquiry about ${pet.name}` : 'Your inquiry');
+    setEmailMessage('');
   };
 
-  const sendReply = (id: string) => {
-    const text = (drafts[id] ?? '').trim();
-    if (!text) {
-      toast.warning('Please write a reply before sending.');
+  const closeEmailCompose = () => {
+    if (sendingEmail) return;
+    setEmailingId(null);
+    setEmailSubject('');
+    setEmailMessage('');
+  };
+
+  const handleSendEmail = async () => {
+    if (!emailingInquiry) return;
+    const subject = emailSubject.trim();
+    const message = emailMessage.trim();
+    if (!subject || !message) {
+      toast.warning('Add a subject and message before sending.');
       return;
     }
-    setReplies((prev) => ({ ...prev, [id]: text }));
-    setDrafts((prev) => ({ ...prev, [id]: '' }));
-    toast.success('Reply sent to adopter!');
+
+    setSendingEmail(true);
+    try {
+      const result = await emailShelterInquiry(emailingInquiry.id, { subject, message });
+      if (result.emailSent) {
+        setInquiries((prev) =>
+          prev.map((i) => (i.id === emailingInquiry.id ? result.inquiry : i)),
+        );
+        toast.success(`Email sent to ${emailingInquiry.fromEmail}.`);
+        setEmailingId(null);
+        setEmailSubject('');
+        setEmailMessage('');
+      } else if (result.emailStubbed) {
+        toast.warning(
+          'Email is not configured yet. Add your Gmail SMTP credentials to backend/.env.',
+        );
+      } else {
+        toast.error('Email could not be sent. Please try again.');
+      }
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 409) {
+        toast.info('An email has already been sent for this inquiry.');
+        await fetchInquiries();
+        setEmailingId(null);
+      } else {
+        toast.error(err instanceof ApiError ? err.message : 'Failed to send email.');
+      }
+    } finally {
+      setSendingEmail(false);
+    }
   };
 
   const toolbar = (
@@ -216,7 +224,7 @@ export const ShelterInquiriesPage = () => {
                   <TableSkeletonRows columns={6} rows={5} avatar />
                 ) : inquiries.map((inquiry) => {
                   const pet = petOf(inquiry.petId);
-                  const resolved = isResolved(inquiry);
+                  const resolved = inquiry.resolved ?? false;
                   return (
                     <TableRow key={inquiry.id}>
                       <TableCell>
@@ -266,27 +274,17 @@ export const ShelterInquiriesPage = () => {
                           >
                             <Eye className="size-4" />
                           </Button>
-                          {resolved ? (
+                          {!inquiry.emailedAt ? (
                             <Button
                               variant="ghost"
                               size="icon-sm"
-                              className="text-blue-600 hover:bg-blue-50 hover:text-blue-700 dark:text-blue-400 dark:hover:bg-blue-950/40"
-                              aria-label={`Reopen inquiry from ${inquiry.fromName}`}
-                              onClick={() => toggleResolved(inquiry.id)}
+                              className="text-orange-600 hover:bg-orange-50 hover:text-orange-700 dark:text-orange-400 dark:hover:bg-orange-950/40"
+                              aria-label={`Email ${inquiry.fromName}`}
+                              onClick={() => openEmailCompose(inquiry)}
                             >
-                              <RotateCcw className="size-4" />
+                              <Mail className="size-4" />
                             </Button>
-                          ) : (
-                            <Button
-                              variant="ghost"
-                              size="icon-sm"
-                              className="text-green-600 hover:bg-green-50 hover:text-green-700 dark:text-green-400 dark:hover:bg-green-950/40"
-                              aria-label={`Mark inquiry from ${inquiry.fromName} resolved`}
-                              onClick={() => toggleResolved(inquiry.id)}
-                            >
-                              <Check className="size-4" />
-                            </Button>
-                          )}
+                          ) : null}
                         </div>
                       </TableCell>
                     </TableRow>
@@ -302,7 +300,7 @@ export const ShelterInquiriesPage = () => {
               <RecordCardSkeleton count={3} />
             ) : inquiries.map((inquiry) => {
               const pet = petOf(inquiry.petId);
-              const resolved = isResolved(inquiry);
+              const resolved = inquiry.resolved ?? false;
               return (
                 <RecordCard
                   key={inquiry.id}
@@ -326,27 +324,17 @@ export const ShelterInquiriesPage = () => {
                       >
                         <Eye className="size-4" />
                       </Button>
-                      {resolved ? (
+                      {!inquiry.emailedAt ? (
                         <Button
                           variant="ghost"
                           size="icon-sm"
-                          className="text-blue-600 hover:bg-blue-50 hover:text-blue-700 dark:text-blue-400 dark:hover:bg-blue-950/40"
-                          aria-label={`Reopen inquiry from ${inquiry.fromName}`}
-                          onClick={() => toggleResolved(inquiry.id)}
+                          className="text-orange-600 hover:bg-orange-50 hover:text-orange-700 dark:text-orange-400 dark:hover:bg-orange-950/40"
+                          aria-label={`Email ${inquiry.fromName}`}
+                          onClick={() => openEmailCompose(inquiry)}
                         >
-                          <RotateCcw className="size-4" />
+                          <Mail className="size-4" />
                         </Button>
-                      ) : (
-                        <Button
-                          variant="ghost"
-                          size="icon-sm"
-                          className="text-green-600 hover:bg-green-50 hover:text-green-700 dark:text-green-400 dark:hover:bg-green-950/40"
-                          aria-label={`Mark inquiry from ${inquiry.fromName} resolved`}
-                          onClick={() => toggleResolved(inquiry.id)}
-                        >
-                          <Check className="size-4" />
-                        </Button>
-                      )}
+                      ) : null}
                     </>
                   }
                 >
@@ -358,6 +346,7 @@ export const ShelterInquiriesPage = () => {
         </TableCard>
       </div>
 
+      {/* Read-only inquiry details */}
       <DetailsModal
         open={detailsInquiry !== null}
         onClose={() => setDetailsId(null)}
@@ -366,27 +355,6 @@ export const ShelterInquiriesPage = () => {
           detailsInquiry ? `Received ${formatDate(detailsInquiry.createdAt)}` : undefined
         }
         icon={MessageCircleQuestion}
-        footer={
-          detailsInquiry ? (
-            <div className="flex gap-2">
-              <Button
-                size="sm"
-                className="flex-1"
-                onClick={() => sendReply(detailsInquiry.id)}
-                disabled={!(drafts[detailsInquiry.id] ?? '').trim()}
-              >
-                Send reply
-              </Button>
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => toggleResolved(detailsInquiry.id)}
-              >
-                {isResolved(detailsInquiry) ? 'Reopen' : 'Mark resolved'}
-              </Button>
-            </div>
-          ) : undefined
-        }
       >
         {detailsInquiry && (
           <div className="space-y-4">
@@ -406,8 +374,8 @@ export const ShelterInquiriesPage = () => {
                   {petOf(detailsInquiry.petId)?.breed ?? 'Pet inquiry'}
                 </p>
               </div>
-              <Badge variant={isResolved(detailsInquiry) ? 'success' : 'warning'}>
-                {isResolved(detailsInquiry) ? 'Resolved' : 'Open'}
+              <Badge variant={detailsInquiry.resolved ? 'success' : 'warning'}>
+                {detailsInquiry.resolved ? 'Resolved' : 'Open'}
               </Badge>
             </div>
 
@@ -424,27 +392,105 @@ export const ShelterInquiriesPage = () => {
               </p>
             </div>
 
-            {replies[detailsInquiry.id] ? (
-              <div className="rounded-lg bg-muted/60 px-3 py-2">
-                <p className="text-xs font-semibold">Your reply</p>
-                <p className="mt-0.5 text-sm">{replies[detailsInquiry.id]}</p>
+            {detailsInquiry.emailedAt ? (
+              <div className="rounded-lg border p-3">
+                <p className="text-xs uppercase tracking-wide text-muted-foreground">
+                  Email sent
+                </p>
+                <p className="mt-1 text-sm font-medium">
+                  {detailsInquiry.emailSubject ?? 'Reply'}
+                </p>
+                {detailsInquiry.emailMessage ? (
+                  <p className="mt-1 whitespace-pre-line text-sm leading-relaxed text-muted-foreground">
+                    {detailsInquiry.emailMessage}
+                  </p>
+                ) : null}
+                <p className="mt-2 text-xs text-muted-foreground">
+                  Sent to {detailsInquiry.fromEmail} on {formatDate(detailsInquiry.emailedAt)}
+                </p>
               </div>
-            ) : null}
-
-            <div>
-              <Label htmlFor={`reply-${detailsInquiry.id}`}>Reply</Label>
-              <Textarea
-                id={`reply-${detailsInquiry.id}`}
-                value={drafts[detailsInquiry.id] ?? ''}
-                onChange={(e) =>
-                  setDrafts((prev) => ({ ...prev, [detailsInquiry.id]: e.target.value }))
-                }
-                placeholder="Write a reply…"
-              />
-            </div>
+            ) : (
+              <p className="text-xs text-muted-foreground">
+                No email has been sent to this inquirer yet.
+              </p>
+            )}
           </div>
         )}
       </DetailsModal>
+
+      {/* Compose dialog for the Email action */}
+      <SlideOver
+        open={emailingInquiry !== null}
+        onClose={closeEmailCompose}
+        title={emailingInquiry ? `Email ${emailingInquiry.fromName}` : 'Email inquirer'}
+        description={
+          emailingInquiry
+            ? `Reply about ${petOf(emailingInquiry.petId)?.name ?? 'this pet'} · ${emailingInquiry.fromEmail}`
+            : undefined
+        }
+        icon={Mail}
+        footer={
+          <div className="flex justify-end gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={closeEmailCompose}
+              disabled={sendingEmail}
+            >
+              Cancel
+            </Button>
+            <Button
+              size="sm"
+              onClick={handleSendEmail}
+              disabled={sendingEmail || !emailSubject.trim() || !emailMessage.trim()}
+            >
+              {sendingEmail ? 'Sending…' : 'Send email'}
+            </Button>
+          </div>
+        }
+      >
+        {emailingInquiry && (
+          <div className="space-y-4">
+            <div className="rounded-lg border p-3">
+              <p className="text-xs uppercase tracking-wide text-muted-foreground">To</p>
+              <p className="mt-1 text-sm font-medium">{emailingInquiry.fromName}</p>
+              <p className="text-sm text-muted-foreground">{emailingInquiry.fromEmail}</p>
+            </div>
+
+            <div className="rounded-lg bg-muted/60 px-3 py-2">
+              <p className="text-xs font-semibold">Their message</p>
+              <p className="mt-0.5 whitespace-pre-line text-sm">{emailingInquiry.message}</p>
+            </div>
+
+            <div>
+              <Label htmlFor="inquiry-email-subject">Subject</Label>
+              <Input
+                id="inquiry-email-subject"
+                value={emailSubject}
+                onChange={(e) => setEmailSubject(e.target.value)}
+                maxLength={200}
+              />
+            </div>
+
+            <div>
+              <Label htmlFor="inquiry-email-message">Message</Label>
+              <Textarea
+                id="inquiry-email-message"
+                value={emailMessage}
+                onChange={(e) => setEmailMessage(e.target.value)}
+                placeholder={`Write your reply to ${emailingInquiry.fromName}…`}
+                className="min-h-40"
+                maxLength={5000}
+              />
+            </div>
+
+            <p className="text-xs text-muted-foreground">
+              This sends once through the shelter's email. After it is delivered, the Email
+              action is hidden.
+            </p>
+          </div>
+        )}
+      </SlideOver>
     </div>
   );
 };

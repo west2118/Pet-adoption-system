@@ -43,12 +43,16 @@ export const ApplicationDetailsModal = ({
   pet,
   open,
   onClose,
-}: ApplicationDetailsModalProps) => (
+}: ApplicationDetailsModalProps) => {
+  // The joined application pet keeps the title useful after the pet leaves
+  // the public catalogue.
+  const petName = pet?.name ?? application.pet?.name;
+  return (
   <DetailsModal
     open={open}
     onClose={onClose}
     size="lg"
-    title={pet ? `${pet.name} — adoption application` : 'Adoption application'}
+    title={petName ? `${petName} — adoption application` : 'Adoption application'}
     description={`${application.applicantName} · submitted ${formatDate(application.submittedAt)}`}
     footer={
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -150,4 +154,5 @@ export const ApplicationDetailsModal = ({
       </section>
     </div>
   </DetailsModal>
-);
+  );
+};

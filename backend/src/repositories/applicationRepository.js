@@ -20,7 +20,13 @@ export const createApplication = async (input, applicantId) => {
 };
 
 export const findApplicationById = async (id) => {
-  const { rows } = await pool.query('SELECT * FROM adoption_applications WHERE id = $1', [id]);
+  const { rows } = await pool.query(
+    `SELECT a.*, p.name AS pet_name, p.image_url AS pet_image, p.breed AS pet_breed
+       FROM adoption_applications a
+       JOIN pets p ON p.id = a.pet_id
+      WHERE a.id = $1`,
+    [id],
+  );
   return rows[0] ?? null;
 };
 
@@ -34,7 +40,11 @@ export const getApplicationHistory = async (applicationId, client = pool) => {
 
 export const listApplicationsByApplicant = async (applicantId, { limit, offset }) => {
   const { rows } = await pool.query(
-    'SELECT * FROM adoption_applications WHERE applicant_id = $1 ORDER BY submitted_at DESC LIMIT $2 OFFSET $3',
+    `SELECT a.*, p.name AS pet_name, p.image_url AS pet_image, p.breed AS pet_breed
+       FROM adoption_applications a
+       JOIN pets p ON p.id = a.pet_id
+      WHERE a.applicant_id = $1
+      ORDER BY a.submitted_at DESC LIMIT $2 OFFSET $3`,
     [applicantId, limit, offset],
   );
   const count = await pool.query(
@@ -82,7 +92,8 @@ export const listApplicationsByShelter = async (shelterId, { limit = 10, offset 
   }
   const where = `WHERE ${conditions.join(' AND ')}`;
   const { rows } = await pool.query(
-    `SELECT a.* FROM adoption_applications a
+    `SELECT a.*, p.name AS pet_name, p.image_url AS pet_image, p.breed AS pet_breed
+     FROM adoption_applications a
      JOIN pets p ON a.pet_id = p.id
      ${where}
      ORDER BY a.submitted_at DESC LIMIT $${values.length + 1} OFFSET $${values.length + 2}`,

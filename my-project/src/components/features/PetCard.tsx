@@ -4,6 +4,7 @@ import { toast } from 'react-toastify';
 import type { Pet } from '@/types';
 import { cn } from '@/lib/utils';
 import { formatAge } from '@/utils/formatters';
+import { formatDistanceKm } from '@/utils/geo';
 import { Badge } from '@/components/ui/Badge';
 import { PetStatusBadge, VisibilityBadge } from '@/components/ui/StatusBadge';
 import { Button } from '@/components/ui/button';
@@ -103,9 +104,18 @@ export const PetCard = ({
           ))}
         </div>
 
-        {shelterLocation && (
-          <p className="mt-2 flex items-center gap-1 text-xs text-muted-foreground">
-            <MapPin className="size-3.5" /> {shelterLocation}
+        {(shelterLocation || pet.distanceKm != null) && (
+          <p className="mt-2 flex flex-wrap items-center gap-x-1 gap-y-0.5 text-xs text-muted-foreground">
+            <MapPin className="size-3.5 shrink-0" />
+            {shelterLocation && <span>{shelterLocation}</span>}
+            {pet.distanceKm != null && (
+              <>
+                {shelterLocation && <span aria-hidden="true">·</span>}
+                <span className="font-medium text-foreground/75">
+                  {formatDistanceKm(pet.distanceKm)} away
+                </span>
+              </>
+            )}
           </p>
         )}
 

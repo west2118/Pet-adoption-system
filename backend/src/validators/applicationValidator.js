@@ -13,6 +13,12 @@ export const createApplicationSchema = z.object({
 });
 
 export const updateApplicationStatusSchema = z.object({
-  status: z.enum(['Submitted', 'Under Review', 'Approved', 'Rejected', 'Adopted']),
+  // `Cancelled` is the shelter's "Cancel adoption" action, only valid from
+  // an Approved application (enforced in the service).
+  status: z.enum(['Submitted', 'Under Review', 'Approved', 'Rejected', 'Cancelled', 'Adopted']),
   note: z.string().max(2000).optional().nullable(),
+});
+
+export const cancelApplicationSchema = z.object({
+  reason: z.string().max(1000).optional(),
 });

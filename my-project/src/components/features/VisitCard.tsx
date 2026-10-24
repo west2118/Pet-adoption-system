@@ -4,8 +4,6 @@ import { Link } from 'react-router-dom';
 import type { VisitStatus, VisitThread } from '@/types';
 import { formatDate } from '@/utils/formatters';
 import { cn } from '@/lib/utils';
-import { VisitThreadView } from '@/components/features/VisitThreadView';
-import { DetailsModal } from '@/components/shared/DetailsModal';
 import { VisitStatusBadge } from '@/components/ui/StatusBadge';
 import { Button } from '@/components/ui/button';
 import { Label, Textarea } from '@/components/ui/Form';
@@ -14,7 +12,7 @@ import { toast } from 'react-toastify';
 import { ApiError } from '@/lib/apiClient';
 
 /** The happy path a visit walks, in order. `Cancelled` sits off this track. */
-const STAGES: VisitStatus[] = ['requested', 'proposed', 'confirmed', 'completed'];
+const STAGES: VisitStatus[] = ['requested', 'confirmed', 'completed'];
 
 const stageIndex = (thread: VisitThread): number => {
   if (thread.status === 'cancelled') return -1;
@@ -23,7 +21,7 @@ const stageIndex = (thread: VisitThread): number => {
 
 const RAIL_INSET = (100 / STAGES.length / 2).toString();
 
-/** Horizontal progress track showing how far a visit has travelled. */
+/** Horizontal progress track showing how far a visit request has travelled. */
 const StatusTrack = ({ thread }: { thread: VisitThread }) => {
   const current = stageIndex(thread);
 
@@ -33,7 +31,7 @@ const StatusTrack = ({ thread }: { thread: VisitThread }) => {
         <span className="flex size-5 items-center justify-center rounded-full bg-muted">
           <X className="size-3" />
         </span>
-        Closed — this visit was cancelled.
+        Closed — this visit request was cancelled or declined.
       </div>
     );
   }
@@ -89,57 +87,27 @@ const StatusTrack = ({ thread }: { thread: VisitThread }) => {
 
 interface VisitCardProps {
   thread: VisitThread;
-  currentUserId?: string;
   onChanged: () => void;
 }
 
 /**
- * Adopter visit card mirroring ApplicationCard: pet photo, status, slot
- * summary, progress track, and the full conversation behind a modal.
+ * Adopter visit request card: pet photo, status, slot summary, progress
+ * track, and cancellation. There is no conversation — the shelter emails
+ * the decision.
  */
-export const VisitCard = ({ thread, currentUserId, onChanged }: VisitCardProps) => {
-  const [open, setOpen] = useState(false);
-  const [messages, setMessages] = useState<Parameters<typeof VisitThreadView>[0]['messages']>([]);
-  const [loadingMessages, setLoadingMessages] = useState(false);
-  const [sending, setSending] = useState(false);
+export const VisitCard = ({ thread, onChanged }: VisitCardProps) => {
   const [cancelling, setCancelling] = useState(false);
   const [cancelReason, setCancelReason] = useState('');
   const [showCancel, setShowCancel] = useState(false);
 
   const closed = thread.status === 'completed' || thread.status === 'cancelled';
 
-  const openConversation = async () => {
-    setOpen(true);
-    setShowCancel(false);
-    setLoadingMessages(true);
-    try {
-      const { messages: fetched } = await visitService.getMine(thread.id);
-      setMessages(fetched);
-    } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : 'Failed to load conversation.');
-    } finally {
-      setLoadingMessages(false);
-    }
-  };
-
-  const handleSend = async (body: string) => {
-    setSending(true);
-    try {
-      const message = await visitService.postMyMessage(thread.id, body);
-      setMessages((prev) => [...prev, message]);
-    } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : 'Failed to send message.');
-    } finally {
-      setSending(false);
-    }
-  };
-
   const handleCancel = async () => {
     setCancelling(true);
     try {
       await visitService.cancelMine(thread.id, cancelReason.trim() || undefined);
-      toast.success('Visit cancelled.');
-      setOpen(false);
+      toast.success('Visit request cancelled.');
+      setShowCancel(false);
       onChanged();
     } catch (err) {
       toast.error(err instanceof ApiError ? err.message : 'Failed to cancel visit.');
@@ -179,50 +147,33 @@ export const VisitCard = ({ thread, currentUserId, onChanged }: VisitCardProps) 
               <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
                 {thread.confirmedSlot
                   ? `Confirmed ${thread.confirmedSlot}`
-                  : 'Waiting on the shelter team to propose or confirm a time.'}
+                  : thread.status === 'cancelled'
+                    ? 'This request was cancelled or declined by the shelter.'
+                    : 'Waiting on the shelter team to approve or decline this request by email.'}
               </p>
             </div>
 
-            <div className="flex shrink-0 gap-2">
-              <Button variant="outline" size="sm" onClick={() => void openConversation()}>
-                View conversation
-              </Button>
+            <div className="flex shrink-0 flex-wrap gap-2">
               <Link to={`/pets/${thread.petId}`}>
                 <Button variant="outline" size="sm">
                   View pet
                 </Button>
               </Link>
+              {!closed && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="text-destructive"
+                  onClick={() => setShowCancel((v) => !v)}
+                >
+                  <X className="size-3.5" /> Cancel request
+                </Button>
+              )}
             </div>
           </div>
 
-          <div className="mt-6 border-t border-border pt-6">
-            <StatusTrack thread={thread} />
-          </div>
-        </div>
-      </div>
-
-      <DetailsModal
-        open={open}
-        onClose={() => setOpen(false)}
-        title={thread.pet ? `Visit · ${thread.pet.name}` : 'Visit thread'}
-        description={`Preferred ${thread.preferredSlot}${thread.confirmedSlot ? ` · confirmed ${thread.confirmedSlot}` : ''}`}
-        size="xl"
-        footer={
-          !closed ? (
-            <Button
-              size="sm"
-              variant="outline"
-              className="w-full text-destructive"
-              onClick={() => setShowCancel((v) => !v)}
-            >
-              <X className="size-3.5" /> Cancel visit
-            </Button>
-          ) : undefined
-        }
-      >
-        <div className="space-y-4">
           {showCancel && !closed ? (
-            <div className="space-y-2 rounded-lg border p-3">
+            <div className="mt-5 space-y-2 rounded-lg border p-3">
               <Label htmlFor={`cancel-${thread.id}`}>Cancellation note (optional)</Label>
               <Textarea
                 id={`cancel-${thread.id}`}
@@ -241,25 +192,22 @@ export const VisitCard = ({ thread, currentUserId, onChanged }: VisitCardProps) 
                   {cancelling ? 'Cancelling…' : 'Confirm cancellation'}
                 </Button>
                 <Button size="sm" variant="ghost" onClick={() => setShowCancel(false)} disabled={cancelling}>
-                  Keep visit
+                  Keep request
                 </Button>
               </div>
             </div>
           ) : null}
-          <VisitThreadView
-            thread={thread}
-            messages={messages}
-            currentUserId={currentUserId}
-            loadingMessages={loadingMessages}
-            sending={sending}
-            onSend={handleSend}
-          />
-          <p className="text-xs text-muted-foreground">
+
+          <div className="mt-6 border-t border-border pt-6">
+            <StatusTrack thread={thread} />
+          </div>
+
+          <p className="mt-4 text-xs text-muted-foreground">
             Requested {formatDate(thread.createdAt)}
             {thread.confirmedSlot ? ` · confirmed ${thread.confirmedSlot}` : ''}
           </p>
         </div>
-      </DetailsModal>
+      </div>
     </article>
   );
 };

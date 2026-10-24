@@ -2,16 +2,12 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { VISIT_TRANSITIONS } from '../src/repositories/visitRepository.js';
 
-describe('visit thread status transitions (no database required)', () => {
-  it('requested can move to proposed, confirmed, or cancelled', () => {
-    assert.deepEqual([...VISIT_TRANSITIONS.requested].sort(), ['cancelled', 'confirmed', 'proposed']);
+describe('visit request status transitions (no database required)', () => {
+  it('a requested visit can be approved (confirmed) or declined (cancelled)', () => {
+    assert.deepEqual([...VISIT_TRANSITIONS.requested].sort(), ['cancelled', 'confirmed']);
   });
 
-  it('proposed can move to confirmed or cancelled', () => {
-    assert.deepEqual([...VISIT_TRANSITIONS.proposed].sort(), ['cancelled', 'confirmed']);
-  });
-
-  it('confirmed can move to completed or cancelled', () => {
+  it('a confirmed visit can be completed or cancelled', () => {
     assert.deepEqual([...VISIT_TRANSITIONS.confirmed].sort(), ['cancelled', 'completed']);
   });
 

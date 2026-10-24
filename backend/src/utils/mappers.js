@@ -23,7 +23,7 @@ export const mapPet = (row) => {
         : '';
   const ageYears = ageYearsFromBirthdate(birthdate);
 
-  return {
+  const pet = {
     id: row.id,
     name: row.name,
     species: row.species,
@@ -51,6 +51,11 @@ export const mapPet = (row) => {
         ? row.date_added.toISOString().slice(0, 10)
         : row.date_added,
   };
+  // Only present on distance-aware catalogue queries (`?lat=&lng=`).
+  if (row.distance_km != null) {
+    pet.distanceKm = Number(row.distance_km);
+  }
+  return pet;
 };
 
 export const mapShelter = (row, activeListings = 0, totalPets = 0) => {
@@ -67,6 +72,8 @@ export const mapShelter = (row, activeListings = 0, totalPets = 0) => {
     imageUrl: row.image_url,
     totalPets: Number(totalPets ?? row.total_pets ?? 0),
     activeListings: Number(activeListings ?? row.active_listings ?? 0),
+    latitude: row.latitude != null ? Number(row.latitude) : null,
+    longitude: row.longitude != null ? Number(row.longitude) : null,
   };
 };
 
@@ -127,6 +134,18 @@ export const mapApplication = (row, history = []) => {
     submittedAt: row.submitted_at,
     updatedAt: row.updated_at,
     staffNotes: row.staff_notes ?? undefined,
+    // Joined pet summary so an application still renders after the pet leaves
+    // the public catalogue (e.g. it is In Process or Adopted).
+    ...(row.pet_name !== undefined
+      ? {
+          pet: {
+            id: row.pet_id,
+            name: row.pet_name,
+            imageUrl: row.pet_image ?? '',
+            breed: row.pet_breed ?? '',
+          },
+        }
+      : {}),
     history: history.map((h) => ({
       status: h.status,
       date: h.created_at,
@@ -144,6 +163,9 @@ export const mapInquiry = (row) => {
     fromEmail: row.from_email,
     message: row.message,
     resolved: row.resolved,
+    emailedAt: row.emailed_at ?? undefined,
+    emailSubject: row.email_subject ?? undefined,
+    emailMessage: row.email_message ?? undefined,
     createdAt: row.created_at,
   };
 };

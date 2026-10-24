@@ -1426,6 +1426,7 @@ export const ShelterListingsPage = () => {
         itemName={pendingDeletePet?.name}
         confirmLabel="Delete listing"
         isDeleting={isDeleting}
+        requireNameConfirmation
       />
     </div>
   );

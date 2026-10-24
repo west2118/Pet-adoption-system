@@ -18,6 +18,7 @@ import {
 import type { ApplicationSummary } from '@/services/adoptionApplicationService';
 import { sessionStore } from '@/lib/apiClient';
 import { ALL_FILTERS } from '@/hooks/usePetFilter';
+import type { NearbySearch } from '@/hooks/useNearbyPets';
 import type { AdoptionApplication, Pet, PetFilters, Shelter, User } from '@/types';
 
 export const usePets = () => {
@@ -83,10 +84,15 @@ export const useShelters = () => {
  *
  * `filters` come straight from `usePetFilter` and are forwarded to
  * `GET /pets`, which applies them together with its own 10-per-page limit and
- * answers with `total` / `totalPages`. The hook only owns the page number and
- * resets it whenever the filter set changes (the page wraps `setPage` for that).
+ * answers with `total` / `totalPages`. When `nearby` is present the backend
+ * also filters by radius and orders closest-first, returning `distanceKm`.
+ * The hook only owns the page number and resets it whenever the filter set
+ * changes (the page wraps `setPage` for that).
  */
-export const useBrowsePetsPage = (filters: PetFilters) => {
+export const useBrowsePetsPage = (
+  filters: PetFilters,
+  nearby: NearbySearch | null = null,
+) => {
   const [page, setPage] = useState(1);
   const [result, setResult] = useState<{
     key: string;
@@ -99,7 +105,10 @@ export const useBrowsePetsPage = (filters: PetFilters) => {
 
   // Identifies the request a result belongs to — a changed filter or page
   // reads as "loading" without any setState inside the effect itself.
-  const requestKey = useMemo(() => `${page}|${JSON.stringify(filters)}`, [page, filters]);
+  const requestKey = useMemo(
+    () => `${page}|${JSON.stringify(filters)}|${nearby ? JSON.stringify(nearby) : 'none'}`,
+    [filters, nearby, page],
+  );
 
   useEffect(() => {
     let mounted = true;
@@ -116,6 +125,10 @@ export const useBrowsePetsPage = (filters: PetFilters) => {
       status: filters.status === ALL_FILTERS ? undefined : filters.status,
       // The grid only lists pets still looking for a home.
       excludeAdopted: true,
+      latitude: nearby?.latitude,
+      longitude: nearby?.longitude,
+      radiusKm: nearby?.radiusKm,
+      sortByDistance: Boolean(nearby),
     })
       .then((res) => {
         if (!mounted) return;
@@ -148,7 +161,7 @@ export const useBrowsePetsPage = (filters: PetFilters) => {
     return () => {
       mounted = false;
     };
-  }, [filters, page, requestKey]);
+  }, [filters, nearby, page, requestKey]);
 
   const loading = result?.key !== requestKey;
 
@@ -358,8 +371,11 @@ export const useMyApplicationsPage = (applicantId?: string) => {
   };
 };
 
-/** Status counters across ALL of an adopter's applications (fetched once). */
-export const useMyApplicationSummary = (applicantId?: string) => {
+/**
+ * Status counters across ALL of an adopter's applications. `reload` lets a
+ * page refetch the counters after an application is withdrawn.
+ */
+export const useMyApplicationSummary = (applicantId?: string, reload = 0) => {
   const [summary, setSummary] = useState<ApplicationSummary | null>(null);
 
   useEffect(() => {
@@ -374,7 +390,7 @@ export const useMyApplicationSummary = (applicantId?: string) => {
     return () => {
       mounted = false;
     };
-  }, [applicantId]);
+  }, [applicantId, reload]);
 
   return summary;
 };

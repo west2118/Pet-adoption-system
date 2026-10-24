@@ -54,7 +54,7 @@ const note = (inner) => `<table role="presentation" width="100%" cellpadding="0"
  * Page shell: grey page background, white rounded card, orange accent bar,
  * brand header, headline, body content, divider and footer.
  */
-export const renderEmail = ({ preheader, title, content }) => `<!DOCTYPE html>
+export const renderEmail = ({ preheader, title, content, footer }) => `<!DOCTYPE html>
 <html lang="en">
   <head>
     <meta charset="utf-8" />
@@ -96,7 +96,7 @@ export const renderEmail = ({ preheader, title, content }) => `<!DOCTYPE html>
             </tr>
             <tr>
               <td class="email-pad" style="padding:20px 32px 28px;border-top:1px solid ${BRAND.line};font-size:12px;line-height:1.6;color:${BRAND.muted};">
-                You are receiving this email because a shelter application was submitted on Paws&amp;Homes.<br />
+                ${footer ?? 'You are receiving this email because a shelter application was submitted on Paws&amp;Homes.'}<br />
                 &copy; ${new Date().getFullYear()} Paws&amp;Homes
               </td>
             </tr>
@@ -164,6 +164,7 @@ const STATUS_CHIPS = {
   Approved: ['#dcfce7', '#166534'],
   Adopted: ['#dbeafe', '#1e40af'],
   Rejected: ['#fee2e2', '#991b1b'],
+  Cancelled: ['#f3f4f6', '#4b5563'],
   Closed: ['#f3f4f6', '#4b5563'],
 };
 
@@ -183,7 +184,7 @@ const applicationsUrl = (appUrl) => `${appUrl}/applications`;
 const visitsUrl = (appUrl) => `${appUrl}/visits`;
 
 /** New visit request received from an adopter (to the shelter contact). */
-export const visitRequestedHtml = ({ name, petName, preferredSlot, message }) =>
+export const visitRequestedHtml = ({ name, petName, preferredSlot }) =>
   renderEmail({
     preheader: `${name} requested a visit with ${petName}.`,
     title: 'New visit request',
@@ -194,16 +195,16 @@ export const visitRequestedHtml = ({ name, petName, preferredSlot, message }) =>
         `<strong>${escapeHtml(name)}</strong> would like to schedule a visit with <strong>${escapeHtml(petName)}</strong>.`,
       ),
       paragraph(`<strong>Preferred slot:</strong> ${escapeHtml(preferredSlot)}`),
-      note(`<strong>Their message:</strong> ${escapeHtml(message)}`),
-      paragraph('Reply in the visit thread to propose or confirm a time.'),
+      paragraph(
+        'Approve or decline this request from your visits dashboard. The adopter will be emailed automatically with your decision.',
+      ),
     ].join('\n                '),
   });
 
 const VISIT_STATUS_TITLES = {
-  proposed: 'A visit time was proposed',
   confirmed: 'Your visit is confirmed',
   completed: 'Thanks for visiting',
-  cancelled: 'Your visit was cancelled',
+  cancelled: 'Update on your visit request',
 };
 
 /** Visit status change (to the adopter). */
@@ -219,7 +220,7 @@ export const visitStatusHtml = ({ name, petName, status, slot, reason, appUrl })
       ),
       slot ? paragraph(`<strong>When:</strong> ${escapeHtml(slot)}`) : '',
       reason ? note(`<strong>Note from the shelter:</strong> ${escapeHtml(reason)}`) : '',
-      paragraph('You can follow the conversation in your visits page.'),
+      paragraph('You can check the status of this request on your visits page.'),
       button(visitsUrl(appUrl), 'View your visits'),
     ]
       .filter(Boolean)
@@ -262,6 +263,7 @@ const DECISION_TITLES = {
   Approved: 'Your application was approved',
   Adopted: 'Your adoption is complete',
   Rejected: 'Update on your application',
+  Cancelled: 'Your application was cancelled',
 };
 
 const DECISION_COPY = {
@@ -271,6 +273,8 @@ const DECISION_COPY = {
     `<strong>${petName}</strong> has been adopted — thank you for giving them a home. Your application is now complete.`,
   Rejected: (petName) =>
     `After reviewing your application for <strong>${petName}</strong>, the shelter is unable to move forward with it this time.`,
+  Cancelled: (petName) =>
+    `Your application to adopt <strong>${petName}</strong> has been cancelled. You can apply again whenever you are ready.`,
 };
 
 /** Final decision on an application: Approved / Adopted / Rejected. */
@@ -280,11 +284,15 @@ export const applicationDecisionHtml = ({
   status,
   note: staffNote,
   appUrl,
+  /** Adopter withdrew it themselves, so the note is theirs, not the shelter's. */
+  cancelledByApplicant = false,
 }) => {
   const copy = DECISION_COPY[status];
   if (!copy) {
     throw new Error(`Unsupported application decision: ${status}`);
   }
+  const noteLabel =
+    status === 'Cancelled' && cancelledByApplicant ? 'Your note' : 'From the shelter';
   return renderEmail({
     preheader: `Your application for ${petName} is now ${String(status).toLowerCase()}.`,
     title: DECISION_TITLES[status],
@@ -292,7 +300,9 @@ export const applicationDecisionHtml = ({
       chipFor(status),
       paragraph(`Hi ${escapeHtml(name)},`),
       paragraph(copy(escapeHtml(petName))),
-      staffNote ? note(`<strong>From the shelter:</strong> ${escapeHtml(staffNote)}`) : '',
+      staffNote
+        ? note(`<strong>${noteLabel}:</strong> ${escapeHtml(staffNote)}`)
+        : '',
       paragraph('You can review this application any time from your applications page.'),
       button(applicationsUrl(appUrl), 'View your application'),
     ]
@@ -320,4 +330,29 @@ export const applicationAutoRejectedHtml = ({ name, petName, reason, appUrl }) =
     ]
       .filter(Boolean)
       .join('\n                '),
+  });
+
+/** Shelter reply to a direct inquiry (to the adopter). */
+export const inquiryReplyHtml = ({
+  name,
+  petName,
+  shelterName,
+  message,
+  petId,
+  appUrl,
+}) =>
+  renderEmail({
+    preheader: `${shelterName} replied to your inquiry about ${petName}.`,
+    title: `Reply from ${shelterName}`,
+    content: [
+      paragraph(`Hi ${escapeHtml(name)},`),
+      paragraph(
+        `You received a message from <strong>${escapeHtml(shelterName)}</strong> about your inquiry for <strong>${escapeHtml(petName)}</strong>:`,
+      ),
+      note(escapeHtml(message).replace(/\r?\n/g, '<br />')),
+      paragraph('Reply to this email to contact the shelter directly.'),
+      button(`${appUrl}/pets/${petId}`, `View ${petName}`),
+    ].join('\n                '),
+    footer:
+      'You are receiving this email because you sent an inquiry about a pet on Paws&amp;Homes.',
   });

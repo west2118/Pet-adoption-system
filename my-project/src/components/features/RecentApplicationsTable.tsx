@@ -49,7 +49,7 @@ export const RecentApplicationsTable = ({
         {loading ? (
           <TableSkeletonRows columns={4} rows={4} avatar />
         ) : applications.map((application) => {
-          const pet = pets.find((p) => p.id === application.petId);
+          const pet = pets.find((p) => p.id === application.petId) ?? application.pet;
           return (
             <TableRow key={application.id}>
               <TableCell>

@@ -28,7 +28,10 @@ const userInitials = (name: string): string =>
 
 export const ProfilePage = () => {
   const { user, updateProfile } = useAuth();
-  const { applications, loading: appsLoading } = useApplications(user?.id, 'mine');
+  const { applications, loading: appsLoading, refresh: refreshApplications } = useApplications(
+    user?.id,
+    'mine',
+  );
   const { pets } = usePets();
   const { shelters } = useShelters();
   const { favorites, loading: favLoading } = useFavorites();
@@ -295,7 +298,12 @@ export const ProfilePage = () => {
             ) : (
               <div className="space-y-6">
                 {recentApplications.map((app) => (
-                  <ApplicationCard key={app.id} application={app} pet={petById(app.petId)} />
+                  <ApplicationCard
+                    key={app.id}
+                    application={app}
+                    pet={petById(app.petId)}
+                    onChanged={refreshApplications}
+                  />
                 ))}
               </div>
             )}

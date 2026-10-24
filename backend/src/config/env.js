@@ -16,8 +16,19 @@ const envSchema = z.object({
   ACCESS_TOKEN_EXPIRES_IN: z.string().default('15m'),
   REFRESH_TOKEN_EXPIRES_IN: z.string().default('30d'),
   ALLOWED_ORIGINS: z.string().default('http://localhost:5173'),
-  RESEND_API_KEY: z.string().optional(),
-  MAIL_FROM: z.string().default('Paws&Homes <onboarding@resend.dev>'),
+  SMTP_HOST: z.string().default('smtp.gmail.com'),
+  SMTP_PORT: z
+    .string()
+    .default('587')
+    .transform((val) => Number(val))
+    .pipe(z.number().int().positive()),
+  SMTP_SECURE: z
+    .string()
+    .default('false')
+    .transform((val) => val === 'true' || val === '1'),
+  SMTP_USER: z.string().optional(),
+  SMTP_PASS: z.string().optional(),
+  MAIL_FROM: z.string().optional(),
   APP_URL: z.string().default('http://localhost:5173'),
 });
 

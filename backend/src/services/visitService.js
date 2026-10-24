@@ -1,12 +1,10 @@
 import { AppError } from '../utils/AppError.js';
 import {
   VISIT_TRANSITIONS,
-  createMessage,
   createThread,
-  findOpenThread,
+  findThreadByPetAndAdopter,
   findThreadById,
   getVisitSummaryByAdopter,
-  listThreadMessages,
   listThreadsByAdopter,
   listThreadsByShelter,
   updateThreadStatus,
@@ -32,62 +30,79 @@ export const mapVisitThread = (row) => {
   if (row.pet_name !== undefined) {
     thread.pet = { id: row.pet_id, name: row.pet_name, imageUrl: row.pet_image ?? '' };
   }
+  if (row.adopter_name !== undefined) {
+    thread.adopter = {
+      id: row.adopter_id,
+      name: row.adopter_name,
+      email: row.adopter_email ?? null,
+    };
+  }
   return thread;
-};
-
-export const mapVisitMessage = (row) => {
-  if (!row) return null;
-  return {
-    id: row.id,
-    threadId: row.thread_id,
-    senderId: row.sender_id,
-    senderName: row.sender_name ?? null,
-    senderRole: row.sender_role ?? null,
-    body: row.body,
-    createdAt: row.created_at,
-  };
 };
 
 const assertParticipant = (thread, userId, shelterId) => {
   const isAdopter = thread.adopter_id === userId;
   const isShelter = shelterId != null && thread.shelter_id === shelterId;
   if (!isAdopter && !isShelter) {
-    throw new AppError('Forbidden. You are not part of this visit thread.', 403);
+    throw new AppError('Forbidden. You are not part of this visit request.', 403);
   }
   return { isAdopter, isShelter };
 };
 
+/** Creates the single visit request for a (pet, adopter) pair. */
 export const requestVisit = async (adopterId, input) => {
   const pet = await findPetById(input.petId);
   if (!pet || pet.visibility !== 'public') {
     throw new AppError('Pet not found or not publicly available.', 404);
   }
-  const existing = await findOpenThread(input.petId, adopterId);
+  const existing = await findThreadByPetAndAdopter(input.petId, adopterId);
   if (existing) {
-    throw new AppError('You already have an open visit thread for this pet.', 409);
+    throw new AppError(
+      'You have already requested a visit for this pet. Check My visits for its status.',
+      409,
+    );
   }
   const adopter = await findUserById(adopterId);
-  const thread = await createThread(
-    { petId: input.petId, adopterId, preferredSlot: input.preferredSlot, message: input.message },
-    adopterId,
-  );
-  const messages = await listThreadMessages(thread.id);
+  let thread;
+  try {
+    thread = await createThread({
+      petId: input.petId,
+      adopterId,
+      preferredSlot: input.preferredSlot,
+    });
+  } catch (err) {
+    // The unique (pet_id, adopter_id) constraint backstops the check above
+    // when two requests race each other.
+    if (err?.code === '23505') {
+      throw new AppError(
+        'You have already requested a visit for this pet. Check My visits for its status.',
+        409,
+      );
+    }
+    throw err;
+  }
   const shelter = await findShelterById(pet.shelter_id);
 
-  // Notify the shelter contact; never blocks the response.
+  // Notify the shelter contact; never blocks the response. The shelter
+  // approves or declines from the dashboard, which emails the adopter.
   if (shelter?.email) {
     sendVisitRequestedEmail({
       to: shelter.email,
       name: adopter?.name ?? 'An adopter',
       petName: pet.name,
       preferredSlot: input.preferredSlot,
-      message: input.message,
     }).catch(() => {});
   }
 
   return {
-    thread: { ...mapVisitThread({ ...thread, shelter_id: pet.shelter_id }), pet: { id: pet.id, name: pet.name, imageUrl: pet.image_url ?? '' } },
-    messages: messages.map(mapVisitMessage),
+    thread: mapVisitThread({
+      ...thread,
+      shelter_id: pet.shelter_id,
+      pet_name: pet.name,
+      pet_image: pet.image_url,
+      adopter_name: adopter?.name ?? null,
+      adopter_email: adopter?.email ?? null,
+    }),
   };
 };
 
@@ -98,6 +113,12 @@ export const listMyVisits = async (adopterId, pagination) => {
 
 export const getMyVisitSummary = async (adopterId) => getVisitSummaryByAdopter(adopterId);
 
+/** The adopter's request for one pet, or null — drives the pet-page state. */
+export const getMyVisitForPet = async (adopterId, petId) => {
+  const row = await findThreadByPetAndAdopter(petId, adopterId);
+  return mapVisitThread(row);
+};
+
 export const listShelterVisits = async (shelterId, pagination) => {
   const { rows, total } = await listThreadsByShelter(shelterId, pagination);
   return { threads: rows.map(mapVisitThread), total };
@@ -106,32 +127,21 @@ export const listShelterVisits = async (shelterId, pagination) => {
 export const getVisitThread = async (threadId, userId, shelterId) => {
   const thread = await findThreadById(threadId);
   if (!thread) {
-    throw new AppError('Visit thread not found.', 404);
+    throw new AppError('Visit request not found.', 404);
   }
   assertParticipant(thread, userId, shelterId);
-  const messages = await listThreadMessages(threadId);
-  return { thread: mapVisitThread(thread), messages: messages.map(mapVisitMessage) };
+  return { thread: mapVisitThread(thread) };
 };
 
-export const postVisitMessage = async (threadId, senderId, shelterId, body) => {
+/**
+ * Shelter decision: `confirmed` approves the request (at the proposed slot
+ * unless another is given), `cancelled` declines/cancels it. Both send the
+ * adopter an email and keep the request's status up to date.
+ */
+export const setVisitStatus = async (threadId, shelterId, input) => {
   const thread = await findThreadById(threadId);
   if (!thread) {
-    throw new AppError('Visit thread not found.', 404);
-  }
-  assertParticipant(thread, senderId, shelterId);
-  if (thread.status === 'completed' || thread.status === 'cancelled') {
-    throw new AppError('This visit thread is closed.', 409);
-  }
-  const row = await createMessage(threadId, senderId, body);
-  const [message] = await listThreadMessages(threadId).then((rows) =>
-    rows.filter((r) => r.id === row.id),
-  );
-  return mapVisitMessage(message ?? row);
-};
-
-export const setVisitStatus = async (threadId, shelterId, input) => {  const thread = await findThreadById(threadId);
-  if (!thread) {
-    throw new AppError('Visit thread not found.', 404);
+    throw new AppError('Visit request not found.', 404);
   }
   if (thread.shelter_id !== shelterId) {
     throw new AppError('Forbidden. Visit belongs to another shelter.', 403);
@@ -143,10 +153,15 @@ export const setVisitStatus = async (threadId, shelterId, input) => {  const thr
       409,
     );
   }
-  if ((input.status === 'proposed' || input.status === 'confirmed') && !input.confirmedSlot && !thread.confirmed_slot) {
-    throw new AppError('A confirmed time slot is required.', 400);
-  }
-  const updated = await updateThreadStatus(threadId, input);
+
+  // Approving confirms the adopter's preferred slot unless the shelter
+  // proposes a different time.
+  const confirmedSlot =
+    input.status === 'confirmed'
+      ? input.confirmedSlot || thread.confirmed_slot || thread.preferred_slot
+      : input.confirmedSlot;
+
+  const updated = await updateThreadStatus(threadId, { ...input, confirmedSlot });
   const adopter = await findUserById(thread.adopter_id);
   const pet = await findPetById(thread.pet_id);
 
@@ -155,24 +170,31 @@ export const setVisitStatus = async (threadId, shelterId, input) => {  const thr
     name: adopter?.name ?? 'there',
     petName: pet?.name ?? 'the pet',
     status: input.status,
-    slot: input.confirmedSlot ?? updated.confirmed_slot ?? undefined,
+    slot: confirmedSlot ?? updated.confirmed_slot ?? undefined,
     reason: input.status === 'cancelled' ? input.cancelReason : undefined,
   }).catch(() => {});
 
-  return mapVisitThread({ ...updated, shelter_id: thread.shelter_id });
+  return mapVisitThread({
+    ...updated,
+    shelter_id: thread.shelter_id,
+    pet_name: thread.pet_name,
+    pet_image: thread.pet_image,
+    adopter_name: thread.adopter_name,
+    adopter_email: thread.adopter_email,
+  });
 };
 
-/** Adopter cancels their own open thread. */
+/** Adopter cancels their own open request. */
 export const cancelVisit = async (threadId, adopterId, cancelReason) => {
   const thread = await findThreadById(threadId);
   if (!thread) {
-    throw new AppError('Visit thread not found.', 404);
+    throw new AppError('Visit request not found.', 404);
   }
   if (thread.adopter_id !== adopterId) {
     throw new AppError('Forbidden. This visit belongs to another adopter.', 403);
   }
   if (thread.status === 'completed' || thread.status === 'cancelled') {
-    throw new AppError('This visit thread is already closed.', 409);
+    throw new AppError('This visit request is already closed.', 409);
   }
   const updated = await updateThreadStatus(threadId, {
     status: 'cancelled',

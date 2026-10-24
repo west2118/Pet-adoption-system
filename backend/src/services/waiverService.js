@@ -131,7 +131,13 @@ export const generateWaiver = async (applicationId, shelterId, templateIds) => {
     },
     pet: mapPet(petRow),
     shelter: mapShelter(shelterRow, shelterRow?.active_listings ?? 0, shelterRow?.total_pets ?? 0),
-    templates: templates.map((t) => ({ id: t.id, name: t.name, category: t.category, body: t.body })),
+    templates: templates.map((t) => ({
+      id: t.id,
+      name: t.name,
+      category: t.category,
+      body: t.body,
+      isDefault: t.isDefault,
+    })),
     issuedAt: new Date().toISOString(),
   };
 

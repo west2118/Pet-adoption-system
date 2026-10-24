@@ -6,3 +6,17 @@ export const createInquirySchema = z.object({
   fromEmail: z.string().email('Invalid email format'),
   message: z.string().min(10, 'Message must be at least 10 characters'),
 });
+
+export const sendInquiryEmailSchema = z.object({
+  subject: z
+    .string()
+    .trim()
+    .min(1, 'Subject is required')
+    .max(200, 'Subject must be 200 characters or fewer')
+    .regex(/^[^\r\n]*$/, 'Subject must be a single line'),
+  message: z
+    .string()
+    .trim()
+    .min(1, 'Message is required')
+    .max(5000, 'Message must be 5000 characters or fewer'),
+});

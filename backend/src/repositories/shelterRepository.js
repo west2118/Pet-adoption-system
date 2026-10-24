@@ -1,4 +1,5 @@
 import { pool } from '../config/database.js';
+import { resolveShelterCoordinates } from '../utils/geo.js';
 
 export const listShelters = async ({ limit = 50, offset = 0 } = {}) => {
   const { rows } = await pool.query(
@@ -47,9 +48,10 @@ export const deleteShelter = async (id) => {
 };
 
 export const createShelter = async (input) => {
+  const { latitude, longitude } = resolveShelterCoordinates(input);
   const { rows } = await pool.query(
-    `INSERT INTO shelters (name, location, address, phone, email, operating_hours, description, image_url)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *`,
+    `INSERT INTO shelters (name, location, address, phone, email, operating_hours, description, image_url, latitude, longitude)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING *`,
     [
       input.name,
       input.location,
@@ -59,6 +61,8 @@ export const createShelter = async (input) => {
       input.operatingHours,
       input.description,
       input.imageUrl,
+      latitude,
+      longitude,
     ],
   );
   return rows[0];
@@ -67,6 +71,21 @@ export const createShelter = async (input) => {
 export const updateShelter = async (id, patch) => {
   const current = await findShelterById(id);
   if (!current) return null;
+  const addressChanged = patch.location !== undefined || patch.address !== undefined;
+  const coordinates =
+    patch.latitude !== undefined || patch.longitude !== undefined
+      ? resolveShelterCoordinates({
+          latitude: patch.latitude,
+          longitude: patch.longitude,
+          location: patch.location ?? current.location,
+          address: patch.address ?? current.address,
+        })
+      : addressChanged
+        ? resolveShelterCoordinates({
+            location: patch.location ?? current.location,
+            address: patch.address ?? current.address,
+          })
+        : { latitude: current.latitude, longitude: current.longitude };
   const merged = {
     name: patch.name ?? current.name,
     location: patch.location ?? current.location,
@@ -76,13 +95,17 @@ export const updateShelter = async (id, patch) => {
     operating_hours: patch.operatingHours ?? current.operating_hours,
     description: patch.description ?? current.description,
     image_url: patch.imageUrl ?? current.image_url,
+    latitude: coordinates.latitude,
+    longitude: coordinates.longitude,
   };
   const { rows } = await pool.query(
     `UPDATE shelters SET name=$1, location=$2, address=$3, phone=$4, email=$5,
-       operating_hours=$6, description=$7, image_url=$8, updated_at=CURRENT_TIMESTAMP
-     WHERE id=$9 RETURNING *`,
+       operating_hours=$6, description=$7, image_url=$8, latitude=$9, longitude=$10,
+       updated_at=CURRENT_TIMESTAMP
+     WHERE id=$11 RETURNING *`,
     [merged.name, merged.location, merged.address, merged.phone, merged.email,
-      merged.operating_hours, merged.description, merged.image_url, id],
+      merged.operating_hours, merged.description, merged.image_url,
+      merged.latitude, merged.longitude, id],
   );
-  return rows[0] ?? null;
+  return rows[0];
 };

@@ -1,11 +1,19 @@
 import { Router } from 'express';
-import { createApplication, getMyApplications, getMyApplicationSummary } from '../controllers/applicationController.js';
+import {
+  cancelMyApplication,
+  createApplication,
+  getMyApplications,
+  getMyApplicationSummary,
+} from '../controllers/applicationController.js';
 import { getMyApplicationWaiver } from '../controllers/waiverController.js';
 import { authenticate } from '../middlewares/authenticate.js';
 import { authorize } from '../middlewares/authorize.js';
 import { validate } from '../middlewares/validate.js';
 import { uuidParam } from '../validators/commonValidator.js';
-import { createApplicationSchema } from '../validators/applicationValidator.js';
+import {
+  cancelApplicationSchema,
+  createApplicationSchema,
+} from '../validators/applicationValidator.js';
 
 export const applicationRoutes = Router();
 
@@ -29,6 +37,14 @@ applicationRoutes.get(
   authenticate,
   authorize('adopter'),
   getMyApplicationSummary,
+);
+applicationRoutes.patch(
+  '/:id/cancel',
+  authenticate,
+  authorize('adopter'),
+  validate(uuidParam, 'params'),
+  validate(cancelApplicationSchema),
+  cancelMyApplication,
 );
 applicationRoutes.get(
   '/:id/waiver',

@@ -64,4 +64,9 @@ export const petQuerySchema = z.object({
   temperament: z.string().optional().default(''),
   location: z.string().optional().default(''),
   excludeAdopted: z.string().optional().default('false'),
+  // "Near me": the visitor's browser coordinates. Distance is computed in SQL.
+  lat: z.string().optional().default(''),
+  lng: z.string().optional().default(''),
+  radiusKm: z.string().optional().default(''),
+  sort: z.string().optional().default(''),
 });

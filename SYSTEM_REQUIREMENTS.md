@@ -71,12 +71,12 @@ The application implements a multi-portal architecture serving **three distinct 
 * **Routes & Key Pages:**
   - `GET /` (`HomePage`): Hero section, featured pets carousel, recent rescue stories, shelter partner highlights, call-to-action banner.
   - `GET /pets` (`BrowsePetsPage`): Interactive public catalog with advanced search and filters (species, breed, age, gender, size, location). *Note: Displays ONLY pets marked as Public visibility.*
-  - `GET /pets/:id` (`PetDetailsPage`): Detailed pet view with photo galleries, medical history, personality traits, shelter contact info, "Apply to Adopt" trigger, inquiry form, and "Request a visit" card (preferred slot + message creates a visit thread).
+  - `GET /pets/:id` (`PetDetailsPage`): Detailed pet view with photo galleries, medical history, personality traits, shelter contact info, "Apply to Adopt" trigger, inquiry form, and "Request a visit" card (preferred slot creates the single visit request per pet; if one already exists, the card links to My Visits instead).
   - `GET /shelters` (`SheltersPage`): Directory of verified partner shelters with location maps, operating hours, and active pet listing counts.
   - `GET /favorites` (`FavoritesPage`): Personal saved watchlist for logged-in users to bookmark pets of interest.
   - `GET /apply/:petId` (`AdoptionFormPage`): Multi-step adoption questionnaire (housing info, yard/fence details, pet experience, references).
-  - `GET /applications` (`ApplicationsPage`): User dashboard tracking submitted adoption applications and their current processing status (*Submitted*, *Under Review*, *Approved*, *Rejected*).
-  - `GET /visits` (`VisitsPage`): Meet-and-greet inbox — one thread per pet with the shelter team (preferred slot, proposals, confirmations, cancellations, and messages in a single conversation).
+  - `GET /applications` (`ApplicationsPage`): User dashboard tracking submitted adoption applications and their current processing status (*Submitted*, *Under Review*, *Approved*, *Rejected*, *Cancelled*, *Adopted*). Pending applications can be withdrawn with **Cancel application** after a confirmation dialog; the adopter is emailed a cancellation confirmation.
+  - `GET /visits` (`VisitsPage`): Meet-and-greet inbox — one request per pet with its status (requested, confirmed, completed, cancelled). The shelter emails the approve/decline decision, and the adopter can cancel an open request.
   - `GET /login` & `/signup` (`AuthPages`): User authentication and account registration.
 
 ---
@@ -98,12 +98,15 @@ The application implements a multi-portal architecture serving **three distinct 
       - *Private / Inventory*: Pet is kept in internal shelter records (e.g., under medical treatment, quarantine, or onboarding) and hidden from the public site.
   - `GET /shelter/applications` (`ShelterApplicationsPage`):
     - Centralized table of incoming adoption applications for the shelter's pets.
-    - Detailed applicant review modal, status workflow updating (*Approve*, *Reject*, *Hold*), and internal staff notes.
+    - Detailed applicant review modal, status workflow updating (*Approve*, *Reject*, *Cancel adoption*, *Mark adopted*), and internal staff notes.
+    - Opening a *Submitted* application's details automatically moves it to *Under Review* and records the date in its status history.
+    - Approve, Reject, and Cancel adoption each open a confirmation dialog with an optional note; the applicant is emailed the decision at their account email. Cancelling an approved adoption returns the pet to *Available*.
   - `GET /shelter/inquiries` (`ShelterInquiriesPage`):
-    - Inbox of direct adopter inquiries about the shelter's pets, with reply and mark-resolved actions.
+    - Read-only inbox of direct adopter inquiries about the shelter's pets. Details open in a view-only modal.
+    - A one-time Email action opens a compose dialog and sends the shelter's reply through SMTP. After a successful send the action disappears, the inquiry is marked resolved, and the sent email is shown in the details modal.
   - `GET /shelter/visits` (`ShelterVisitsPage`):
     - Visit scheduling inbox: adopter meet-and-greet threads for the shelter's pets.
-    - Propose/confirm visit slots, message back, and mark visits completed or cancelled — questions, proposals, and confirmations stay in one thread.
+    - Approve (confirm) or decline (cancel) visit requests and mark approved visits completed — the adopter is emailed automatically and the request status is tracked here.
   - `GET /shelter/profile` (`ShelterProfilePage`):
     - Manage shelter organization details, logo uploads, address, contact phone/email, operating hours, and adoption policy descriptions.
 

@@ -82,7 +82,7 @@ const pillars = [
     icon: CalendarCheck,
     tag: 'Direct',
     title: 'Visit scheduling',
-    text: 'Ask questions, request a meet and greet, and coordinate the visit with the shelter team in one thread.',
+    text: 'Request a meet and greet for a pet and track its status — the shelter emails you their decision.',
   },
   {
     icon: Building2,

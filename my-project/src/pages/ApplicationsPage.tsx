@@ -1,4 +1,5 @@
 import { ArrowRight, HeartHandshake, RefreshCw } from 'lucide-react';
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { BlurText, GridOverlay, Reveal, TablePagination } from '@/components/shared';
 import { ApplicationCard } from '@/components/features/ApplicationCard';
@@ -19,7 +20,14 @@ export const ApplicationsPage = () => {
   // its own endpoint so the counters stay right across every page.
   const { applications, total, pageSize, page, setPage, loading, error, refresh } =
     useMyApplicationsPage(user?.id);
-  const summary = useMyApplicationSummary(user?.id);
+  const [summaryReload, setSummaryReload] = useState(0);
+  const summary = useMyApplicationSummary(user?.id, summaryReload);
+
+  // A withdrawal changes the list and the summary counters.
+  const handleApplicationChanged = () => {
+    refresh();
+    setSummaryReload((value) => value + 1);
+  };
   const { pets } = usePets();
 
   const petById = (id: string) => pets.find((p) => p.id === id);
@@ -28,6 +36,7 @@ export const ApplicationsPage = () => {
     Submitted: 0,
     'Under Review': summary?.underReview ?? 0,
     Rejected: 0,
+    Cancelled: 0,
     Approved: summary?.approved ?? 0,
     Adopted: summary?.adopted ?? 0,
   };
@@ -148,7 +157,12 @@ export const ApplicationsPage = () => {
               <>
                 <div className="space-y-6">
                   {applications.map((app) => (
-                    <ApplicationCard key={app.id} application={app} pet={petById(app.petId)} />
+                    <ApplicationCard
+                      key={app.id}
+                      application={app}
+                      pet={petById(app.petId)}
+                      onChanged={handleApplicationChanged}
+                    />
                   ))}
                 </div>
 

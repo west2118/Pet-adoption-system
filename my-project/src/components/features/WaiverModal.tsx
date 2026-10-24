@@ -6,6 +6,7 @@ import { DetailsModal } from '@/components/shared';
 import { WaiverPrintDocument } from './WaiverPrintDocument';
 import { Button } from '@/components/ui/button';
 import { ApiError } from '@/lib/apiClient';
+import { formatWaiverBodyPreview } from '@/lib/waiverContent';
 import { waiverService } from '@/services/waiverService';
 import type { Waiver, WaiverTemplate } from '@/types';
 
@@ -152,9 +153,10 @@ export const WaiverModal = ({ open, onClose, applicationId, applicantName }: Wai
                   <span>
                     <span className="font-medium">{t.name}</span>{' '}
                     <span className="text-xs text-muted-foreground">
-                      ({t.category} · {t.status})
+                      ({t.category} · {t.status}
+                      {t.isDefault ? '' : ' · your shelter only'})
                     </span>
-                    <span className="mt-1 line-clamp-2 block text-muted-foreground">{t.body}</span>
+                    <span className="mt-1 line-clamp-2 block text-muted-foreground">{formatWaiverBodyPreview(t.body)}</span>
                   </span>
                 </label>
               ))}
@@ -188,9 +190,10 @@ export const WaiverModal = ({ open, onClose, applicationId, applicantName }: Wai
                   <span>
                     <span className="font-medium">{t.name}</span>{' '}
                     <span className="text-xs text-muted-foreground">
-                      ({t.category} · {t.status})
+                      ({t.category} · {t.status}
+                      {t.isDefault ? '' : ' · your shelter only'})
                     </span>
-                    <span className="mt-1 line-clamp-2 block text-muted-foreground">{t.body}</span>
+                    <span className="mt-1 line-clamp-2 block text-muted-foreground">{formatWaiverBodyPreview(t.body)}</span>
                   </span>
                 </label>
               ))}

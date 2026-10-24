@@ -57,6 +57,13 @@ describe('smoke (no database required)', () => {
     assert.equal(res.status, 401);
   });
 
+  it('PATCH /applications/:id/cancel without token returns 401', async () => {
+    const res = await request
+      .patch('/api/v1/applications/00000000-0000-0000-0000-000000000000/cancel')
+      .send({});
+    assert.equal(res.status, 401);
+  });
+
   it('GET /admin/stats without token returns 401', async () => {
     const res = await request.get('/api/v1/admin/stats');
     assert.equal(res.status, 401);

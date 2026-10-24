@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import type { ReactNode } from 'react';
 import { ChevronDown, RotateCcw, Search, SlidersHorizontal, X } from 'lucide-react';
 import type { PetFilters } from '@/types';
 import { cn } from '@/lib/utils';
@@ -15,6 +16,8 @@ interface FilterBarProps {
   breeds: string[];
   locations: string[];
   temperaments: string[];
+  /** Extra controls rendered with Filters / Reset (e.g. the NearbyFilter). */
+  actions?: ReactNode;
 }
 
 interface FilterField {
@@ -42,6 +45,7 @@ export const FilterBar = ({
   breeds,
   locations,
   temperaments,
+  actions,
 }: FilterBarProps) => {
   const [panelOpen, setPanelOpen] = useState(false);
 
@@ -157,7 +161,7 @@ export const FilterBar = ({
           )}
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <Button
             type="button"
             variant="outline"
@@ -180,6 +184,8 @@ export const FilterBar = ({
               className={cn('size-4 transition-transform', panelOpen && 'rotate-180')}
             />
           </Button>
+
+          {actions}
 
           <Button
             type="button"

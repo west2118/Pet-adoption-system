@@ -244,7 +244,7 @@ export const PetDetailsPage = () => {
               </p>
               <div className="mt-10 grid gap-4">
                 <InquiryForm petId={pet.id} petName={pet.name} />
-                <VisitRequestCard petId={pet.id} petName={pet.name} />
+                <VisitRequestCard key={pet.id} petId={pet.id} petName={pet.name} />
               </div>
             </Reveal>
           </div>

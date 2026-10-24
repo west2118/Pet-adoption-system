@@ -1,6 +1,7 @@
 import { mockApplications, mockInquiries, mockPets, mockShelters, mockUsers, getShelterLocation, publicPets } from '@/data/mockData';
 import { ApiError, apiRequest, apiRequestWithMeta, sessionStore } from '@/lib/apiClient';
 import { ALL_FILTERS } from '@/hooks/usePetFilter';
+import { haversineKm } from '@/utils/geo';
 import type {
   AdoptionApplication,
   ApplicationStatus,
@@ -105,6 +106,13 @@ export interface PublicPetsQuery {
   shelterId?: string;
   /** The browse grid only lists pets still looking for a home. */
   excludeAdopted?: boolean;
+  /** Visitor coordinates for "Near me"; the backend computes the distance in SQL. */
+  latitude?: number;
+  longitude?: number;
+  /** Optional radius cap in kilometres (omit for "any distance"). */
+  radiusKm?: number;
+  /** Order the page closest-first (requires latitude/longitude). */
+  sortByDistance?: boolean;
 }
 
 /** The facet subset of `PublicPetsQuery` that maps 1:1 onto a query param. */
@@ -153,6 +161,14 @@ const toPublicPetsQuery = (options: PublicPetsQuery): string => {
   });
   if (options.shelterId) params.set('shelterId', options.shelterId);
   if (options.excludeAdopted) params.set('excludeAdopted', 'true');
+  if (options.latitude != null && options.longitude != null) {
+    params.set('lat', String(options.latitude));
+    params.set('lng', String(options.longitude));
+    if (options.radiusKm != null && options.radiusKm > 0) {
+      params.set('radiusKm', String(options.radiusKm));
+    }
+    if (options.sortByDistance) params.set('sort', 'distance');
+  }
   return `?${params.toString()}`;
 };
 
@@ -182,6 +198,25 @@ const browsableMockPets = (options: PublicPetsQuery): Pet[] => {
       list = list.filter((p) => (p[key] as string) === value);
     }
   });
+
+  // Demo-mode "Near me": mirror the backend's distance filter + ordering.
+  if (options.latitude != null && options.longitude != null) {
+    const origin = { latitude: options.latitude, longitude: options.longitude };
+    list = list.flatMap((pet) => {
+      const shelter = mockShelters.find((s) => s.id === pet.shelterId);
+      if (shelter?.latitude == null || shelter?.longitude == null) return [];
+      const distanceKm = haversineKm(origin, {
+        latitude: shelter.latitude,
+        longitude: shelter.longitude,
+      });
+      if (options.radiusKm != null && distanceKm > options.radiusKm) return [];
+      return [{ ...pet, distanceKm: Math.round(distanceKm * 100) / 100 }];
+    });
+    if (options.sortByDistance) {
+      list = [...list].sort((a, b) => (a.distanceKm ?? Infinity) - (b.distanceKm ?? Infinity));
+    }
+  }
+
   return list;
 };
 
@@ -912,25 +947,52 @@ export const submitInquiry = async (input: SubmitInquiryInput): Promise<Inquiry>
   }
 };
 
+export interface InquiryEmailInput {
+  subject: string;
+  message: string;
+}
+
+export interface InquiryEmailResult {
+  inquiry: Inquiry;
+  emailSent: boolean;
+  emailStubbed: boolean;
+}
+
 /**
- * Mark a shelter inbox inquiry as resolved. Falls back to the local store
- * in demo mode (the backend has no reopen endpoint, so reopening stays
- * a local-only affordance).
+ * Send the shelter's reply to an inquiry author. The backend enforces
+ * one email per inquiry and records what was sent; in demo mode the local
+ * store mirrors that behaviour so the action disappears.
  */
-export const resolveShelterInquiry = async (id: string): Promise<Inquiry | undefined> => {
+export const emailShelterInquiry = async (
+  id: string,
+  input: InquiryEmailInput,
+): Promise<InquiryEmailResult> => {
   if (sessionStore.has()) {
     try {
-      const data = await apiRequest<InquiryResponse>(
-        `/shelter/inquiries/${encodeURIComponent(id)}/resolve`,
-        { method: 'PATCH', auth: 'full' },
+      return await apiRequest<InquiryEmailResult>(
+        `/shelter/inquiries/${encodeURIComponent(id)}/email`,
+        { method: 'POST', auth: 'full', body: input },
       );
-      return data.inquiry;
     } catch (err) {
       if (!shouldFallbackToMock(err)) throw err;
     }
   }
-  inquiriesStore = inquiriesStore.map((i) => (i.id === id ? { ...i, resolved: true } : i));
-  return inquiriesStore.find((i) => i.id === id);
+
+  const target = inquiriesStore.find((i) => i.id === id);
+  if (!target) throw new ApiError('Inquiry not found.', 404);
+  if (target.emailedAt) {
+    throw new ApiError('An email has already been sent for this inquiry.', 409);
+  }
+
+  const inquiry: Inquiry = {
+    ...target,
+    resolved: true,
+    emailedAt: new Date().toISOString(),
+    emailSubject: input.subject,
+    emailMessage: input.message,
+  };
+  inquiriesStore = inquiriesStore.map((i) => (i.id === id ? inquiry : i));
+  return { inquiry, emailSent: true, emailStubbed: false };
 };
 
 /**

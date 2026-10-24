@@ -9,6 +9,9 @@ export const createShelterSchema = z.object({
   operatingHours: z.string().min(1, 'Operating hours are required'),
   description: z.string().min(10, 'Description must be at least 10 characters'),
   imageUrl: z.string().url('Invalid image URL format'),
+  // Optional precise coordinates; when omitted the backend derives the city centre.
+  latitude: z.coerce.number().min(-90).max(90).nullable().optional(),
+  longitude: z.coerce.number().min(-180).max(180).nullable().optional(),
 });
 
 export const updateShelterSchema = createShelterSchema.partial();

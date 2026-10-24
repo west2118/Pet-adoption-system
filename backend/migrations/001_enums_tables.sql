@@ -36,7 +36,7 @@ EXCEPTION WHEN duplicate_object THEN NULL;
 END $$;
 
 DO $$ BEGIN
-  CREATE TYPE application_status_type AS ENUM ('Submitted', 'Under Review', 'Approved', 'Rejected', 'Adopted');
+  CREATE TYPE application_status_type AS ENUM ('Submitted', 'Under Review', 'Approved', 'Rejected', 'Cancelled', 'Adopted');
 EXCEPTION WHEN duplicate_object THEN NULL;
 END $$;
 

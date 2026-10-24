@@ -1,4 +1,6 @@
 import {
+  AlertTriangle,
+  Ban,
   Check,
   ClipboardList,
   Eye,
@@ -7,7 +9,7 @@ import {
   Search,
   X,
 } from 'lucide-react';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { toast } from 'react-toastify';
 import {
   DetailsModal,
@@ -27,7 +29,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/Table';
-import { Input, Select } from '@/components/ui/Form';
+import { Input, Label, Select, Textarea } from '@/components/ui/Form';
 import { Button } from '@/components/ui/button';
 import { ApplicationStatusBadge } from '@/components/ui/StatusBadge';
 import { usePets } from '@/hooks/useData';
@@ -43,6 +45,7 @@ const STATUS_FILTER_OPTIONS = [
   { value: 'Under Review', label: 'Under Review' },
   { value: 'Approved', label: 'Approved' },
   { value: 'Rejected', label: 'Rejected' },
+  { value: 'Cancelled', label: 'Cancelled' },
   { value: 'Adopted', label: 'Adopted' },
 ];
 
@@ -57,7 +60,15 @@ export const ShelterApplicationsPage = () => {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const [detailsApp, setDetailsApp] = useState<AdoptionApplication | null>(null);
+  const [decision, setDecision] = useState<{
+    app: AdoptionApplication;
+    status: 'Approved' | 'Rejected' | 'Cancelled';
+  } | null>(null);
+  const [decisionNote, setDecisionNote] = useState('');
+  const [deciding, setDeciding] = useState(false);
   const [waiverAppId, setWaiverAppId] = useState<string | null>(null);
+  // Opening details of a Submitted application moves it to Under Review once.
+  const pendingReview = useRef<Set<string>>(new Set());
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -85,7 +96,7 @@ export const ShelterApplicationsPage = () => {
     ? (applications.find((a) => a.id === waiverAppId) ?? null)
     : null;
 
-  const handleStatusChange = async (id: string, status: ApplicationStatus) => {
+  const handleStatusChange = async (id: string, status: ApplicationStatus, note?: string) => {
     // Local mirror of the server rule: accepting one application auto-rejects
     // the other open ones for the same pet and moves the pet itself, so the
     // table stays correct without a refetch.
@@ -127,6 +138,12 @@ export const ShelterApplicationsPage = () => {
         setPets((prev) => prev.map((p) => (p.id === updated.petId ? { ...p, status: petStatus } : p)));
       } else {
         setApplications((prev) => prev.map((a) => (a.id === id ? updated : a)));
+        if (status === 'Cancelled') {
+          // A cancelled adoption returns the pet to the adoptable pool.
+          setPets((prev) =>
+            prev.map((p) => (p.id === updated.petId ? { ...p, status: 'Available' } : p)),
+          );
+        }
       }
       setDetailsApp((prev) => (prev && prev.id === id ? updated : prev));
       return competitors.length;
@@ -140,7 +157,7 @@ export const ShelterApplicationsPage = () => {
           const updated = await adoptionApplicationService.updateStatus(
             id,
             status,
-            'Updated by staff',
+            note ?? 'Updated by staff',
           );
           const autoRejected = syncAcceptanceSideEffects(updated);
           toast.success(`Application ${status.toLowerCase()}!`);
@@ -154,7 +171,11 @@ export const ShelterApplicationsPage = () => {
           // fall through to the local mock store (demo mode / unreachable API)
         }
       }
-      const updated = await applicationService.updateStatus(id, status, 'Updated by staff');
+      const updated = await applicationService.updateStatus(
+        id,
+        status,
+        note ?? 'Updated by staff',
+      );
       if (updated) {
         const autoRejected = syncAcceptanceSideEffects(updated);
         toast.success(`Application ${status.toLowerCase()}!`);
@@ -169,6 +190,40 @@ export const ShelterApplicationsPage = () => {
     } catch {
       toast.error('Failed to update application status. Please try again.');
       return false;
+    }
+  };
+
+  /**
+   * Approve / reject / cancel adoption are decisions, not one-click toggles —
+   * confirm them in a modal first (with an optional note that is emailed).
+   */
+  const requestDecision = (
+    app: AdoptionApplication,
+    status: 'Approved' | 'Rejected' | 'Cancelled',
+  ) => {
+    setDetailsApp(null);
+    setDecisionNote('');
+    setDecision({ app, status });
+  };
+
+  const confirmDecision = async () => {
+    if (!decision) return;
+    setDeciding(true);
+    const fallbackNote =
+      decision.status === 'Approved'
+        ? 'Application approved by shelter'
+        : decision.status === 'Rejected'
+          ? 'Application rejected by shelter'
+          : 'Adoption cancelled by shelter';
+    const ok = await handleStatusChange(
+      decision.app.id,
+      decision.status,
+      decisionNote.trim() || fallbackNote,
+    );
+    setDeciding(false);
+    if (ok) {
+      setDecision(null);
+      setDecisionNote('');
     }
   };
 
@@ -230,7 +285,13 @@ export const ShelterApplicationsPage = () => {
       />
     ) : undefined;
 
-  const petOf = (petId: string) => pets.find((p) => p.id === petId);
+  /**
+   * Approved applications move the pet to `In Process`, which the public
+   * catalogue (`usePets`) filters out. Fall back to the pet summary joined
+   * onto the application so the row keeps its name, photo and breed.
+   */
+  const petOf = (app: AdoptionApplication) =>
+    pets.find((p) => p.id === app.petId) ?? app.pet;
 
   /** E-waivers are only printable once the pet is being handed over. */
   const canPrintWaiver = (app: AdoptionApplication) =>
@@ -251,8 +312,18 @@ export const ShelterApplicationsPage = () => {
     ) : null;
 
   const isTerminal = (app: AdoptionApplication) =>
-    app.status === 'Adopted' || app.status === 'Rejected';
+    app.status === 'Adopted' || app.status === 'Rejected' || app.status === 'Cancelled';
   const isApproved = (app: AdoptionApplication) => app.status === 'Approved';
+
+  /** Opening details marks a Submitted application as Under Review. */
+  const openDetails = (app: AdoptionApplication) => {
+    setDetailsApp(app);
+    if (app.status !== 'Submitted' || pendingReview.current.has(app.id)) return;
+    pendingReview.current.add(app.id);
+    void handleStatusChange(app.id, 'Under Review', 'Application opened by shelter').finally(
+      () => pendingReview.current.delete(app.id),
+    );
+  };
 
   /** Status-driven next step: Submitted/Under Review → Approve/Reject,
    *  Approved → Mark as adopted (then waiver print), Adopted/Rejected → terminal. */
@@ -262,7 +333,7 @@ export const ShelterApplicationsPage = () => {
       size="icon-sm"
       className="text-green-600 hover:bg-green-50 hover:text-green-700 dark:text-green-400 dark:hover:bg-green-950/40"
       aria-label={`Approve ${app.applicantName}`}
-      onClick={() => handleStatusChange(app.id, 'Approved')}
+      onClick={() => requestDecision(app, 'Approved')}
     >
       <Check className="size-4" />
     </Button>
@@ -274,7 +345,7 @@ export const ShelterApplicationsPage = () => {
       size="icon-sm"
       className="text-red-600 hover:bg-red-50 hover:text-red-700 dark:text-red-400 dark:hover:bg-red-950/40"
       aria-label={`Reject ${app.applicantName}`}
-      onClick={() => handleStatusChange(app.id, 'Rejected')}
+      onClick={() => requestDecision(app, 'Rejected')}
     >
       <X className="size-4" />
     </Button>
@@ -290,6 +361,19 @@ export const ShelterApplicationsPage = () => {
       onClick={() => handleMarkAdopted(app.id)}
     >
       <HeartHandshake className="size-4" />
+    </Button>
+  );
+
+  const cancelAdoptionAction = (app: AdoptionApplication) => (
+    <Button
+      variant="ghost"
+      size="icon-sm"
+      className="text-destructive hover:bg-destructive/10"
+      aria-label={`Cancel adoption for ${app.applicantName}`}
+      title="Cancel adoption"
+      onClick={() => requestDecision(app, 'Cancelled')}
+    >
+      <Ban className="size-4" />
     </Button>
   );
 
@@ -333,7 +417,7 @@ export const ShelterApplicationsPage = () => {
                 {loading ? (
                   <TableSkeletonRows columns={5} rows={5} avatar />
                 ) : applications.map((app) => {
-                  const pet = petOf(app.petId);
+                  const pet = petOf(app);
                   return (
                     <TableRow key={app.id}>
                       <TableCell>
@@ -372,13 +456,14 @@ export const ShelterApplicationsPage = () => {
                             size="icon-sm"
                             className="text-muted-foreground"
                             aria-label={`View ${app.applicantName} application`}
-                            onClick={() => setDetailsApp(app)}
+                            onClick={() => openDetails(app)}
                           >
                             <Eye className="size-4" />
                           </Button>
                           {isApproved(app) ? (
                             <>
                               {markAdoptedAction(app)}
+                              {cancelAdoptionAction(app)}
                               {waiverAction(app, `Print e-waiver for ${app.applicantName}`)}
                             </>
                           ) : isTerminal(app) ? (
@@ -403,7 +488,7 @@ export const ShelterApplicationsPage = () => {
             {loading ? (
               <RecordCardSkeleton count={3} />
             ) : applications.map((app) => {
-              const pet = petOf(app.petId);
+              const pet = petOf(app);
               return (
                 <RecordCard
                   key={app.id}
@@ -419,13 +504,14 @@ export const ShelterApplicationsPage = () => {
                         size="icon-sm"
                         className="text-muted-foreground"
                         aria-label={`View ${app.applicantName} application`}
-                        onClick={() => setDetailsApp(app)}
+                        onClick={() => openDetails(app)}
                       >
                         <Eye className="size-4" />
                       </Button>
                       {isApproved(app) ? (
                         <>
                           {markAdoptedAction(app)}
+                          {cancelAdoptionAction(app)}
                           {waiverAction(app, `Print e-waiver for ${app.applicantName}`)}
                         </>
                       ) : isTerminal(app) ? (
@@ -470,19 +556,31 @@ export const ShelterApplicationsPage = () => {
                 </Button>
               )}
               {detailsApp.status === 'Approved' ? (
-                <Button
-                  size="sm"
-                  className="w-full bg-blue-600 text-white hover:bg-blue-700"
-                  onClick={() => handleMarkAdopted(detailsApp.id)}
-                >
-                  <HeartHandshake className="size-4" /> Mark as adopted & print e-waiver
-                </Button>
-              ) : detailsApp.status === 'Adopted' || detailsApp.status === 'Rejected' ? null : (
+                <>
+                  <Button
+                    size="sm"
+                    className="w-full bg-blue-600 text-white hover:bg-blue-700"
+                    onClick={() => handleMarkAdopted(detailsApp.id)}
+                  >
+                    <HeartHandshake className="size-4" /> Mark as adopted & print e-waiver
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="destructive"
+                    className="w-full"
+                    onClick={() => requestDecision(detailsApp, 'Cancelled')}
+                  >
+                    <Ban className="size-4" /> Cancel adoption
+                  </Button>
+                </>
+              ) : detailsApp.status === 'Adopted' ||
+                detailsApp.status === 'Rejected' ||
+                detailsApp.status === 'Cancelled' ? null : (
                 <div className="flex gap-2">
                   <Button
                     size="sm"
                     className="flex-1 bg-green-600 text-white hover:bg-green-700"
-                    onClick={() => handleStatusChange(detailsApp.id, 'Approved')}
+                    onClick={() => requestDecision(detailsApp, 'Approved')}
                   >
                     <Check className="size-4" /> Approve
                   </Button>
@@ -490,7 +588,7 @@ export const ShelterApplicationsPage = () => {
                     size="sm"
                     variant="destructive"
                     className="flex-1"
-                    onClick={() => handleStatusChange(detailsApp.id, 'Rejected')}
+                    onClick={() => requestDecision(detailsApp, 'Rejected')}
                   >
                     <X className="size-4" /> Reject
                   </Button>
@@ -503,17 +601,17 @@ export const ShelterApplicationsPage = () => {
         {detailsApp && (
           <div className="space-y-4">
             <div className="flex items-center gap-3">
-              {petOf(detailsApp.petId) ? (
+              {petOf(detailsApp) ? (
                 <img
-                  src={petOf(detailsApp.petId)?.imageUrl}
-                  alt={petOf(detailsApp.petId)?.name}
+                  src={petOf(detailsApp)?.imageUrl}
+                  alt={petOf(detailsApp)?.name}
                   className="size-14 rounded-lg object-cover"
                 />
               ) : null}
               <div className="min-w-0 flex-1">
-                <p className="font-semibold">{petOf(detailsApp.petId)?.name ?? 'Unknown pet'}</p>
+                <p className="font-semibold">{petOf(detailsApp)?.name ?? 'Unknown pet'}</p>
                 <p className="truncate text-xs text-muted-foreground">
-                  {petOf(detailsApp.petId)?.breed ?? '—'}
+                  {petOf(detailsApp)?.breed ?? '—'}
                 </p>
               </div>
               <ApplicationStatusBadge status={detailsApp.status} />
@@ -566,6 +664,114 @@ export const ShelterApplicationsPage = () => {
                   </li>
                 ))}
               </ol>
+            </div>
+          </div>
+        )}
+      </DetailsModal>
+
+      <DetailsModal
+        open={decision !== null}
+        onClose={deciding ? () => undefined : () => setDecision(null)}
+        title={
+          decision?.status === 'Approved'
+            ? 'Approve this application?'
+            : decision?.status === 'Rejected'
+              ? 'Reject this application?'
+              : 'Cancel this adoption?'
+        }
+        description={
+          decision ? `${decision.app.applicantName} · ${decision.app.email}` : undefined
+        }
+        icon={
+          decision?.status === 'Approved'
+            ? Check
+            : decision?.status === 'Rejected'
+              ? AlertTriangle
+              : Ban
+        }
+      >
+        {decision && (
+          <div className="space-y-4">
+            <div
+              className={
+                decision.status === 'Approved'
+                  ? 'rounded-lg border border-green-600/30 bg-green-50 px-3 py-2.5 text-sm dark:bg-green-950/40'
+                  : 'rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2.5 text-sm'
+              }
+            >
+              {decision.status === 'Cancelled' ? (
+                <>
+                  You are about to cancel the approved adoption of{' '}
+                  <span className="font-semibold">
+                    {petOf(decision.app)?.name ?? 'this pet'}
+                  </span>{' '}
+                  for{' '}
+                  <span className="font-semibold">{decision.app.applicantName}</span>.
+                </>
+              ) : (
+                <>
+                  You are about to {decision.status === 'Approved' ? 'approve' : 'reject'}{' '}
+                  <span className="font-semibold">{decision.app.applicantName}</span>&apos;s
+                  application for{' '}
+                  <span className="font-semibold">
+                    {petOf(decision.app)?.name ?? 'this pet'}
+                  </span>
+                  .
+                </>
+              )}
+            </div>
+            <p className="text-sm leading-relaxed text-muted-foreground">
+              The status will be set to{' '}
+              <span className="font-medium text-foreground">{decision.status}</span>, and an email
+              with this status is sent to the applicant&apos;s account email.
+              {decision.status === 'Approved'
+                ? ' Other open applications for this pet will be auto-rejected.'
+                : ''}
+              {decision.status === 'Cancelled'
+                ? ' The pet will be returned to Available so other adopters can apply.'
+                : ''}
+            </p>
+            <div>
+              <Label htmlFor="decision-note">Note (optional)</Label>
+              <Textarea
+                id="decision-note"
+                value={decisionNote}
+                onChange={(e) => setDecisionNote(e.target.value)}
+                placeholder="Included in the email to the applicant…"
+                disabled={deciding}
+              />
+            </div>
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                className="flex-1"
+                onClick={() => setDecision(null)}
+                disabled={deciding}
+              >
+                Keep application
+              </Button>
+              <Button
+                variant={decision.status === 'Approved' ? 'default' : 'destructive'}
+                className={
+                  decision.status === 'Approved'
+                    ? 'flex-1 bg-green-600 text-white hover:bg-green-700'
+                    : 'flex-1'
+                }
+                onClick={() => void confirmDecision()}
+                disabled={deciding}
+              >
+                {deciding
+                  ? decision.status === 'Approved'
+                    ? 'Approving…'
+                    : decision.status === 'Rejected'
+                      ? 'Rejecting…'
+                      : 'Cancelling…'
+                  : decision.status === 'Approved'
+                    ? 'Approve application'
+                    : decision.status === 'Rejected'
+                      ? 'Reject application'
+                      : 'Cancel adoption'}
+              </Button>
             </div>
           </div>
         )}

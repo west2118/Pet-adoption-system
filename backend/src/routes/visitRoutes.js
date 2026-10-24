@@ -1,13 +1,19 @@
 import { Router } from 'express';
-import { cancelMyVisit, createVisit, getMyVisitSummary, getMyVisits, getVisit, postMessage } from '../controllers/visitController.js';
+import {
+  cancelMyVisit,
+  createVisit,
+  getMyVisitForPet,
+  getMyVisitSummary,
+  getMyVisits,
+} from '../controllers/visitController.js';
 import { authenticate } from '../middlewares/authenticate.js';
 import { authorize } from '../middlewares/authorize.js';
 import { validate } from '../middlewares/validate.js';
 import { uuidParam } from '../validators/commonValidator.js';
 import {
   cancelVisitSchema,
-  createVisitMessageSchema,
   createVisitSchema,
+  visitPetParam,
 } from '../validators/visitValidator.js';
 
 export const visitRoutes = Router();
@@ -23,20 +29,15 @@ visitRoutes.get('/my', authenticate, authorize('adopter'), getMyVisits);
 // Summary counters for the same adopter — registered alongside /my so the
 // paged list and the stats band can be fetched independently.
 visitRoutes.get('/my/stats', authenticate, authorize('adopter'), getMyVisitSummary);
+// Whether this adopter already requested a visit for a given pet. Kept ahead
+// of any `/:id` route and scoped by pet so the one-request rule is visible
+// on the pet page.
 visitRoutes.get(
-  '/:id',
-  authenticate,
-  authorize('adopter', 'shelter_staff', 'platform_admin'),
-  validate(uuidParam, 'params'),
-  getVisit,
-);
-visitRoutes.post(
-  '/:id/messages',
+  '/my/pet/:petId',
   authenticate,
   authorize('adopter'),
-  validate(uuidParam, 'params'),
-  validate(createVisitMessageSchema),
-  postMessage,
+  validate(visitPetParam, 'params'),
+  getMyVisitForPet,
 );
 visitRoutes.patch(
   '/:id/cancel',

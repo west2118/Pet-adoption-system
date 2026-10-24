@@ -1,5 +1,6 @@
 import { ApiError, apiRequest, apiRequestWithMeta, sessionStore } from '@/lib/apiClient';
 import { mockApplications } from '@/data/mockData';
+import { applicationService } from '@/services/api';
 import type { PaginatedResult } from '@/services/api';
 import type { AdoptionApplication, ApplicationStatus } from '@/types';
 
@@ -168,6 +169,33 @@ export const listShelterApplicationsPaginated = async (options: {
   };
 };
 
+export const cancelMyApplication = async (
+  id: string,
+  reason?: string,
+): Promise<AdoptionApplication> => {
+  if (sessionStore.has()) {
+    try {
+      const { application } = await apiRequest<{ application: AdoptionApplication }>(
+        `/applications/${encodeURIComponent(id)}/cancel`,
+        { method: 'PATCH', body: { reason }, auth: 'full' },
+      );
+      return application;
+    } catch (err) {
+      if (!shouldFallbackToMocks(err)) throw err;
+    }
+  }
+
+  const updated = await applicationService.updateStatus(
+    id,
+    'Cancelled',
+    reason ?? 'Cancelled by applicant',
+  );
+  if (!updated) {
+    throw new ApiError('Application not found.', 404, 'NOT_FOUND');
+  }
+  return updated;
+};
+
 export const updateShelterApplicationStatus = async (
   id: string,
   status: ApplicationStatus,
@@ -185,6 +213,7 @@ export const adoptionApplicationService = {
   listMine: listMyApplications,
   listMinePaginated: listMyApplicationsPaginated,
   summaryMine: getMyApplicationSummary,
+  cancelMine: cancelMyApplication,
   listForShelter: listShelterApplications,
   listForShelterPaginated: listShelterApplicationsPaginated,
   updateStatus: updateShelterApplicationStatus,

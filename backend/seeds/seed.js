@@ -11,6 +11,8 @@ const shelters = [
     name: 'Happy Tails Rescue',
     location: 'Manila',
     address: '123 Bayani St, Quezon City, Manila',
+    latitude: 14.676,
+    longitude: 121.0437,
     phone: '+63 2 8555 0101',
     email: 'hello@happytails.ph',
     operating_hours: 'Mon-Sat, 9:00 AM - 6:00 PM',
@@ -21,6 +23,8 @@ const shelters = [
     name: 'Second Chance Shelter',
     location: 'Cebu',
     address: '45 Mango Ave, Cebu City',
+    latitude: 10.3157,
+    longitude: 123.8854,
     phone: '+63 32 555 0142',
     email: 'adopt@secondchance.ph',
     operating_hours: 'Tue-Sun, 10:00 AM - 5:00 PM',
@@ -45,9 +49,9 @@ const seed = async () => {
     const shelterIds = [];
     for (const s of shelters) {
       const r = await pool.query(
-        `INSERT INTO shelters (name, location, address, phone, email, operating_hours, description, image_url)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id`,
-        [s.name, s.location, s.address, s.phone, s.email, s.operating_hours, s.description, s.image_url],
+        `INSERT INTO shelters (name, location, address, phone, email, operating_hours, description, image_url, latitude, longitude)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING id`,
+        [s.name, s.location, s.address, s.phone, s.email, s.operating_hours, s.description, s.image_url, s.latitude, s.longitude],
       );
       shelterIds.push(r.rows[0].id);
     }

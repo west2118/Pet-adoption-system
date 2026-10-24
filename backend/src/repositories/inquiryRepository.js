@@ -40,7 +40,12 @@ export const listInquiriesByShelter = async (shelterId, { limit = 10, offset = 0
 
 export const findInquiryById = async (id) => {
   const { rows } = await pool.query(
-    `SELECT i.*, p.shelter_id FROM inquiries i JOIN pets p ON i.pet_id = p.id WHERE i.id = $1`,
+    `SELECT i.*, p.shelter_id, p.name AS pet_name,
+            s.name AS shelter_name, s.email AS shelter_email
+       FROM inquiries i
+       JOIN pets p ON i.pet_id = p.id
+       LEFT JOIN shelters s ON p.shelter_id = s.id
+      WHERE i.id = $1`,
     [id],
   );
   return rows[0] ?? null;
@@ -50,6 +55,25 @@ export const markInquiryResolved = async (id) => {
   const { rows } = await pool.query(
     'UPDATE inquiries SET resolved = true WHERE id = $1 RETURNING *',
     [id],
+  );
+  return rows[0] ?? null;
+};
+
+/**
+ * Records a successfully delivered reply email. The inquiry is also marked
+ * resolved because emailing is the inbox's completion action now that the
+ * resolve/reopen controls are gone.
+ */
+export const markInquiryEmailed = async (id, { subject, message }) => {
+  const { rows } = await pool.query(
+    `UPDATE inquiries
+        SET emailed_at = CURRENT_TIMESTAMP,
+            email_subject = $2,
+            email_message = $3,
+            resolved = true
+      WHERE id = $1
+      RETURNING *`,
+    [id, subject, message],
   );
   return rows[0] ?? null;
 };

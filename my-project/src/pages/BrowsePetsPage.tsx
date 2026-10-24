@@ -1,15 +1,18 @@
 import { useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
+import { AlertCircle } from 'lucide-react';
 import type { Pet } from '@/types';
 import { Container } from '@/components/layout/Container';
 import { Reveal, TablePagination } from '@/components/shared';
 import { FilterBar } from '@/components/features/FilterBar';
+import { NearbyFilter } from '@/components/features/NearbyFilter';
 import { PetsHero } from '@/components/features/PetsHero';
 import { PetsTicker } from '@/components/features/PetsTicker';
 import { PetCard } from '@/components/features/PetCard';
 import { EmptyState, LoadingGrid } from '@/components/ui/Feedback';
 import { Button } from '@/components/ui/button';
 import { useBrowsePetsPage, useHeroPets, usePetFacets, useShelters } from '@/hooks/useData';
+import { useNearbyPets } from '@/hooks/useNearbyPets';
 import { usePetFilter } from '@/hooks/usePetFilter';
 import { cn } from '@/lib/utils';
 
@@ -32,8 +35,12 @@ export const BrowsePetsPage = () => {
     presetLocation,
   );
 
+  // "Near me": browser location → backend distance filter/sort. It activates
+  // automatically for visitors who already granted location access.
+  const nearby = useNearbyPets();
+
   const { pets: pagePets, total, pageSize, page, setPage, loading, error } =
-    useBrowsePetsPage(filters);
+    useBrowsePetsPage(filters, nearby.search);
 
   // Any filter change invalidates the current page, so go back to page 1.
   const changeFilter = (key: keyof typeof filters, value: string) => {
@@ -47,6 +54,14 @@ export const BrowsePetsPage = () => {
   const resetAll = () => {
     setPage(1);
     resetFilters();
+  };
+  const toggleNearby = () => {
+    setPage(1);
+    nearby.toggle();
+  };
+  const changeRadius = (radiusKm: number) => {
+    setPage(1);
+    nearby.setRadiusKm(radiusKm);
   };
 
   const goToPage = (next: number) => {
@@ -133,9 +148,15 @@ export const BrowsePetsPage = () => {
             </h2>
 
             <p className="mt-3 text-sm text-muted-foreground">
-              {activeFilterCount > 0
-                ? `${activeFilterCount} filter${activeFilterCount === 1 ? '' : 's'} applied`
-                : 'Every adoptable animal across our partner shelters.'}
+              {nearby.active
+                ? `Closest to you first, within ${nearby.radiusKm} km${
+                    activeFilterCount > 0
+                      ? ` · ${activeFilterCount} filter${activeFilterCount === 1 ? '' : 's'} applied`
+                      : ''
+                  }`
+                : activeFilterCount > 0
+                  ? `${activeFilterCount} filter${activeFilterCount === 1 ? '' : 's'} applied`
+                  : 'Every adoptable animal across our partner shelters.'}
             </p>
           </Reveal>
         </div>
@@ -150,7 +171,26 @@ export const BrowsePetsPage = () => {
             breeds={breeds}
             locations={locations}
             temperaments={temperaments}
+            actions={
+              <NearbyFilter
+                active={nearby.enabled}
+                supported={nearby.supported}
+                requesting={nearby.status === 'requesting'}
+                radiusKm={nearby.radiusKm}
+                onToggle={toggleNearby}
+                onRadiusChange={changeRadius}
+              />
+            }
           />
+          {nearby.error && (
+            <p
+              role="status"
+              className="mt-3 flex items-start gap-2 text-xs text-destructive"
+            >
+              <AlertCircle className="mt-px size-3.5 shrink-0" />
+              {nearby.error}
+            </p>
+          )}
         </Reveal>
 
         <div className="mt-8">
@@ -160,13 +200,37 @@ export const BrowsePetsPage = () => {
             <EmptyState title="Could not load pets" description={error} />
           ) : total === 0 ? (
             <EmptyState
-              title="No pets match your filters"
-              description="Try clearing a filter or searching for a different breed."
+              title={nearby.active ? 'No pets within this radius' : 'No pets match your filters'}
+              description={
+                nearby.active
+                  ? activeFilterCount > 0
+                    ? 'Try a wider search radius, clear a filter, or turn off Near me to see every shelter.'
+                    : 'Try a wider search radius, or turn off Near me to see every shelter.'
+                  : 'Try clearing a filter or searching for a different breed.'
+              }
               icon="search"
               action={
-                <Button variant="outline" size="sm" onClick={resetAll}>
-                  Clear all filters
-                </Button>
+                nearby.active ? (
+                  <div className="flex flex-wrap items-center justify-center gap-2">
+                    {nearby.radiusKm < 100 && (
+                      <Button size="sm" onClick={() => changeRadius(100)}>
+                        Widen to 100 km
+                      </Button>
+                    )}
+                    {activeFilterCount > 0 && (
+                      <Button variant="outline" size="sm" onClick={resetAll}>
+                        Clear all filters
+                      </Button>
+                    )}
+                    <Button variant="outline" size="sm" onClick={toggleNearby}>
+                      Turn off Near me
+                    </Button>
+                  </div>
+                ) : (
+                  <Button variant="outline" size="sm" onClick={resetAll}>
+                    Clear all filters
+                  </Button>
+                )
               }
             />
           ) : (

@@ -1,23 +1,20 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { CalendarClock, Send } from 'lucide-react';
+import { CalendarClock, CheckCircle2, Send } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/Card';
 import { Label } from '@/components/ui/Form';
 import { Button } from '@/components/ui/button';
-import {
-  ValidatedInput,
-  ValidatedTextarea,
-  focusFirstError,
-  isBlank,
-} from '@/components/shared';
+import { ValidatedInput, focusFirstError } from '@/components/shared';
+import { VisitStatusBadge } from '@/components/ui/StatusBadge';
 import { useAuth } from '@/hooks/useAuth';
 import { ApiError } from '@/lib/apiClient';
 import { visitService } from '@/services/visitService';
+import type { VisitThread } from '@/types';
 
 /**
  * Formats a `datetime-local` value ("2026-10-18T10:00") into the readable
- * slot string stored on the thread ("Sat, Oct 18 at 10:00 AM").
+ * slot string stored on the request ("Sat, Oct 18 at 10:00 AM").
  */
 const formatSlot = (value: string): string => {
   const d = new Date(value);
@@ -38,23 +35,37 @@ const nowLocalInput = (): string => {
 };
 
 /**
- * Adopter entry point for visit scheduling: preferred slot + opening
- * message creates the (pet, adopter) thread the shelter team replies in.
- * Anonymous visitors are routed to login first.
+ * Adopter entry point for visit requests: one request per pet, decided by
+ * the shelter over email. Adopters who already requested this pet see their
+ * request status plus a shortcut to My visits instead of the form.
  */
 export const VisitRequestCard = ({ petId, petName }: { petId: string; petName: string }) => {
   const { user } = useAuth();
+  const isAdopter = user?.role === 'adopter';
+  const userId = user?.id;
+  const [existing, setExisting] = useState<VisitThread | null | undefined>(undefined);
   const [sent, setSent] = useState(false);
   const [sending, setSending] = useState(false);
-  const [form, setForm] = useState({ slot: '', message: '' });
-  const [fieldErrors, setFieldErrors] = useState<Partial<Record<keyof typeof form, string>>>({});
+  const [slot, setSlot] = useState('');
+  const [slotError, setSlotError] = useState<string | undefined>(undefined);
 
-  const set = (key: keyof typeof form, value: string) => {
-    setForm((prev) => ({ ...prev, [key]: value }));
-    setFieldErrors((prev) => ({ ...prev, [key]: undefined }));
-  };
+  useEffect(() => {
+    if (!isAdopter || !userId) return;
+    let active = true;
+    visitService
+      .getMineForPet(petId)
+      .then((visit) => {
+        if (active) setExisting(visit);
+      })
+      .catch(() => {
+        if (active) setExisting(null);
+      });
+    return () => {
+      active = false;
+    };
+  }, [isAdopter, petId, userId]);
 
-  if (!user || user.role !== 'adopter') {
+  if (!user || !isAdopter) {
     return (
       <Card>
         <CardHeader>
@@ -62,7 +73,7 @@ export const VisitRequestCard = ({ petId, petName }: { petId: string; petName: s
             <CalendarClock className="size-5 text-orange-500" />
             Visit {petName}
           </CardTitle>
-          <CardDescription>Ask questions and coordinate a meet-and-greet.</CardDescription>
+          <CardDescription>Request a meet-and-greet with the shelter team.</CardDescription>
         </CardHeader>
         <CardContent>
           <p className="text-sm text-muted-foreground">
@@ -80,32 +91,34 @@ export const VisitRequestCard = ({ petId, petName }: { petId: string; petName: s
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const next: typeof fieldErrors = {};
-    const picked = form.slot.trim() === '' ? null : new Date(form.slot);
+    const picked = slot.trim() === '' ? null : new Date(slot);
     if (!picked || Number.isNaN(picked.getTime())) {
-      next.slot = 'Pick a preferred date and time.';
-    } else if (picked.getTime() <= Date.now()) {
-      next.slot = 'Pick a date and time in the future.';
+      setSlotError('Pick a preferred date and time.');
+      toast.warning('Please fix the highlighted fields.');
+      focusFirstError();
+      return;
     }
-    if (isBlank(form.message)) next.message = 'Please write a message.';
-    else if (form.message.trim().length < 10)
-      next.message = 'Message must be at least 10 characters.';
-    setFieldErrors(next);
-    if (Object.keys(next).length > 0 || !picked) {
+    if (picked.getTime() <= Date.now()) {
+      setSlotError('Pick a date and time in the future.');
       toast.warning('Please fix the highlighted fields.');
       focusFirstError();
       return;
     }
     setSending(true);
     try {
-      await visitService.request({
+      const thread = await visitService.request({
         petId,
-        preferredSlot: formatSlot(form.slot),
-        message: form.message.trim(),
+        preferredSlot: formatSlot(slot),
       });
+      setExisting(thread);
       setSent(true);
-      toast.success(`Visit request sent! The shelter will reply in your visits thread.`);
+      toast.success('Visit request sent! The shelter will email you with their decision.');
     } catch (err) {
+      if (err instanceof ApiError && err.status === 409) {
+        // Another tab may have created the request first; show its state.
+        const visit = await visitService.getMineForPet(petId).catch(() => null);
+        setExisting(visit);
+      }
       toast.error(err instanceof ApiError ? err.message : 'Failed to send visit request.');
     } finally {
       setSending(false);
@@ -116,13 +129,68 @@ export const VisitRequestCard = ({ petId, petName }: { petId: string; petName: s
     return (
       <Card>
         <CardContent className="pt-5 text-sm">
-          <p className="font-semibold">Visit requested!</p>
+          <p className="flex items-center gap-2 font-semibold">
+            <CheckCircle2 className="size-4 text-green-600" />
+            Visit requested!
+          </p>
           <p className="mt-1 text-muted-foreground">
-            The shelter team will propose or confirm a time with {petName}.
+            The shelter team will review your request for {petName} and email you when they
+            approve or decline it.
           </p>
           <Link to="/visits">
             <Button size="sm" variant="outline" className="mt-3 w-full">
-              Open my visits
+              Go to My Visits
+            </Button>
+          </Link>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (existing === undefined) {
+    return (
+      <Card>
+        <CardContent className="pt-5 text-sm text-muted-foreground">
+          Checking your visit request…
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (existing) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex flex-wrap items-center gap-2 text-base">
+            <CalendarClock className="size-5 text-orange-500" />
+            Visit already requested
+            <VisitStatusBadge status={existing.status} />
+          </CardTitle>
+          <CardDescription>
+            You already requested a visit with {petName}.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <p className="text-sm text-muted-foreground">
+            Only one visit request is allowed per pet. The shelter will email you when they
+            approve or decline this request.
+          </p>
+          {existing.status === 'confirmed' && existing.confirmedSlot ? (
+            <p className="mt-3 text-sm text-foreground">
+              Approved for <strong>{existing.confirmedSlot}</strong>.
+            </p>
+          ) : existing.status === 'cancelled' ? (
+            <p className="mt-3 text-sm text-muted-foreground">
+              This request was cancelled or declined.
+            </p>
+          ) : (
+            <p className="mt-3 font-mono text-[11px] uppercase tracking-[0.18em] text-primary">
+              Preferred {existing.preferredSlot}
+            </p>
+          )}
+          <Link to="/visits">
+            <Button size="sm" className="mt-4 w-full">
+              Go to My Visits
             </Button>
           </Link>
         </CardContent>
@@ -137,7 +205,9 @@ export const VisitRequestCard = ({ petId, petName }: { petId: string; petName: s
           <CalendarClock className="size-5 text-orange-500" />
           Visit {petName}
         </CardTitle>
-        <CardDescription>Ask questions and coordinate a meet-and-greet.</CardDescription>
+        <CardDescription>
+          Request a meet-and-greet. The shelter will email you their decision.
+        </CardDescription>
       </CardHeader>
       <CardContent>
         <form onSubmit={handleSubmit} noValidate className="space-y-3">
@@ -147,19 +217,12 @@ export const VisitRequestCard = ({ petId, petName }: { petId: string; petName: s
               id="visit-slot"
               type="datetime-local"
               min={nowLocalInput()}
-              value={form.slot}
-              onChange={(e) => set('slot', e.target.value)}
-              error={fieldErrors.slot}
-            />
-          </div>
-          <div>
-            <Label htmlFor="visit-msg">Message</Label>
-            <ValidatedTextarea
-              id="visit-msg"
-              value={form.message}
-              onChange={(e) => set('message', e.target.value)}
-              placeholder={`Hi! I'd love to meet ${petName}…`}
-              error={fieldErrors.message}
+              value={slot}
+              onChange={(e) => {
+                setSlot(e.target.value);
+                setSlotError(undefined);
+              }}
+              error={slotError}
             />
           </div>
           <Button type="submit" className="w-full" size="sm" disabled={sending}>

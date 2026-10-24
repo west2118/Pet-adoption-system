@@ -1,63 +1,50 @@
 import { pool } from '../config/database.js';
 
 /**
- * Allowed status transitions for a visit thread. Terminal states
- * (`completed`, `cancelled`) accept no further moves.
+ * Allowed status transitions for a visit request. A shelter approves by
+ * confirming (optionally with a slot) and declines by cancelling. Terminal
+ * states (`completed`, `cancelled`) accept no further moves.
  */
 export const VISIT_TRANSITIONS = {
-  requested: ['proposed', 'confirmed', 'cancelled'],
-  proposed: ['confirmed', 'cancelled'],
+  requested: ['confirmed', 'cancelled'],
   confirmed: ['completed', 'cancelled'],
   completed: [],
   cancelled: [],
 };
 
+const THREAD_WITH_PET = `
+  SELECT t.*, p.shelter_id, p.name AS pet_name, p.image_url AS pet_image,
+         u.name AS adopter_name, u.email AS adopter_email
+    FROM visit_threads t
+    JOIN pets p ON p.id = t.pet_id
+    JOIN users u ON u.id = t.adopter_id
+`;
+
 export const findThreadById = async (id) => {
-  const { rows } = await pool.query(
-    `SELECT t.*, p.shelter_id FROM visit_threads t
-      JOIN pets p ON p.id = t.pet_id WHERE t.id = $1`,
-    [id],
-  );
+  const { rows } = await pool.query(`${THREAD_WITH_PET} WHERE t.id = $1`, [id]);
   return rows[0] ?? null;
 };
 
-export const findOpenThread = async (petId, adopterId) => {
+/**
+ * One request per (pet, adopter), regardless of status — a cancelled or
+ * completed visit still counts, so the adopter cannot re-request the same pet.
+ */
+export const findThreadByPetAndAdopter = async (petId, adopterId) => {
   const { rows } = await pool.query(
-    `SELECT * FROM visit_threads
-      WHERE pet_id = $1 AND adopter_id = $2
-        AND status IN ('requested', 'proposed', 'confirmed')`,
+    `${THREAD_WITH_PET} WHERE t.pet_id = $1 AND t.adopter_id = $2`,
     [petId, adopterId],
   );
   return rows[0] ?? null;
 };
 
-export const createThread = async ({ petId, adopterId, preferredSlot, message }, senderId) => {
-  const client = await pool.connect();
-  try {
-    await client.query('BEGIN');
-    const { rows } = await client.query(
-      `INSERT INTO visit_threads (pet_id, adopter_id, status, preferred_slot)
-       VALUES ($1, $2, 'requested', $3) RETURNING *`,
-      [petId, adopterId, preferredSlot],
-    );
-    await client.query(
-      `INSERT INTO visit_messages (thread_id, sender_id, body) VALUES ($1, $2, $3)`,
-      [rows[0].id, senderId, message],
-    );
-    await client.query('COMMIT');
-    return rows[0];
-  } catch (err) {
-    await client.query('ROLLBACK');
-    throw err;
-  } finally {
-    client.release();
-  }
+export const createThread = async ({ petId, adopterId, preferredSlot }) => {
+  const { rows } = await pool.query(
+    `INSERT INTO visit_threads (pet_id, adopter_id, status, preferred_slot)
+     VALUES ($1, $2, 'requested', $3) RETURNING *`,
+    [petId, adopterId, preferredSlot],
+  );
+  return rows[0] ?? null;
 };
-
-const THREAD_WITH_PET = `
-  SELECT t.*, p.shelter_id, p.name AS pet_name, p.image_url AS pet_image
-    FROM visit_threads t JOIN pets p ON p.id = t.pet_id
-`;
 
 export const listThreadsByAdopter = async (adopterId, { limit = 10, offset = 0, status } = {}) => {
   const conditions = ['t.adopter_id = $1'];
@@ -79,14 +66,13 @@ export const listThreadsByAdopter = async (adopterId, { limit = 10, offset = 0, 
 };
 
 /**
- * Status counters across ALL of an adopter's visit threads — the summary
+ * Status counters across ALL of an adopter's visit requests — the summary
  * band has to stay correct while the list itself is paged.
  */
 export const getVisitSummaryByAdopter = async (adopterId) => {
   const { rows } = await pool.query(
     `SELECT COUNT(*)::int AS total,
             COUNT(*) FILTER (WHERE status = 'requested')::int AS requested,
-            COUNT(*) FILTER (WHERE status = 'proposed')::int AS proposed,
             COUNT(*) FILTER (WHERE status = 'confirmed')::int AS confirmed,
             COUNT(*) FILTER (WHERE status = 'completed')::int AS completed,
             COUNT(*) FILTER (WHERE status = 'cancelled')::int AS cancelled
@@ -98,7 +84,6 @@ export const getVisitSummaryByAdopter = async (adopterId) => {
   return {
     total: row.total,
     requested: row.requested,
-    proposed: row.proposed,
     confirmed: row.confirmed,
     completed: row.completed,
     cancelled: row.cancelled,
@@ -123,29 +108,6 @@ export const listThreadsByShelter = async (shelterId, { limit = 10, offset = 0, 
     values,
   );
   return { rows, total: count.rows[0].total };
-};
-
-export const listThreadMessages = async (threadId) => {
-  const { rows } = await pool.query(
-    `SELECT m.*, u.name AS sender_name, u.role AS sender_role
-       FROM visit_messages m JOIN users u ON u.id = m.sender_id
-      WHERE m.thread_id = $1 ORDER BY m.created_at ASC`,
-    [threadId],
-  );
-  return rows;
-};
-
-export const createMessage = async (threadId, senderId, body) => {
-  const { rows } = await pool.query(
-    `INSERT INTO visit_messages (thread_id, sender_id, body)
-     VALUES ($1, $2, $3) RETURNING *`,
-    [threadId, senderId, body],
-  );
-  await pool.query(
-    'UPDATE visit_threads SET updated_at = CURRENT_TIMESTAMP WHERE id = $1',
-    [threadId],
-  );
-  return rows[0];
 };
 
 export const updateThreadStatus = async (threadId, { status, confirmedSlot, cancelReason }) => {

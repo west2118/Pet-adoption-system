@@ -1,8 +1,8 @@
--- Migration 009: Visit scheduling threads (meet-and-greet coordination)
+-- Migration 009: Visit requests (meet-and-greet coordination)
 --
--- One thread per (pet, adopter) coordinates questions, proposed slots, and
--- confirmation in a single conversation. Statuses mirror the adoption
--- application workflow style: open states first, terminal states last.
+-- One row per (pet, adopter) carries the preferred slot and decision status.
+-- There is deliberately no conversation table: the shelter approves or
+-- declines by email, and the adopter's request keeps only its status.
 --
 -- NOTE: the migrator re-applies every file on each boot with no tracking
 -- table, so every statement here must be idempotent (same convention as
@@ -35,15 +35,6 @@ CREATE TABLE IF NOT EXISTS visit_threads (
   CONSTRAINT uq_visit_thread_pet_adopter UNIQUE (pet_id, adopter_id)
 );
 
-CREATE TABLE IF NOT EXISTS visit_messages (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  thread_id UUID NOT NULL REFERENCES visit_threads(id) ON DELETE CASCADE,
-  sender_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  body TEXT NOT NULL,
-  created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
-);
-
 CREATE INDEX IF NOT EXISTS idx_visit_threads_pet ON visit_threads (pet_id);
 CREATE INDEX IF NOT EXISTS idx_visit_threads_adopter ON visit_threads (adopter_id);
 CREATE INDEX IF NOT EXISTS idx_visit_threads_status ON visit_threads (status);
-CREATE INDEX IF NOT EXISTS idx_visit_messages_thread ON visit_messages (thread_id);

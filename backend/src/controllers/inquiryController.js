@@ -1,4 +1,9 @@
-import { listShelterInquiries, resolveInquiry, submitInquiry } from '../services/inquiryService.js';
+import {
+  listShelterInquiries,
+  resolveInquiry,
+  sendInquiryEmail,
+  submitInquiry,
+} from '../services/inquiryService.js';
 import { sendSuccess, buildMeta } from '../utils/respond.js';
 import { parsePagination } from '../validators/commonValidator.js';
 
@@ -28,4 +33,18 @@ export const getShelterInquiries = async (req, res) => {
 export const markInquiryResolved = async (req, res) => {
   const inquiry = await resolveInquiry(req.params.id, req.user.shelterId);
   return sendSuccess(res, { inquiry }, 'Inquiry marked as resolved.');
+};
+
+export const emailInquiry = async (req, res) => {
+  const { inquiry, emailSent, emailStubbed } = await sendInquiryEmail(
+    req.params.id,
+    req.user.shelterId,
+    req.body,
+  );
+  const message = emailSent
+    ? 'Email sent to the inquirer.'
+    : emailStubbed
+      ? 'Email was not sent because SMTP is not configured.'
+      : 'Email could not be sent.';
+  return sendSuccess(res, { inquiry, emailSent, emailStubbed }, message);
 };

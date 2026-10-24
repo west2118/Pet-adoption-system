@@ -4,11 +4,12 @@ import assert from 'node:assert/strict';
 process.env.NODE_ENV = 'test';
 process.env.DATABASE_URL = 'postgresql://postgres:postgres@localhost:5432/pet_adoption_test';
 process.env.JWT_SECRET = 'test-secret-at-least-16-chars';
-// Force the mailer into stub mode: no Resend key, no network calls.
+// Force the mailer into stub mode: no SMTP credentials, no network calls.
 // `delete` alone is not enough — dotenv re-reads backend/.env when env.js
-// loads, which would build a real Resend client inside the tests. An empty
+// loads, which would build a real SMTP transport inside the tests. An empty
 // string keeps it stubbed (dotenv never overwrites an existing key).
-process.env.RESEND_API_KEY = '';
+process.env.SMTP_USER = '';
+process.env.SMTP_PASS = '';
 
 const {
   applicationReceivedHtml,
@@ -18,6 +19,7 @@ const {
   applicationAutoRejectedHtml,
   shelterApprovedHtml,
   shelterRejectedHtml,
+  inquiryReplyHtml,
   escapeHtml,
 } = await import('../src/services/emailTemplates.js');
 
@@ -154,6 +156,30 @@ describe('application status emails (styled HTML)', () => {
     assert.match(rejected, /<h1[^>]*>Update on your application<\/h1>/);
     assert.match(rejected, /background-color:#fee2e2/); // red chip
 
+    const cancelled = applicationDecisionHtml({
+      name: 'Maria',
+      petName: 'Simba',
+      status: 'Cancelled',
+      note: 'Found a closer match',
+      appUrl: APP_URL,
+      cancelledByApplicant: true,
+    });
+    assertStyledShell(cancelled);
+    assert.match(cancelled, /<h1[^>]*>Your application was cancelled<\/h1>/);
+    assert.match(cancelled, /has been cancelled/);
+    assert.match(cancelled, /<strong>Your note:<\/strong> Found a closer match/);
+
+    // Shelter cancelling an approved adoption: the note is theirs.
+    const cancelledByShelter = applicationDecisionHtml({
+      name: 'Maria',
+      petName: 'Simba',
+      status: 'Cancelled',
+      note: 'The adoption could not proceed.',
+      appUrl: APP_URL,
+    });
+    assertStyledShell(cancelledByShelter);
+    assert.match(cancelledByShelter, /<strong>From the shelter:<\/strong> The adoption could not proceed\./);
+
     assert.throws(
       () => applicationDecisionHtml({ name: 'M', petName: 'S', status: 'Pending' }),
       /Unsupported application decision/,
@@ -175,6 +201,24 @@ describe('application status emails (styled HTML)', () => {
     assert.match(html, new RegExp(`href="${APP_URL}/pets"`));
     // Apostrophes in the reason are escaped, not injected.
     assert.match(html, /Another adopter&#39;s application/);
+  });
+
+  it('inquiry reply is styled, escapes the message and preserves line breaks', () => {
+    const html = inquiryReplyHtml({
+      name: 'Jane <Doe>',
+      petName: 'Bruno',
+      shelterName: 'Paws & Homes',
+      message: 'Hello <script>alert(1)</script>\nSecond line',
+      petId: 'pet-1',
+      appUrl: APP_URL,
+    });
+    assertStyledShell(html);
+    assert.match(html, /<h1[^>]*>Reply from Paws &amp; Homes<\/h1>/);
+    assert.match(html, /Hi Jane &lt;Doe&gt;,/);
+    assert.match(html, /Hello &lt;script&gt;alert\(1\)&lt;\/script&gt;<br \/>Second line/);
+    assert.match(html, /href="http:\/\/localhost:5173\/pets\/pet-1"/);
+    assert.match(html, /You are receiving this email because you sent an inquiry/);
+    assert.doesNotMatch(html, /<script>/);
   });
 
   it('escapes pet names in every new template', () => {
@@ -199,7 +243,7 @@ describe('application status emails (styled HTML)', () => {
     assert.match(html, /&lt;b&gt;Simba&lt;\/b&gt;/);
   });
 
-  it('new mailer senders resolve stubbed in test mode (no RESEND_API_KEY)', async () => {
+  it('new mailer senders resolve stubbed in test mode (no SMTP credentials)', async () => {
     assert.equal(mailer.isMailerConfigured(), false);
 
     const senders = [
@@ -219,6 +263,12 @@ describe('application status emails (styled HTML)', () => {
         petName: 'Simba',
         status: 'Approved',
         note: 'Pick-up Saturday',
+      }),
+      mailer.sendApplicationDecisionEmail({
+        to: 'a@example.com',
+        name: 'Maria',
+        petName: 'Simba',
+        status: 'Cancelled',
       }),
       mailer.sendApplicationAutoRejectedEmail({
         to: 'a@example.com',

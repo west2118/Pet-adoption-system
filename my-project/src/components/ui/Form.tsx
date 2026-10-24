@@ -1,4 +1,9 @@
-import type { InputHTMLAttributes, SelectHTMLAttributes, TextareaHTMLAttributes } from 'react';
+import type {
+  InputHTMLAttributes,
+  Ref,
+  SelectHTMLAttributes,
+  TextareaHTMLAttributes,
+} from 'react';
 import { cn } from '@/lib/utils';
 
 const fieldBase =
@@ -8,11 +13,17 @@ export const Input = ({ className, ...props }: InputHTMLAttributes<HTMLInputElem
   return <input className={cn(fieldBase, 'h-9', className)} {...props} />;
 };
 
+interface TextareaProps extends TextareaHTMLAttributes<HTMLTextAreaElement> {
+  /** React 19 passes `ref` as a normal prop to function components. */
+  ref?: Ref<HTMLTextAreaElement>;
+}
+
 export const Textarea = ({
   className,
+  ref,
   ...props
-}: TextareaHTMLAttributes<HTMLTextAreaElement>) => {
-  return <textarea className={cn(fieldBase, 'min-h-24 py-2', className)} {...props} />;
+}: TextareaProps) => {
+  return <textarea ref={ref} className={cn(fieldBase, 'min-h-24 py-2', className)} {...props} />;
 };
 
 interface SelectProps extends SelectHTMLAttributes<HTMLSelectElement> {

@@ -1,4 +1,4 @@
-import { Resend } from 'resend';
+import nodemailer from 'nodemailer';
 import { env } from '../config/env.js';
 import { logger } from '../utils/logger.js';
 import {
@@ -11,36 +11,59 @@ import {
   shelterRejectedHtml,
   visitRequestedHtml,
   visitStatusHtml,
+  inquiryReplyHtml,
 } from './emailTemplates.js';
 
 /**
- * Transactional email. Uses Resend when RESEND_API_KEY is configured; otherwise
- * logs the message so the approval workflow still works in local development.
+ * Transactional email. Uses SMTP when SMTP_USER and SMTP_PASS are configured;
+ * otherwise logs the message so the approval workflow still works in local
+ * development.
  *
- * NOTE: Resend's default `onboarding@resend.dev` sender only delivers to the
- * Resend account owner's address. For real applicant mail, verify a custom
- * domain in Resend and set MAIL_FROM accordingly.
+ * Gmail example (backend/.env):
+ *   SMTP_HOST=smtp.gmail.com
+ *   SMTP_PORT=587
+ *   SMTP_SECURE=false
+ *   SMTP_USER=you@gmail.com
+ *   SMTP_PASS=your-16-char-google-app-password
+ *
+ * Gmail requires an App Password (Google Account → Security → 2-Step
+ * Verification → App passwords); your normal account password will not work.
+ * MAIL_FROM is optional and defaults to SMTP_USER.
  *
  * Never throws: always resolves to a status object so callers can persist
  * and report the outcome (`sent`, `stubbed`, or `error`).
  */
-const resend = env.RESEND_API_KEY ? new Resend(env.RESEND_API_KEY) : null;
+const transporter = env.SMTP_USER && env.SMTP_PASS
+  ? nodemailer.createTransport({
+      host: env.SMTP_HOST,
+      port: env.SMTP_PORT,
+      secure: env.SMTP_SECURE,
+      auth: {
+        user: env.SMTP_USER,
+        // Google shows app passwords grouped with spaces; strip them.
+        pass: env.SMTP_PASS.replace(/\s+/g, ''),
+      },
+    })
+  : null;
 
-export const isMailerConfigured = () => resend !== null;
+const mailFrom = env.MAIL_FROM || env.SMTP_USER;
 
-const send = async ({ to, subject, html }) => {
-  if (!resend) {
+export const isMailerConfigured = () => transporter !== null;
+
+const send = async ({ to, subject, html, replyTo }) => {
+  if (!transporter) {
     logger.info(`[mailer:stub] To: ${to} | Subject: ${subject}`);
     return { sent: false, stubbed: true };
   }
   try {
-    // The Resend SDK resolves (not rejects) API errors as `{ data, error }`.
-    const result = await resend.emails.send({ from: env.MAIL_FROM, to, subject, html });
-    if (result?.error) {
-      logger.error('Failed to send email:', result.error);
-      return { sent: false, stubbed: false, error: result.error };
-    }
-    return { sent: true, stubbed: false, id: result?.data?.id ?? null };
+    const info = await transporter.sendMail({
+      from: mailFrom,
+      to,
+      subject,
+      html,
+      ...(replyTo ? { replyTo } : {}),
+    });
+    return { sent: true, stubbed: false, id: info.messageId ?? null };
   } catch (err) {
     // Email failures must never block the approval transaction's response.
     logger.error('Failed to send email:', err);
@@ -83,6 +106,7 @@ const DECISION_SUBJECTS = {
   Approved: 'Your application was approved 🎉',
   Adopted: 'Your adoption is complete',
   Rejected: 'Update on your application',
+  Cancelled: 'Your application was cancelled',
 };
 
 export const sendApplicationSubmittedEmail = async ({ to, name, petName }) =>
@@ -99,11 +123,25 @@ export const sendApplicationUnderReviewEmail = async ({ to, name, petName }) =>
     html: applicationUnderReviewHtml({ name, petName, appUrl: env.APP_URL }),
   });
 
-export const sendApplicationDecisionEmail = async ({ to, name, petName, status, note }) =>
+export const sendApplicationDecisionEmail = async ({
+  to,
+  name,
+  petName,
+  status,
+  note,
+  cancelledByApplicant = false,
+}) =>
   send({
     to,
     subject: DECISION_SUBJECTS[status] ?? 'Update on your application',
-    html: applicationDecisionHtml({ name, petName, status, note, appUrl: env.APP_URL }),
+    html: applicationDecisionHtml({
+      name,
+      petName,
+      status,
+      note,
+      appUrl: env.APP_URL,
+      cancelledByApplicant,
+    }),
   });
 
 export const sendApplicationAutoRejectedEmail = async ({ to, name, petName, reason }) =>
@@ -117,18 +155,17 @@ export const sendApplicationAutoRejectedEmail = async ({ to, name, petName, reas
  * Visit scheduling thread notifications (fire-and-forget)
  * ------------------------------------------------------------------ */
 
-export const sendVisitRequestedEmail = async ({ to, name, petName, preferredSlot, message }) =>
+export const sendVisitRequestedEmail = async ({ to, name, petName, preferredSlot }) =>
   send({
     to,
     subject: `New visit request for ${petName}`,
-    html: visitRequestedHtml({ name, petName, preferredSlot, message }),
+    html: visitRequestedHtml({ name, petName, preferredSlot }),
   });
 
 const VISIT_STATUS_SUBJECTS = {
-  proposed: 'A visit time was proposed',
   confirmed: 'Your visit is confirmed 🎉',
   completed: 'Thanks for visiting',
-  cancelled: 'Your visit was cancelled',
+  cancelled: 'Update on your visit request',
 };
 
 export const sendVisitStatusEmail = async ({ to, name, petName, status, slot, reason }) =>
@@ -136,4 +173,32 @@ export const sendVisitStatusEmail = async ({ to, name, petName, status, slot, re
     to,
     subject: VISIT_STATUS_SUBJECTS[status] ?? 'Update on your visit',
     html: visitStatusHtml({ name, petName, status, slot, reason, appUrl: env.APP_URL }),
+  });
+
+/* ------------------------------------------------------------------ *
+ * Shelter inquiry replies (sent once per inquiry, tracked in the DB)
+ * ------------------------------------------------------------------ */
+
+export const sendInquiryReplyEmail = async ({
+  to,
+  name,
+  petName,
+  petId,
+  shelterName,
+  shelterEmail,
+  subject,
+  message,
+}) =>
+  send({
+    to,
+    subject,
+    html: inquiryReplyHtml({
+      name,
+      petName,
+      shelterName,
+      message,
+      petId,
+      appUrl: env.APP_URL,
+    }),
+    replyTo: shelterEmail,
   });

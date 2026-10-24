@@ -1,18 +1,23 @@
-import { Check, X } from 'lucide-react';
+import { AlertTriangle, Ban, Check, X } from 'lucide-react';
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
+import { toast } from 'react-toastify';
 import type { AdoptionApplication, ApplicationStatus, Pet } from '@/types';
 import { formatDate } from '@/utils/formatters';
 import { cn } from '@/lib/utils';
+import { ApiError } from '@/lib/apiClient';
+import { adoptionApplicationService } from '@/services/adoptionApplicationService';
+import { DetailsModal } from '@/components/shared/DetailsModal';
 import { ApplicationDetailsModal } from '@/components/features/ApplicationDetailsModal';
 import { ApplicationStatusBadge } from '@/components/ui/StatusBadge';
 import { Button } from '@/components/ui/button';
+import { Label, Textarea } from '@/components/ui/Form';
 
 /** The happy path an application walks, in order. `Rejected` sits off this track. */
 const STAGES: ApplicationStatus[] = ['Submitted', 'Under Review', 'Approved', 'Adopted'];
 
 const stageIndex = (application: AdoptionApplication): number => {
-  if (application.status === 'Rejected') return -1;
+  if (application.status === 'Rejected' || application.status === 'Cancelled') return -1;
   const reached = new Set<ApplicationStatus>([
     ...application.history.map((h) => h.status),
     application.status,
@@ -48,6 +53,17 @@ const StatusTrack = ({ application }: StatusTrackProps) => {
           <X className="size-3" />
         </span>
         Not moving forward — this application was declined by the shelter.
+      </div>
+    );
+  }
+
+  if (application.status === 'Cancelled') {
+    return (
+      <div className="flex items-center gap-2 text-sm text-muted-foreground">
+        <span className="flex size-5 items-center justify-center rounded-full bg-muted">
+          <Ban className="size-3" />
+        </span>
+        You cancelled this application.
       </div>
     );
   }
@@ -110,6 +126,8 @@ interface ApplicationCardProps {
   pet?: Pet;
   showApplicant?: boolean;
   onStatusChange?: (id: string, status: AdoptionApplication['status']) => void;
+  /** Called after the adopter withdraws — the page should refetch the list. */
+  onChanged?: () => void;
 }
 
 export const ApplicationCard = ({
@@ -117,13 +135,41 @@ export const ApplicationCard = ({
   pet,
   showApplicant,
   onStatusChange,
+  onChanged,
 }: ApplicationCardProps) => {
   const [detailsOpen, setDetailsOpen] = useState(false);
+  const [cancelOpen, setCancelOpen] = useState(false);
+  const [cancelReason, setCancelReason] = useState('');
+  const [cancelling, setCancelling] = useState(false);
+
+  const canCancel =
+    application.status === 'Submitted' || application.status === 'Under Review';
+  // The pet may have left the public catalogue (In Process / Adopted), so fall
+  // back to the pet summary returned with the application.
+  const petInfo = pet ?? application.pet;
+
+  const handleCancel = async () => {
+    setCancelling(true);
+    try {
+      await adoptionApplicationService.cancelMine(
+        application.id,
+        cancelReason.trim() || undefined,
+      );
+      toast.success('Application cancelled.');
+      setCancelOpen(false);
+      setCancelReason('');
+      onChanged?.();
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : 'Failed to cancel application.');
+    } finally {
+      setCancelling(false);
+    }
+  };
 
   return (
     <article className="overflow-hidden rounded-lg border border-border bg-card transition-colors hover:border-primary/40">
       <div className="flex flex-col gap-6 p-6 sm:flex-row lg:gap-8">
-        {pet && (
+        {petInfo && (
           /* `sm:self-start` matters: from `sm` up the card is a row, so the default
              `align-items: stretch` made this link as tall as the text column and the
              `bg-muted` showed as a grey band under the photo. Below `sm` the card is a
@@ -133,8 +179,8 @@ export const ApplicationCard = ({
             className="shrink-0 overflow-hidden rounded-lg bg-muted sm:self-start"
           >
             <img
-              src={pet.imageUrl}
-              alt={pet.name}
+              src={petInfo.imageUrl}
+              alt={petInfo.name}
               className="aspect-[4/5] w-full object-cover transition-transform duration-700 ease-out hover:scale-105 sm:w-40"
             />
           </Link>
@@ -145,13 +191,13 @@ export const ApplicationCard = ({
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-3">
                 <h3 className="text-lg font-medium leading-snug">
-                  {pet ? pet.name : application.petId}
+                  {petInfo ? petInfo.name : application.petId}
                 </h3>
                 <ApplicationStatusBadge status={application.status} />
               </div>
-              {pet && (
+              {petInfo?.breed && (
                 <p className="mt-1 font-mono text-[11px] uppercase tracking-[0.18em] text-primary">
-                  {pet.breed}
+                  {petInfo.breed}
                 </p>
               )}
               <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
@@ -161,7 +207,7 @@ export const ApplicationCard = ({
               </p>
             </div>
 
-            <div className="flex shrink-0 gap-2">
+            <div className="flex shrink-0 flex-wrap gap-2">
               <Button
                 variant="outline"
                 size="sm"
@@ -180,6 +226,16 @@ export const ApplicationCard = ({
                 </>
               ) : (
                 <>
+                  {canCancel && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="text-destructive"
+                      onClick={() => setCancelOpen(true)}
+                    >
+                      <Ban className="size-3.5" /> Cancel application
+                    </Button>
+                  )}
                   {application.status === 'Adopted' && (
                     <Link to={`/applications/${application.id}/waiver`}>
                       <Button variant="outline" size="sm">
@@ -209,6 +265,51 @@ export const ApplicationCard = ({
         open={detailsOpen}
         onClose={() => setDetailsOpen(false)}
       />
+
+      <DetailsModal
+        open={cancelOpen}
+        onClose={cancelling ? () => undefined : () => setCancelOpen(false)}
+        title="Cancel this application?"
+        description={petInfo ? `${petInfo.name} · ${application.email}` : application.email}
+        icon={AlertTriangle}
+      >
+        <div className="space-y-4">
+          <p className="text-sm leading-relaxed text-muted-foreground">
+            This withdraws your application for{' '}
+            <span className="font-medium text-foreground">{petInfo?.name ?? 'this pet'}</span>. It
+            cannot be undone, and a confirmation email will be sent to{' '}
+            <span className="font-medium text-foreground">{application.email}</span>.
+          </p>
+          <div>
+            <Label htmlFor={`cancel-reason-${application.id}`}>Reason (optional)</Label>
+            <Textarea
+              id={`cancel-reason-${application.id}`}
+              value={cancelReason}
+              onChange={(e) => setCancelReason(e.target.value)}
+              placeholder="Let the shelter know why you are withdrawing…"
+              disabled={cancelling}
+            />
+          </div>
+          <div className="flex gap-2">
+            <Button
+              variant="outline"
+              className="flex-1"
+              onClick={() => setCancelOpen(false)}
+              disabled={cancelling}
+            >
+              Keep application
+            </Button>
+            <Button
+              variant="destructive"
+              className="flex-1"
+              onClick={() => void handleCancel()}
+              disabled={cancelling}
+            >
+              {cancelling ? 'Cancelling…' : 'Cancel application'}
+            </Button>
+          </div>
+        </div>
+      </DetailsModal>
     </article>
   );
 };

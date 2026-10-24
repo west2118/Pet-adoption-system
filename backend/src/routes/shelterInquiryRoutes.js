@@ -1,10 +1,15 @@
 import { Router } from 'express';
-import { getShelterInquiries, markInquiryResolved } from '../controllers/inquiryController.js';
+import {
+  emailInquiry,
+  getShelterInquiries,
+  markInquiryResolved,
+} from '../controllers/inquiryController.js';
 import { authenticate } from '../middlewares/authenticate.js';
 import { authorize } from '../middlewares/authorize.js';
 import { requireShelter } from '../middlewares/requireShelter.js';
 import { validate } from '../middlewares/validate.js';
 import { uuidParam } from '../validators/commonValidator.js';
+import { sendInquiryEmailSchema } from '../validators/inquiryValidator.js';
 
 export const shelterInquiryRoutes = Router();
 
@@ -19,4 +24,10 @@ shelterInquiryRoutes.patch(
   '/:id/resolve',
   validate(uuidParam, 'params'),
   markInquiryResolved,
+);
+shelterInquiryRoutes.post(
+  '/:id/email',
+  validate(uuidParam, 'params'),
+  validate(sendInquiryEmailSchema),
+  emailInquiry,
 );

@@ -1,9 +1,4 @@
-import {
-  getVisitThread,
-  listShelterVisits,
-  postVisitMessage,
-  setVisitStatus,
-} from '../services/visitService.js';
+import { getVisitThread, listShelterVisits, setVisitStatus } from '../services/visitService.js';
 import { sendSuccess, buildMeta } from '../utils/respond.js';
 import { parsePagination } from '../validators/commonValidator.js';
 
@@ -15,13 +10,8 @@ export const getShelterVisits = async (req, res) => {
 };
 
 export const getShelterVisit = async (req, res) => {
-  const { thread, messages } = await getVisitThread(req.params.id, req.user.id, req.user.shelterId);
-  return sendSuccess(res, { thread, messages });
-};
-
-export const postShelterMessage = async (req, res) => {
-  const message = await postVisitMessage(req.params.id, req.user.id, req.user.shelterId, req.body.body);
-  return sendSuccess(res, { message }, 'Message sent.', undefined, 201);
+  const { thread } = await getVisitThread(req.params.id, req.user.id, req.user.shelterId);
+  return sendSuccess(res, { thread });
 };
 
 export const updateVisitStatus = async (req, res) => {

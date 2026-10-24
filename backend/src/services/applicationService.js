@@ -69,10 +69,11 @@ const autoRejectCompetingApplications = async (
   note,
 ) => {
   const { rows } = await client.query(
-    `UPDATE adoption_applications
+    `UPDATE adoption_applications a
       SET status = 'Rejected', staff_notes = $1, updated_at = CURRENT_TIMESTAMP
-      WHERE pet_id = $2 AND id <> $3 AND status = ANY($4)
-      RETURNING id, applicant_name, email`,
+      WHERE a.pet_id = $2 AND a.id <> $3 AND a.status = ANY($4)
+      RETURNING a.id, a.applicant_name, a.email,
+        (SELECT u.email FROM users u WHERE u.id = a.applicant_id) AS account_email`,
     [note, petId, acceptedId, statuses],
   );
   for (const row of rows) {
@@ -89,11 +90,22 @@ const autoRejectCompetingApplications = async (
  * status change is already committed, so a mail hiccup cannot affect it.
  */
 const notifyApplicationStatusChange = ({ record, petName, newStatus, note, rejectedRows }) => {
-  const applicant = { to: record.email, name: record.applicant_name, petName };
+  // Always reach the account that submitted the application; the address on
+  // the form is a fallback for legacy rows.
+  const applicant = {
+    to: record.applicant_account_email || record.email,
+    name: record.applicant_name,
+    petName,
+  };
 
   if (newStatus === 'Under Review') {
     sendApplicationUnderReviewEmail(applicant).catch(() => {});
-  } else if (newStatus === 'Approved' || newStatus === 'Rejected' || newStatus === 'Adopted') {
+  } else if (
+    newStatus === 'Approved' ||
+    newStatus === 'Rejected' ||
+    newStatus === 'Adopted' ||
+    newStatus === 'Cancelled'
+  ) {
     sendApplicationDecisionEmail({ ...applicant, status: newStatus, note }).catch(() => {});
   }
 
@@ -103,11 +115,80 @@ const notifyApplicationStatusChange = ({ record, petName, newStatus, note, rejec
       : "Another adopter's application for this pet was accepted.";
   for (const competitor of rejectedRows) {
     sendApplicationAutoRejectedEmail({
-      to: competitor.email,
+      to: competitor.account_email || competitor.email,
       name: competitor.applicant_name,
       petName,
       reason,
     }).catch(() => {});
+  }
+};
+
+/**
+ * Adopter withdraws their own application while it is still open. The status
+ * moves to `Cancelled` (never `Rejected`, which belongs to shelter decisions),
+ * the reason lands in the audit history, and the applicant is emailed a
+ * confirmation at the address on their account.
+ */
+export const cancelApplication = async (applicationId, applicantId, reason) => {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    const appRes = await client.query(
+      `SELECT a.*, p.name AS pet_name, u.email AS applicant_account_email
+       FROM adoption_applications a
+       JOIN pets p ON p.id = a.pet_id
+       JOIN users u ON u.id = a.applicant_id
+       WHERE a.id = $1
+       FOR UPDATE OF a`,
+      [applicationId],
+    );
+    if (appRes.rows.length === 0) {
+      throw new AppError('Application not found.', 404);
+    }
+    const record = appRes.rows[0];
+    if (record.applicant_id !== applicantId) {
+      throw new AppError('Forbidden. Application belongs to another applicant.', 403);
+    }
+    if (!['Submitted', 'Under Review'].includes(record.status)) {
+      throw new AppError(
+        'Only applications that are still under review can be cancelled.',
+        409,
+      );
+    }
+
+    const note = reason?.trim() || 'Cancelled by applicant';
+    await client.query(
+      `UPDATE adoption_applications
+       SET status = 'Cancelled', updated_at = CURRENT_TIMESTAMP
+       WHERE id = $1`,
+      [applicationId],
+    );
+    await client.query(
+      `INSERT INTO application_history (application_id, status, note) VALUES ($1, 'Cancelled', $2)`,
+      [applicationId, note],
+    );
+
+    await client.query('COMMIT');
+
+    // Fire-and-forget: the withdrawal is already durable.
+    sendApplicationDecisionEmail({
+      to: record.applicant_account_email || record.email,
+      name: record.applicant_name,
+      petName: record.pet_name,
+      status: 'Cancelled',
+      note: reason?.trim() || undefined,
+      cancelledByApplicant: true,
+    }).catch(() => {});
+
+    const updated = await findApplicationById(applicationId);
+    const history = await getApplicationHistory(applicationId);
+    return mapApplication(updated, history);
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
   }
 };
 
@@ -118,9 +199,11 @@ export const updateApplicationStatus = async (applicationId, shelterId, newStatu
     await client.query('BEGIN');
 
     const appRes = await client.query(
-      `SELECT a.*, p.shelter_id, p.id AS pet_id, p.name AS pet_name
+      `SELECT a.*, p.shelter_id, p.id AS pet_id, p.name AS pet_name,
+              u.email AS applicant_account_email
        FROM adoption_applications a
        JOIN pets p ON a.pet_id = p.id
+       JOIN users u ON u.id = a.applicant_id
        WHERE a.id = $1`,
       [applicationId],
     );
@@ -130,6 +213,29 @@ export const updateApplicationStatus = async (applicationId, shelterId, newStatu
     const record = appRes.rows[0];
     if (record.shelter_id !== shelterId) {
       throw new AppError('Forbidden. Application belongs to another shelter.', 403);
+    }
+    // Cancel adoption is only meaningful after approval; pending applications
+    // are declined with Rejected instead.
+    if (newStatus === 'Cancelled' && record.status !== 'Approved') {
+      throw new AppError('Only an approved adoption can be cancelled.', 409);
+    }
+
+    // Approving/adopting implies the application was reviewed. Legacy rows can
+    // jump straight from Submitted to Approved, which left the Under Review
+    // step checked but undated on the adopter's progress track.
+    if (newStatus === 'Approved' || newStatus === 'Adopted') {
+      const reviewEntry = await client.query(
+        `SELECT 1 FROM application_history
+          WHERE application_id = $1 AND status = 'Under Review' LIMIT 1`,
+        [applicationId],
+      );
+      if (reviewEntry.rowCount === 0) {
+        await client.query(
+          `INSERT INTO application_history (application_id, status, note)
+           VALUES ($1, 'Under Review', $2)`,
+          [applicationId, 'Reviewed by shelter before approval'],
+        );
+      }
     }
 
     await client.query(
@@ -173,6 +279,14 @@ export const updateApplicationStatus = async (applicationId, shelterId, newStatu
         applicationId,
         ['Submitted', 'Under Review', 'Approved'],
         'Auto-rejected: this pet has been adopted.',
+      );
+    } else if (newStatus === 'Cancelled') {
+      // The adoption fell through: the pet is adoptable again.
+      await client.query(
+        `UPDATE pets
+            SET status = 'Available', updated_at = CURRENT_TIMESTAMP
+          WHERE id = $1 AND status = 'In Process'`,
+        [record.pet_id],
       );
     }
 

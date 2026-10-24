@@ -1,7 +1,6 @@
 import { CalendarClock, Check, Eye, Flag, X } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 import { toast } from 'react-toastify';
-import { VisitThreadView } from '@/components/features/VisitThreadView';
 import {
   DetailsModal,
   RecordCard,
@@ -22,27 +21,25 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/Table';
-import { useAuth } from '@/hooks/useAuth';
 import { ApiError } from '@/lib/apiClient';
 import { visitService } from '@/services/visitService';
-import type { VisitMessage, VisitStatus, VisitThread } from '@/types';
+import type { VisitStatus, VisitThread } from '@/types';
 import { formatDate } from '@/utils/formatters';
 
 const STATUS_FILTER_OPTIONS = [
   { value: 'all', label: 'All' },
   { value: 'requested', label: 'Requested' },
-  { value: 'proposed', label: 'Proposed' },
   { value: 'confirmed', label: 'Confirmed' },
   { value: 'completed', label: 'Completed' },
   { value: 'cancelled', label: 'Cancelled' },
 ];
 
 /**
- * Shelter visit inbox: adopter meet-and-greet threads for this shelter's
- * pets — propose/confirm slots, message back, and close out visits.
+ * Shelter visit inbox: one request per pet from an adopter. Staff approve
+ * (confirm) or decline (cancel) each request; the adopter is emailed the
+ * decision automatically. There is no conversation to maintain.
  */
 export const ShelterVisitsPage = () => {
-  const { user } = useAuth();
   const [threads, setThreads] = useState<VisitThread[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -50,13 +47,10 @@ export const ShelterVisitsPage = () => {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [messages, setMessages] = useState<VisitMessage[]>([]);
-  const [loadingMessages, setLoadingMessages] = useState(false);
-  const [sending, setSending] = useState(false);
   const [working, setWorking] = useState(false);
   const [slot, setSlot] = useState('');
-  const [cancelReason, setCancelReason] = useState('');
-  const [showCancel, setShowCancel] = useState(false);
+  const [reason, setReason] = useState('');
+  const [showDecline, setShowDecline] = useState(false);
 
   const fetchThreads = useCallback(async () => {
     setLoading(true);
@@ -75,68 +69,42 @@ export const ShelterVisitsPage = () => {
     fetchThreads();
   }, [fetchThreads]);
 
-  const openThread = async (id: string) => {
+  const openRequest = async (id: string) => {
     setSelectedId(id);
-    setMessages([]);
-    setShowCancel(false);
-    setLoadingMessages(true);
+    setShowDecline(false);
+    setReason('');
     try {
-      const { thread, messages: fetched } = await visitService.getForShelter(id);
+      const thread = await visitService.getForShelter(id);
       setThreads((prev) => prev.map((t) => (t.id === id ? thread : t)));
-      setSlot(thread.confirmedSlot ?? '');
-      setMessages(fetched);
+      setSlot(thread.confirmedSlot ?? thread.preferredSlot ?? '');
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : 'Failed to load conversation.');
-    } finally {
-      setLoadingMessages(false);
+      toast.error(err instanceof ApiError ? err.message : 'Failed to load visit request.');
     }
   };
 
   const selected = threads.find((t) => t.id === selectedId) ?? null;
-  const actionable = selected != null && ['requested', 'proposed', 'confirmed'].includes(selected.status);
-
-  const refreshSelected = async (id: string) => {
-    try {
-      const { thread, messages: fetched } = await visitService.getForShelter(id);
-      setThreads((prev) => prev.map((t) => (t.id === id ? thread : t)));
-      setSlot(thread.confirmedSlot ?? '');
-      setMessages(fetched);
-    } catch {
-      await fetchThreads();
-    }
-  };
-
-  const handleSend = async (body: string) => {
-    if (!selectedId) return;
-    setSending(true);
-    try {
-      const message = await visitService.postShelterMessage(selectedId, body);
-      setMessages((prev) => [...prev, message]);
-    } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : 'Failed to send message.');
-    } finally {
-      setSending(false);
-    }
-  };
+  const actionable = selected != null && ['requested', 'confirmed'].includes(selected.status);
 
   const handleStatus = async (status: VisitStatus) => {
     if (!selectedId) return;
-    if ((status === 'proposed' || status === 'confirmed') && !slot.trim() && !selected?.confirmedSlot) {
-      toast.warning('Enter the visit date/time first.');
-      return;
-    }
     setWorking(true);
     try {
-      await visitService.updateStatus(selectedId, {
+      const thread = await visitService.updateStatus(selectedId, {
         status,
-        confirmedSlot: slot.trim() || undefined,
-        cancelReason: status === 'cancelled' ? cancelReason.trim() || undefined : undefined,
+        confirmedSlot: status === 'confirmed' ? slot.trim() || undefined : undefined,
+        cancelReason: status === 'cancelled' ? reason.trim() || undefined : undefined,
       });
-      toast.success(`Visit ${status}.`);
-      setShowCancel(false);
-      setCancelReason('');
+      setThreads((prev) => prev.map((t) => (t.id === selectedId ? thread : t)));
+      setShowDecline(false);
+      setReason('');
+      toast.success(
+        status === 'confirmed'
+          ? `${thread.pet?.name ?? 'Visit'} approved — the adopter has been emailed.`
+          : status === 'cancelled'
+            ? `${thread.pet?.name ?? 'Visit'} declined — the adopter has been emailed.`
+            : 'Visit marked completed.',
+      );
       await fetchThreads();
-      await refreshSelected(selectedId);
     } catch (err) {
       toast.error(err instanceof ApiError ? err.message : 'Failed to update visit.');
     } finally {
@@ -174,83 +142,87 @@ export const ShelterVisitsPage = () => {
       />
     ) : undefined;
 
-  const actionBar = selected && actionable ? (
-    <div className="space-y-2 rounded-lg border p-3">
-      {(selected.status === 'requested' || selected.status === 'proposed') && (
-        <div>
-          <Label htmlFor="visit-slot">Visit date/time</Label>
-          <Input
-            id="visit-slot"
-            value={slot}
-            onChange={(e) => setSlot(e.target.value)}
-            placeholder="e.g. Sat, Oct 18 at 10:00 AM"
-          />
+  const actionBar =
+    selected && actionable ? (
+      <div className="space-y-2 rounded-lg border p-3">
+        {selected.status === 'requested' && (
+          <div>
+            <Label htmlFor="visit-slot">Visit date/time (defaults to their preferred slot)</Label>
+            <Input
+              id="visit-slot"
+              value={slot}
+              onChange={(e) => setSlot(e.target.value)}
+              placeholder="e.g. Sat, Oct 18 at 10:00 AM"
+            />
+          </div>
+        )}
+        <div className="flex flex-wrap gap-2">
+          {selected.status === 'requested' && (
+            <>
+              <Button size="sm" onClick={() => void handleStatus('confirmed')} disabled={working}>
+                <Check className="size-3.5" /> Approve request
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                className="text-destructive"
+                onClick={() => setShowDecline((v) => !v)}
+                disabled={working}
+              >
+                <X className="size-3.5" /> Decline
+              </Button>
+            </>
+          )}
+          {selected.status === 'confirmed' && (
+            <>
+              <Button size="sm" onClick={() => void handleStatus('completed')} disabled={working}>
+                <Flag className="size-3.5" /> Mark completed
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                className="text-destructive"
+                onClick={() => setShowDecline((v) => !v)}
+                disabled={working}
+              >
+                <X className="size-3.5" /> Cancel visit
+              </Button>
+            </>
+          )}
         </div>
-      )}
-      <div className="flex flex-wrap gap-2">
-        {(selected.status === 'requested' || selected.status === 'proposed') && (
-          <>
-            <Button size="sm" onClick={() => void handleStatus('proposed')} disabled={working}>
-              Propose time
-            </Button>
+        {showDecline && (
+          <div className="space-y-2">
+            <Label htmlFor="visit-cancel-reason">Reason emailed to the adopter (optional)</Label>
+            <Textarea
+              id="visit-cancel-reason"
+              value={reason}
+              onChange={(e) => setReason(e.target.value)}
+              placeholder="Let the adopter know why…"
+            />
             <Button
               size="sm"
-              variant="outline"
-              onClick={() => void handleStatus('confirmed')}
+              variant="destructive"
+              onClick={() => void handleStatus('cancelled')}
               disabled={working}
             >
-              <Check className="size-3.5" /> Confirm
+              {working ? 'Working…' : selected.status === 'requested' ? 'Confirm decline' : 'Confirm cancellation'}
             </Button>
-          </>
+          </div>
         )}
-        {selected.status === 'confirmed' && (
-          <Button size="sm" onClick={() => void handleStatus('completed')} disabled={working}>
-            <Flag className="size-3.5" /> Mark completed
-          </Button>
-        )}
-        <Button
-          size="sm"
-          variant="ghost"
-          className="text-destructive"
-          onClick={() => setShowCancel((v) => !v)}
-          disabled={working}
-        >
-          <X className="size-3.5" /> Cancel
-        </Button>
       </div>
-      {showCancel && (
-        <div className="space-y-2">
-          <Label htmlFor="visit-cancel-reason">Cancellation note (optional)</Label>
-          <Textarea
-            id="visit-cancel-reason"
-            value={cancelReason}
-            onChange={(e) => setCancelReason(e.target.value)}
-            placeholder="Reason shared with the adopter…"
-          />
-          <Button
-            size="sm"
-            variant="destructive"
-            onClick={() => void handleStatus('cancelled')}
-            disabled={working}
-          >
-            {working ? 'Working…' : 'Confirm cancellation'}
-          </Button>
-        </div>
-      )}
-    </div>
-  ) : undefined;
+    ) : undefined;
 
   return (
     <div className="w-full px-4 py-6 sm:px-6">
       <SectionHeader
         title="Visit requests"
-        subtitle="Meet-and-greet threads for your shelter's pets."
+        subtitle="Approve or decline meet-and-greet requests — the adopter is emailed automatically."
       />
 
       <div className="mt-6">
         <TableCard
           title="Visits"
-          description="Coordinate times and answer questions in one thread per pet."
+          description="One request per pet. Approve and decline from the request details."
           icon={CalendarClock}
           toolbar={toolbar}
           isEmpty={!loading && threads.length === 0}
@@ -264,6 +236,7 @@ export const ShelterVisitsPage = () => {
               <TableHeader>
                 <TableRow>
                   <TableHead>Pet</TableHead>
+                  <TableHead>Adopter</TableHead>
                   <TableHead>Preferred slot</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead>Updated</TableHead>
@@ -272,7 +245,7 @@ export const ShelterVisitsPage = () => {
               </TableHeader>
               <TableBody>
                 {loading ? (
-                  <TableSkeletonRows columns={5} rows={5} avatar />
+                  <TableSkeletonRows columns={6} rows={5} avatar />
                 ) : (
                   threads.map((thread) => (
                     <TableRow key={thread.id}>
@@ -288,6 +261,9 @@ export const ShelterVisitsPage = () => {
                           <p className="font-medium">{thread.pet?.name ?? '—'}</p>
                         </div>
                       </TableCell>
+                      <TableCell className="text-muted-foreground">
+                        {thread.adopter?.name ?? '—'}
+                      </TableCell>
                       <TableCell className="text-muted-foreground">{thread.preferredSlot}</TableCell>
                       <TableCell>
                         <VisitStatusBadge status={thread.status} />
@@ -300,8 +276,8 @@ export const ShelterVisitsPage = () => {
                           variant="ghost"
                           size="icon-sm"
                           className="text-muted-foreground"
-                          aria-label={`Open visit thread for ${thread.pet?.name ?? 'pet'}`}
-                          onClick={() => void openThread(thread.id)}
+                          aria-label={`Open visit request for ${thread.pet?.name ?? 'pet'}`}
+                          onClick={() => void openRequest(thread.id)}
                         >
                           <Eye className="size-4" />
                         </Button>
@@ -323,15 +299,15 @@ export const ShelterVisitsPage = () => {
                   imageUrl={thread.pet?.imageUrl}
                   imageAlt={thread.pet?.name}
                   title={thread.pet?.name ?? 'Visit'}
-                  subtitle={thread.preferredSlot}
+                  subtitle={`${thread.adopter?.name ?? 'Adopter'} · ${thread.preferredSlot}`}
                   badges={<VisitStatusBadge status={thread.status} />}
                   actions={
                     <Button
                       variant="ghost"
                       size="icon-sm"
                       className="text-muted-foreground"
-                      aria-label={`Open visit thread for ${thread.pet?.name ?? 'pet'}`}
-                      onClick={() => void openThread(thread.id)}
+                      aria-label={`Open visit request for ${thread.pet?.name ?? 'pet'}`}
+                      onClick={() => void openRequest(thread.id)}
                     >
                       <Eye className="size-4" />
                     </Button>
@@ -350,7 +326,7 @@ export const ShelterVisitsPage = () => {
       <DetailsModal
         open={selected !== null}
         onClose={() => setSelectedId(null)}
-        title={selected?.pet?.name ? `Visit · ${selected.pet.name}` : 'Visit thread'}
+        title={selected?.pet?.name ? `Visit request · ${selected.pet.name}` : 'Visit request'}
         description={
           selected
             ? `Preferred ${selected.preferredSlot}${selected.confirmedSlot ? ` · confirmed ${selected.confirmedSlot}` : ''}`
@@ -360,15 +336,54 @@ export const ShelterVisitsPage = () => {
         size="xl"
       >
         {selected && (
-          <VisitThreadView
-            thread={selected}
-            messages={messages}
-            currentUserId={user?.id}
-            loadingMessages={loadingMessages}
-            sending={sending || working}
-            onSend={handleSend}
-            actionBar={actionBar}
-          />
+          <div className="space-y-4">
+            <div className="flex flex-wrap items-center gap-2">
+              <VisitStatusBadge status={selected.status} />
+              <span className="text-sm text-muted-foreground">
+                Requested {formatDate(selected.createdAt)}
+              </span>
+            </div>
+
+            <dl className="grid gap-3 rounded-lg border p-4 text-sm sm:grid-cols-2">
+              <div>
+                <dt className="font-mono text-[11px] uppercase tracking-[0.16em] text-muted-foreground">
+                  Adopter
+                </dt>
+                <dd className="mt-1">{selected.adopter?.name ?? '—'}</dd>
+              </div>
+              <div>
+                <dt className="font-mono text-[11px] uppercase tracking-[0.16em] text-muted-foreground">
+                  Email
+                </dt>
+                <dd className="mt-1 break-all">{selected.adopter?.email ?? '—'}</dd>
+              </div>
+              <div>
+                <dt className="font-mono text-[11px] uppercase tracking-[0.16em] text-muted-foreground">
+                  Preferred slot
+                </dt>
+                <dd className="mt-1">{selected.preferredSlot}</dd>
+              </div>
+              <div>
+                <dt className="font-mono text-[11px] uppercase tracking-[0.16em] text-muted-foreground">
+                  Confirmed slot
+                </dt>
+                <dd className="mt-1">{selected.confirmedSlot ?? 'Not confirmed yet'}</dd>
+              </div>
+            </dl>
+
+            {selected.status === 'cancelled' && selected.cancelReason ? (
+              <p className="rounded-lg bg-muted/60 px-3 py-2 text-sm text-muted-foreground">
+                Note: {selected.cancelReason}
+              </p>
+            ) : null}
+
+            {actionBar}
+
+            <p className="text-xs text-muted-foreground">
+              Approving or declining emails the adopter automatically. Their request keeps its
+              status here so you can track it.
+            </p>
+          </div>
         )}
       </DetailsModal>
     </div>

@@ -1,4 +1,11 @@
-import { getApplicationSummary, listMyApplications, listShelterApplications, submitApplication, updateApplicationStatus } from '../services/applicationService.js';
+import {
+  cancelApplication,
+  getApplicationSummary,
+  listMyApplications,
+  listShelterApplications,
+  submitApplication,
+  updateApplicationStatus,
+} from '../services/applicationService.js';
 import { sendSuccess, buildMeta } from '../utils/respond.js';
 import { parsePagination } from '../validators/commonValidator.js';
 
@@ -13,6 +20,15 @@ export const getMyApplications = async (req, res) => {
   const { page, limit, offset } = parsePagination(req.query, 5);
   const { applications, total } = await listMyApplications(req.user.id, { limit, offset });
   return sendSuccess(res, { applications }, undefined, buildMeta(page, limit, total));
+};
+
+export const cancelMyApplication = async (req, res) => {
+  const application = await cancelApplication(
+    req.params.id,
+    req.user.id,
+    req.body.reason,
+  );
+  return sendSuccess(res, { application }, 'Application cancelled.');
 };
 
 /** Status counters for the adopter's summary bar (independent of paging). */
