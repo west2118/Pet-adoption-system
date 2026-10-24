@@ -13,6 +13,8 @@ export const updateVisitStatusSchema = z.object({
   status: z.enum(['confirmed', 'completed', 'cancelled']),
   confirmedSlot: z.string().max(255).optional(),
   cancelReason: z.string().max(500).optional(),
+  /** Short note emailed with the confirmation (visit date + message). */
+  message: z.string().max(1000).optional(),
 });
 
 export const cancelVisitSchema = z.object({

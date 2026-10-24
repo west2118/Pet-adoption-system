@@ -1,9 +1,9 @@
-import { AlertTriangle, Ban, Check, X } from 'lucide-react';
+import { AlertTriangle, Ban, Check, Undo2, X } from 'lucide-react';
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import type { AdoptionApplication, ApplicationStatus, Pet } from '@/types';
-import { formatDate } from '@/utils/formatters';
+import { formatDate, formatDateTime } from '@/utils/formatters';
 import { cn } from '@/lib/utils';
 import { ApiError } from '@/lib/apiClient';
 import { adoptionApplicationService } from '@/services/adoptionApplicationService';
@@ -17,7 +17,13 @@ import { Label, Textarea } from '@/components/ui/Form';
 const STAGES: ApplicationStatus[] = ['Submitted', 'Under Review', 'Approved', 'Adopted'];
 
 const stageIndex = (application: AdoptionApplication): number => {
-  if (application.status === 'Rejected' || application.status === 'Cancelled') return -1;
+  if (
+    application.status === 'Rejected' ||
+    application.status === 'Cancelled' ||
+    application.status === 'Returned'
+  ) {
+    return -1;
+  }
   const reached = new Set<ApplicationStatus>([
     ...application.history.map((h) => h.status),
     application.status,
@@ -53,6 +59,17 @@ const StatusTrack = ({ application }: StatusTrackProps) => {
           <X className="size-3" />
         </span>
         Not moving forward — this application was declined by the shelter.
+      </div>
+    );
+  }
+
+  if (application.status === 'Returned') {
+    return (
+      <div className="flex items-center gap-2 text-sm text-muted-foreground">
+        <span className="flex size-5 items-center justify-center rounded-full bg-amber-500/15">
+          <Undo2 className="size-3" />
+        </span>
+        Your adoption ended and the pet was returned to the shelter.
       </div>
     );
   }
@@ -142,8 +159,16 @@ export const ApplicationCard = ({
   const [cancelReason, setCancelReason] = useState('');
   const [cancelling, setCancelling] = useState(false);
 
+  // An approved adoption can still be withdrawn — the pet has not been
+  // handed over yet, so the application can move to Cancelled.
   const canCancel =
-    application.status === 'Submitted' || application.status === 'Under Review';
+    application.status === 'Submitted' ||
+    application.status === 'Under Review' ||
+    application.status === 'Approved';
+  const isApproved = application.status === 'Approved';
+  const pickupScheduled =
+    Boolean(application.pickupAt) &&
+    (application.status === 'Approved' || application.status === 'Adopted');
   // The pet may have left the public catalogue (In Process / Adopted), so fall
   // back to the pet summary returned with the application.
   const petInfo = pet ?? application.pet;
@@ -233,16 +258,22 @@ export const ApplicationCard = ({
                       className="text-destructive"
                       onClick={() => setCancelOpen(true)}
                     >
-                      <Ban className="size-3.5" /> Cancel application
+                      <Ban className="size-3.5" />{' '}
+                      {isApproved ? 'Cancel adoption' : 'Cancel application'}
                     </Button>
                   )}
-                  {application.status === 'Adopted' && (
-                    <Link to={`/applications/${application.id}/waiver`}>
-                      <Button variant="outline" size="sm">
-                        View waiver
-                      </Button>
-                    </Link>
-                  )}
+                  {application.waiverStatus &&
+                    application.waiverStatus !== 'None' &&
+                    (application.status === 'Approved' ||
+                      application.status === 'Adopted') && (
+                      <Link to={`/applications/${application.id}/waiver`}>
+                        <Button variant="outline" size="sm">
+                          {application.waiverStatus === 'Signed'
+                            ? 'View signed waiver'
+                            : 'Review & sign waiver'}
+                        </Button>
+                      </Link>
+                    )}
                   <Link to={`/pets/${application.petId}`}>
                     <Button variant="outline" size="sm">
                       View pet
@@ -252,6 +283,28 @@ export const ApplicationCard = ({
               )}
             </div>
           </div>
+
+          {pickupScheduled && (
+            <div className="mt-6 rounded-lg border border-green-600/30 bg-green-50/60 p-4 dark:bg-green-950/20">
+              <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
+                Clinic pickup
+              </p>
+              <p className="mt-1 text-sm font-medium text-foreground">
+                {formatDateTime(application.pickupAt as string)}
+              </p>
+              {application.pickupEmail && (
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Questions about the appointment?{' '}
+                  <a
+                    className="underline underline-offset-2"
+                    href={`mailto:${application.pickupEmail}`}
+                  >
+                    {application.pickupEmail}
+                  </a>
+                </p>
+              )}
+            </div>
+          )}
 
           <div className="mt-6 border-t border-border pt-6">
             <StatusTrack application={application} />
@@ -269,16 +322,28 @@ export const ApplicationCard = ({
       <DetailsModal
         open={cancelOpen}
         onClose={cancelling ? () => undefined : () => setCancelOpen(false)}
-        title="Cancel this application?"
+        title={isApproved ? 'Cancel this adoption?' : 'Cancel this application?'}
         description={petInfo ? `${petInfo.name} · ${application.email}` : application.email}
         icon={AlertTriangle}
       >
         <div className="space-y-4">
           <p className="text-sm leading-relaxed text-muted-foreground">
-            This withdraws your application for{' '}
-            <span className="font-medium text-foreground">{petInfo?.name ?? 'this pet'}</span>. It
-            cannot be undone, and a confirmation email will be sent to{' '}
-            <span className="font-medium text-foreground">{application.email}</span>.
+            {isApproved ? (
+              <>
+                Your application for{' '}
+                <span className="font-medium text-foreground">{petInfo?.name ?? 'this pet'}</span>{' '}
+                has already been approved{application.pickupAt ? ' and a clinic pickup is scheduled' : ''}.
+                Cancelling withdraws the adoption, releases the appointment, and puts the pet back
+                up for adoption. It cannot be undone.
+              </>
+            ) : (
+              <>
+                This withdraws your application for{' '}
+                <span className="font-medium text-foreground">{petInfo?.name ?? 'this pet'}</span>. It
+                cannot be undone, and a confirmation email will be sent to{' '}
+                <span className="font-medium text-foreground">{application.email}</span>.
+              </>
+            )}
           </p>
           <div>
             <Label htmlFor={`cancel-reason-${application.id}`}>Reason (optional)</Label>
@@ -305,7 +370,7 @@ export const ApplicationCard = ({
               onClick={() => void handleCancel()}
               disabled={cancelling}
             >
-              {cancelling ? 'Cancelling…' : 'Cancel application'}
+              {cancelling ? 'Cancelling…' : isApproved ? 'Cancel adoption' : 'Cancel application'}
             </Button>
           </div>
         </div>

@@ -39,6 +39,7 @@ export const ApplicationsPage = () => {
     Cancelled: 0,
     Approved: summary?.approved ?? 0,
     Adopted: summary?.adopted ?? 0,
+    Returned: 0,
   };
 
   const stats = [

@@ -1,4 +1,4 @@
-import { CalendarClock, Check, Eye, Flag, X } from 'lucide-react';
+import { CalendarClock, Eye, Flag, Mail, X } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 import { toast } from 'react-toastify';
 import {
@@ -6,6 +6,7 @@ import {
   RecordCard,
   RecordCardSkeleton,
   SectionHeader,
+  SlideOver,
   TableCard,
   TablePagination,
   TableSkeletonRows,
@@ -35,9 +36,9 @@ const STATUS_FILTER_OPTIONS = [
 ];
 
 /**
- * Shelter visit inbox: one request per pet from an adopter. Staff approve
- * (confirm) or decline (cancel) each request; the adopter is emailed the
- * decision automatically. There is no conversation to maintain.
+ * Shelter visit inbox: one request per pet from an adopter. The detail view is
+ * read-only — confirming (with a visit date + message) and declining happen in
+ * their own email dialogs, mirroring the inquiry inbox.
  */
 export const ShelterVisitsPage = () => {
   const [threads, setThreads] = useState<VisitThread[]>([]);
@@ -48,9 +49,17 @@ export const ShelterVisitsPage = () => {
   const [pageSize, setPageSize] = useState(10);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [working, setWorking] = useState(false);
-  const [slot, setSlot] = useState('');
+
+  // Compose dialog: visit date + message emailed to the adopter. Kept separate
+  // from `selectedId` so emailing never opens the read-only details modal.
+  const [composeId, setComposeId] = useState<string | null>(null);
+  const [composeOpen, setComposeOpen] = useState(false);
+  const [composeSlot, setComposeSlot] = useState('');
+  const [composeMessage, setComposeMessage] = useState('');
+  // Decline / cancel dialog.
+  const [declineId, setDeclineId] = useState<string | null>(null);
+  const [declineOpen, setDeclineOpen] = useState(false);
   const [reason, setReason] = useState('');
-  const [showDecline, setShowDecline] = useState(false);
 
   const fetchThreads = useCallback(async () => {
     setLoading(true);
@@ -71,38 +80,119 @@ export const ShelterVisitsPage = () => {
 
   const openRequest = async (id: string) => {
     setSelectedId(id);
-    setShowDecline(false);
-    setReason('');
     try {
       const thread = await visitService.getForShelter(id);
       setThreads((prev) => prev.map((t) => (t.id === id ? thread : t)));
-      setSlot(thread.confirmedSlot ?? thread.preferredSlot ?? '');
     } catch (err) {
       toast.error(err instanceof ApiError ? err.message : 'Failed to load visit request.');
     }
   };
 
   const selected = threads.find((t) => t.id === selectedId) ?? null;
+  const composeThread = threads.find((t) => t.id === composeId) ?? null;
+  const declineThread = threads.find((t) => t.id === declineId) ?? null;
   const actionable = selected != null && ['requested', 'confirmed'].includes(selected.status);
 
-  const handleStatus = async (status: VisitStatus) => {
-    if (!selectedId) return;
+  const closeDetails = () => setSelectedId(null);
+
+  /** Opens the confirmation email for a row without opening the details view. */
+  const openCompose = (thread?: VisitThread) => {
+    const target = thread ?? selected;
+    if (!target) return;
+    setComposeId(target.id);
+    // Start from the confirmed slot when rescheduling, else the request's slot.
+    setComposeSlot(target.confirmedSlot ?? target.preferredSlot ?? '');
+    setComposeMessage(target.shelterMessage ?? '');
+    setComposeOpen(true);
+  };
+
+  const closeCompose = () => {
+    if (working) return;
+    setComposeOpen(false);
+    setComposeId(null);
+    setComposeSlot('');
+    setComposeMessage('');
+  };
+
+  const openDecline = (thread?: VisitThread | null) => {
+    const target = thread ?? composeThread ?? selected;
+    if (!target) return;
+    setDeclineId(target.id);
+    setReason('');
+    setDeclineOpen(true);
+  };
+
+  const closeDecline = () => {
+    if (working) return;
+    setDeclineOpen(false);
+    setDeclineId(null);
+    setReason('');
+  };
+
+  /** Emails the adopter the visit date + message and confirms the request. */
+  const sendVisitEmail = async () => {
+    if (!composeThread) return;
+    const slot = composeSlot.trim();
+    if (!slot) {
+      toast.error('Add the visit date and time before sending.');
+      return;
+    }
     setWorking(true);
     try {
-      const thread = await visitService.updateStatus(selectedId, {
+      const thread = await visitService.updateStatus(composeThread.id, {
+        status: 'confirmed',
+        confirmedSlot: slot,
+        message: composeMessage.trim() || undefined,
+      });
+      setThreads((prev) => prev.map((t) => (t.id === composeThread.id ? thread : t)));
+      setComposeOpen(false);
+      setComposeId(null);
+      setComposeSlot('');
+      setComposeMessage('');
+      toast.success(
+        composeThread.status === 'confirmed'
+          ? `Updated visit emailed to ${thread.adopter?.email ?? 'the adopter'}.`
+          : `Visit approved — ${thread.pet?.name ?? 'the visit'} was emailed to the adopter.`,
+      );
+      await fetchThreads();
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : 'Failed to send the visit email.');
+    } finally {
+      setWorking(false);
+    }
+  };
+
+  /** Mark a confirmed visit completed straight from the row. */
+  const completeVisit = async (thread: VisitThread) => {
+    setWorking(true);
+    try {
+      const updated = await visitService.updateStatus(thread.id, { status: 'completed' });
+      setThreads((prev) => prev.map((t) => (t.id === thread.id ? updated : t)));
+      toast.success('Visit marked completed.');
+      await fetchThreads();
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : 'Failed to update visit.');
+    } finally {
+      setWorking(false);
+    }
+  };
+
+  const handleStatus = async (status: VisitStatus) => {
+    if (!declineThread) return;
+    setWorking(true);
+    try {
+      const thread = await visitService.updateStatus(declineThread.id, {
         status,
-        confirmedSlot: status === 'confirmed' ? slot.trim() || undefined : undefined,
         cancelReason: status === 'cancelled' ? reason.trim() || undefined : undefined,
       });
-      setThreads((prev) => prev.map((t) => (t.id === selectedId ? thread : t)));
-      setShowDecline(false);
+      setThreads((prev) => prev.map((t) => (t.id === declineThread.id ? thread : t)));
+      setDeclineOpen(false);
+      setDeclineId(null);
       setReason('');
       toast.success(
-        status === 'confirmed'
-          ? `${thread.pet?.name ?? 'Visit'} approved — the adopter has been emailed.`
-          : status === 'cancelled'
-            ? `${thread.pet?.name ?? 'Visit'} declined — the adopter has been emailed.`
-            : 'Visit marked completed.',
+        status === 'cancelled'
+          ? `${thread.pet?.name ?? 'Visit'} declined — the adopter has been emailed.`
+          : 'Visit marked completed.',
       );
       await fetchThreads();
     } catch (err) {
@@ -142,75 +232,12 @@ export const ShelterVisitsPage = () => {
       />
     ) : undefined;
 
-  const actionBar =
-    selected && actionable ? (
-      <div className="space-y-2 rounded-lg border p-3">
-        {selected.status === 'requested' && (
-          <div>
-            <Label htmlFor="visit-slot">Visit date/time (defaults to their preferred slot)</Label>
-            <Input
-              id="visit-slot"
-              value={slot}
-              onChange={(e) => setSlot(e.target.value)}
-              placeholder="e.g. Sat, Oct 18 at 10:00 AM"
-            />
-          </div>
-        )}
-        <div className="flex flex-wrap gap-2">
-          {selected.status === 'requested' && (
-            <>
-              <Button size="sm" onClick={() => void handleStatus('confirmed')} disabled={working}>
-                <Check className="size-3.5" /> Approve request
-              </Button>
-              <Button
-                size="sm"
-                variant="outline"
-                className="text-destructive"
-                onClick={() => setShowDecline((v) => !v)}
-                disabled={working}
-              >
-                <X className="size-3.5" /> Decline
-              </Button>
-            </>
-          )}
-          {selected.status === 'confirmed' && (
-            <>
-              <Button size="sm" onClick={() => void handleStatus('completed')} disabled={working}>
-                <Flag className="size-3.5" /> Mark completed
-              </Button>
-              <Button
-                size="sm"
-                variant="outline"
-                className="text-destructive"
-                onClick={() => setShowDecline((v) => !v)}
-                disabled={working}
-              >
-                <X className="size-3.5" /> Cancel visit
-              </Button>
-            </>
-          )}
-        </div>
-        {showDecline && (
-          <div className="space-y-2">
-            <Label htmlFor="visit-cancel-reason">Reason emailed to the adopter (optional)</Label>
-            <Textarea
-              id="visit-cancel-reason"
-              value={reason}
-              onChange={(e) => setReason(e.target.value)}
-              placeholder="Let the adopter know why…"
-            />
-            <Button
-              size="sm"
-              variant="destructive"
-              onClick={() => void handleStatus('cancelled')}
-              disabled={working}
-            >
-              {working ? 'Working…' : selected.status === 'requested' ? 'Confirm decline' : 'Confirm cancellation'}
-            </Button>
-          </div>
-        )}
-      </div>
-    ) : undefined;
+  /** The view modal only shows the request — decisions start from Email. */
+  const detailsFooter = selected ? (
+    <Button size="sm" variant="outline" className="w-full" onClick={closeDetails}>
+      Close
+    </Button>
+  ) : undefined;
 
   return (
     <div className="w-full px-4 py-6 sm:px-6">
@@ -222,7 +249,7 @@ export const ShelterVisitsPage = () => {
       <div className="mt-6">
         <TableCard
           title="Visits"
-          description="One request per pet. Approve and decline from the request details."
+          description="One request per pet. Email the adopter to approve, reschedule, or decline."
           icon={CalendarClock}
           toolbar={toolbar}
           isEmpty={!loading && threads.length === 0}
@@ -276,11 +303,36 @@ export const ShelterVisitsPage = () => {
                           variant="ghost"
                           size="icon-sm"
                           className="text-muted-foreground"
-                          aria-label={`Open visit request for ${thread.pet?.name ?? 'pet'}`}
+                          aria-label={`View visit request for ${thread.pet?.name ?? 'pet'}`}
                           onClick={() => void openRequest(thread.id)}
                         >
                           <Eye className="size-4" />
                         </Button>
+                        {thread.status === 'requested' || thread.status === 'confirmed' ? (
+                          <Button
+                            variant="ghost"
+                            size="icon-sm"
+                            className="text-orange-600 hover:bg-orange-50 hover:text-orange-700 dark:text-orange-400 dark:hover:bg-orange-950/40"
+                            aria-label={`Email ${thread.adopter?.name ?? 'adopter'} about the visit`}
+                            title="Email the adopter (date + message)"
+                            onClick={() => openCompose(thread)}
+                          >
+                            <Mail className="size-4" />
+                          </Button>
+                        ) : null}
+                        {thread.status === 'confirmed' ? (
+                          <Button
+                            variant="ghost"
+                            size="icon-sm"
+                            className="text-green-600 hover:bg-green-50 hover:text-green-700 dark:text-green-400 dark:hover:bg-green-950/40"
+                            aria-label={`Mark visit for ${thread.pet?.name ?? 'pet'} completed`}
+                            title="Mark completed"
+                            onClick={() => void completeVisit(thread)}
+                            disabled={working}
+                          >
+                            <Flag className="size-4" />
+                          </Button>
+                        ) : null}
                       </TableCell>
                     </TableRow>
                   ))
@@ -302,15 +354,28 @@ export const ShelterVisitsPage = () => {
                   subtitle={`${thread.adopter?.name ?? 'Adopter'} · ${thread.preferredSlot}`}
                   badges={<VisitStatusBadge status={thread.status} />}
                   actions={
-                    <Button
-                      variant="ghost"
-                      size="icon-sm"
-                      className="text-muted-foreground"
-                      aria-label={`Open visit request for ${thread.pet?.name ?? 'pet'}`}
-                      onClick={() => void openRequest(thread.id)}
-                    >
-                      <Eye className="size-4" />
-                    </Button>
+                    <>
+                      <Button
+                        variant="ghost"
+                        size="icon-sm"
+                        className="text-muted-foreground"
+                        aria-label={`View visit request for ${thread.pet?.name ?? 'pet'}`}
+                        onClick={() => void openRequest(thread.id)}
+                      >
+                        <Eye className="size-4" />
+                      </Button>
+                      {thread.status === 'requested' || thread.status === 'confirmed' ? (
+                        <Button
+                          variant="ghost"
+                          size="icon-sm"
+                          className="text-orange-600 hover:bg-orange-50 hover:text-orange-700 dark:text-orange-400 dark:hover:bg-orange-950/40"
+                          aria-label={`Email ${thread.adopter?.name ?? 'adopter'} about the visit`}
+                          onClick={() => openCompose(thread)}
+                        >
+                          <Mail className="size-4" />
+                        </Button>
+                      ) : null}
+                    </>
                   }
                 >
                   <p className="text-sm text-muted-foreground">
@@ -323,9 +388,10 @@ export const ShelterVisitsPage = () => {
         </TableCard>
       </div>
 
+      {/* Read-only request view — no inputs; decisions happen in the dialogs below. */}
       <DetailsModal
         open={selected !== null}
-        onClose={() => setSelectedId(null)}
+        onClose={closeDetails}
         title={selected?.pet?.name ? `Visit request · ${selected.pet.name}` : 'Visit request'}
         description={
           selected
@@ -334,6 +400,7 @@ export const ShelterVisitsPage = () => {
         }
         icon={CalendarClock}
         size="xl"
+        footer={detailsFooter}
       >
         {selected && (
           <div className="space-y-4">
@@ -369,7 +436,24 @@ export const ShelterVisitsPage = () => {
                 </dt>
                 <dd className="mt-1">{selected.confirmedSlot ?? 'Not confirmed yet'}</dd>
               </div>
+              <div>
+                <dt className="font-mono text-[11px] uppercase tracking-[0.16em] text-muted-foreground">
+                  Last update
+                </dt>
+                <dd className="mt-1">{formatDate(selected.updatedAt)}</dd>
+              </div>
             </dl>
+
+            {selected.shelterMessage ? (
+              <div className="rounded-lg border p-3">
+                <p className="text-xs uppercase tracking-wide text-muted-foreground">
+                  Email sent to the adopter
+                </p>
+                <p className="mt-1 whitespace-pre-line text-sm leading-relaxed">
+                  {selected.shelterMessage}
+                </p>
+              </div>
+            ) : null}
 
             {selected.status === 'cancelled' && selected.cancelReason ? (
               <p className="rounded-lg bg-muted/60 px-3 py-2 text-sm text-muted-foreground">
@@ -377,15 +461,159 @@ export const ShelterVisitsPage = () => {
               </p>
             ) : null}
 
-            {actionBar}
-
-            <p className="text-xs text-muted-foreground">
-              Approving or declining emails the adopter automatically. Their request keeps its
-              status here so you can track it.
-            </p>
+            {!actionable ? (
+              <p className="text-xs text-muted-foreground">
+                This visit request is closed. Its status and email history stay here for reference.
+              </p>
+            ) : null}
           </div>
         )}
       </DetailsModal>
+
+      {/* Confirmation email: visit date + message, like the inquiry reply. */}
+      <SlideOver
+        open={composeOpen}
+        onClose={closeCompose}
+        title={
+          composeThread ? `Email ${composeThread.adopter?.name ?? 'the adopter'}` : 'Email adopter'
+        }
+        description={
+          composeThread
+            ? `${composeThread.pet?.name ?? 'Visit'} · ${composeThread.adopter?.email ?? 'no email on file'}`
+            : undefined
+        }
+        icon={Mail}
+        footer={
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              className="mr-auto text-destructive"
+              onClick={() => {
+                setComposeOpen(false);
+                openDecline(composeThread);
+              }}
+              disabled={working}
+            >
+              <X className="size-3.5" />{' '}
+              {composeThread?.status === 'confirmed' ? 'Cancel visit' : 'Decline instead'}
+            </Button>
+            <Button variant="outline" size="sm" onClick={closeCompose} disabled={working}>
+              Close
+            </Button>
+            <Button
+              size="sm"
+              onClick={() => void sendVisitEmail()}
+              disabled={working || !composeSlot.trim()}
+            >
+              {working
+                ? 'Sending…'
+                : composeThread?.status === 'confirmed'
+                  ? 'Send update'
+                  : 'Send & approve'}
+            </Button>
+          </div>
+        }
+      >
+        {composeThread && (
+          <div className="space-y-4">
+            <div className="rounded-lg border p-3">
+              <p className="text-xs uppercase tracking-wide text-muted-foreground">To</p>
+              <p className="mt-1 text-sm font-medium">{composeThread.adopter?.name ?? 'Adopter'}</p>
+              <p className="text-sm text-muted-foreground">
+                {composeThread.adopter?.email ?? 'No email on file'}
+              </p>
+            </div>
+
+            <div className="rounded-lg bg-muted/60 px-3 py-2">
+              <p className="text-xs font-semibold">Their request</p>
+              <p className="mt-0.5 text-sm">
+                {composeThread.pet?.name ?? 'Pet'} · preferred {composeThread.preferredSlot}
+              </p>
+            </div>
+
+            <div>
+              <Label htmlFor="visit-email-slot">Visit date &amp; time</Label>
+              <Input
+                id="visit-email-slot"
+                value={composeSlot}
+                onChange={(e) => setComposeSlot(e.target.value)}
+                placeholder="e.g. Sat, Oct 18 at 10:00 AM"
+                maxLength={255}
+              />
+            </div>
+
+            <div>
+              <Label htmlFor="visit-email-message">Message</Label>
+              <Textarea
+                id="visit-email-message"
+                value={composeMessage}
+                onChange={(e) => setComposeMessage(e.target.value)}
+                placeholder={`Where to meet and anything ${composeThread.adopter?.name ?? 'they'} should bring…`}
+                className="min-h-40"
+                maxLength={1000}
+              />
+            </div>
+
+            <p className="text-xs text-muted-foreground">
+              Sending emails the adopter this date and message and{' '}
+              {composeThread.status === 'confirmed'
+                ? 'updates the confirmed schedule.'
+                : 'approves the visit request.'}
+            </p>
+          </div>
+        )}
+      </SlideOver>
+
+      {/* Decline / cancel visit with a reason emailed to the adopter. */}
+      <SlideOver
+        open={declineOpen}
+        onClose={closeDecline}
+        title={
+          declineThread?.status === 'confirmed' ? 'Cancel this visit?' : 'Decline this visit?'
+        }
+        description={
+          declineThread
+            ? `${declineThread.pet?.name ?? 'Visit'} · ${declineThread.adopter?.email ?? 'adopter'}`
+            : undefined
+        }
+        icon={X}
+        footer={
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" size="sm" onClick={closeDecline} disabled={working}>
+              Keep request
+            </Button>
+            <Button
+              variant="destructive"
+              size="sm"
+              onClick={() => void handleStatus('cancelled')}
+              disabled={working}
+            >
+              {working
+                ? 'Working…'
+                : declineThread?.status === 'confirmed'
+                  ? 'Cancel visit'
+                  : 'Decline request'}
+            </Button>
+          </div>
+        }
+      >
+        <div className="space-y-4">
+          <p className="text-sm text-muted-foreground">
+            The adopter is emailed this decision. Their request keeps the cancelled status here.
+          </p>
+          <div>
+            <Label htmlFor="visit-cancel-reason">Reason emailed to the adopter (optional)</Label>
+            <Textarea
+              id="visit-cancel-reason"
+              value={reason}
+              onChange={(e) => setReason(e.target.value)}
+              placeholder="Let the adopter know why…"
+              maxLength={500}
+            />
+          </div>
+        </div>
+      </SlideOver>
     </div>
   );
 };

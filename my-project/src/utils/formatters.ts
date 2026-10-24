@@ -40,6 +40,19 @@ export const formatDate = (iso: string): string => {
   });
 };
 
+/** Date plus time — used for scheduled appointments (e.g. clinic pickup). */
+export const formatDateTime = (iso: string): string => {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  return d.toLocaleString('en-PH', {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  });
+};
+
 export const capitalize = (value: string): string => {
   if (!value) return value;
   return value.charAt(0).toUpperCase() + value.slice(1);

@@ -54,6 +54,10 @@ export const setApplicationStatus = async (req, res) => {
     req.user.shelterId,
     req.body.status,
     req.body.note ?? null,
+    {
+      pickupAt: req.body.pickupAt ?? null,
+      pickupEmail: req.body.pickupEmail ?? null,
+    },
   );
   return sendSuccess(res, { application }, 'Application status updated successfully.');
 };

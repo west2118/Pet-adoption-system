@@ -131,8 +131,14 @@ export const mapApplication = (row, history = []) => {
     experience: row.experience,
     reason: row.reason,
     status: row.status,
+    waiverStatus: row.waiver_status ?? 'None',
+    ...(row.waiver_version != null ? { waiverVersion: Number(row.waiver_version) } : {}),
+    ...(row.waiver_signed_at ? { waiverSignedAt: row.waiver_signed_at } : {}),
     submittedAt: row.submitted_at,
     updatedAt: row.updated_at,
+    // Set when the shelter approves: the clinic appointment + contact address.
+    pickupAt: row.pickup_at ?? null,
+    pickupEmail: row.pickup_email ?? null,
     staffNotes: row.staff_notes ?? undefined,
     // Joined pet summary so an application still renders after the pet leaves
     // the public catalogue (e.g. it is In Process or Adopted).
@@ -184,22 +190,57 @@ export const mapWaiverTemplate = (row) => {
   };
 };
 
+const parseSnapshot = (snapshot) => {
+  if (typeof snapshot !== 'string') return snapshot;
+  try {
+    return JSON.parse(snapshot);
+  } catch {
+    return null;
+  }
+};
+
 export const mapWaiver = (row) => {
   if (!row) return null;
-  let snapshot = row.snapshot;
-  if (typeof snapshot === 'string') {
-    try {
-      snapshot = JSON.parse(snapshot);
-    } catch {
-      snapshot = null;
-    }
-  }
+  const snapshot = parseSnapshot(row.snapshot);
+  const snapshotSignature = snapshot?.signature;
   return {
     id: row.id,
     applicationId: row.application_id,
     shelterId: row.shelter_id,
     snapshot,
+    status: row.status ?? 'Issued',
+    version: Number(row.version ?? snapshot?.version ?? 1),
+    generatedAt: row.generated_at ?? snapshot?.generatedAt ?? row.created_at,
+    generatedBy:
+      snapshot?.generatedBy ??
+      (row.generated_by_name
+        ? { id: row.generated_by ?? null, name: row.generated_by_name }
+        : null),
+    signedAt: row.signed_at ?? snapshotSignature?.signedAt ?? null,
+    signedBy: row.signed_by ?? null,
+    signedByName: row.signed_by_name ?? snapshotSignature?.signedByName ?? null,
+    signatureName: row.signature_name ?? snapshotSignature?.name ?? null,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
+  };
+};
+
+export const mapWaiverVersion = (row, isCurrent = false) => {
+  if (!row) return null;
+  return {
+    id: row.id,
+    version: Number(row.version ?? 1),
+    status: row.status ?? 'Superseded',
+    snapshot: parseSnapshot(row.snapshot),
+    generatedAt: row.generated_at ?? row.created_at,
+    generatedBy: row.generated_by_name
+      ? { id: row.generated_by ?? null, name: row.generated_by_name }
+      : null,
+    signedAt: row.signed_at ?? null,
+    signedBy: row.signed_by ?? null,
+    signedByName: row.signed_by_name ?? null,
+    signatureName: row.signature_name ?? null,
+    archivedAt: row.archived_at ?? null,
+    isCurrent,
   };
 };

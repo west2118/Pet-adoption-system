@@ -107,6 +107,7 @@ const DECISION_SUBJECTS = {
   Adopted: 'Your adoption is complete',
   Rejected: 'Update on your application',
   Cancelled: 'Your application was cancelled',
+  Returned: 'Your adoption has ended',
 };
 
 export const sendApplicationSubmittedEmail = async ({ to, name, petName }) =>
@@ -130,6 +131,8 @@ export const sendApplicationDecisionEmail = async ({
   status,
   note,
   cancelledByApplicant = false,
+  pickupAt,
+  pickupEmail,
 }) =>
   send({
     to,
@@ -141,6 +144,8 @@ export const sendApplicationDecisionEmail = async ({
       note,
       appUrl: env.APP_URL,
       cancelledByApplicant,
+      pickupAt,
+      pickupEmail,
     }),
   });
 

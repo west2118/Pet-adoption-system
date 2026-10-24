@@ -6,11 +6,16 @@ export const getMyListings = async (req, res) => {
   const { page, limit, offset } = parsePagination(req.query);
   const search = req.query.search || undefined;
   const visibility = req.query.visibility || undefined;
+  // Species/status filters run in SQL so the page count matches the filter.
+  const species = req.query.species || undefined;
+  const status = req.query.status || undefined;
   const { pets, total } = await listShelterListings(req.user.shelterId, {
     limit,
     offset,
     search,
     visibility,
+    species,
+    status,
   });
   return sendSuccess(res, { pets }, undefined, buildMeta(page, limit, total));
 };

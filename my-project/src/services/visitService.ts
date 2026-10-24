@@ -112,7 +112,13 @@ export const getShelterVisit = async (id: string): Promise<VisitThread> => {
 
 export const updateShelterVisitStatus = async (
   id: string,
-  input: { status: VisitStatus; confirmedSlot?: string; cancelReason?: string },
+  input: {
+    status: VisitStatus;
+    confirmedSlot?: string;
+    cancelReason?: string;
+    /** Emailed with the confirmation (date + short message). */
+    message?: string;
+  },
 ): Promise<VisitThread> => {
   const data = await apiRequest<{ thread: VisitThread }>(
     `/shelter/visits/${encodeURIComponent(id)}/status`,

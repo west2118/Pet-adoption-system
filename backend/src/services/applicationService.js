@@ -89,7 +89,14 @@ const autoRejectCompetingApplications = async (
  * Fire-and-forget status notifications. Never awaited and never throws: the
  * status change is already committed, so a mail hiccup cannot affect it.
  */
-const notifyApplicationStatusChange = ({ record, petName, newStatus, note, rejectedRows }) => {
+const notifyApplicationStatusChange = ({
+  record,
+  petName,
+  newStatus,
+  note,
+  rejectedRows,
+  pickup,
+}) => {
   // Always reach the account that submitted the application; the address on
   // the form is a fallback for legacy rows.
   const applicant = {
@@ -104,9 +111,17 @@ const notifyApplicationStatusChange = ({ record, petName, newStatus, note, rejec
     newStatus === 'Approved' ||
     newStatus === 'Rejected' ||
     newStatus === 'Adopted' ||
-    newStatus === 'Cancelled'
+    newStatus === 'Cancelled' ||
+    newStatus === 'Returned'
   ) {
-    sendApplicationDecisionEmail({ ...applicant, status: newStatus, note }).catch(() => {});
+    sendApplicationDecisionEmail({
+      ...applicant,
+      status: newStatus,
+      note,
+      // The approval email carries the scheduled clinic pickup.
+      ...(pickup?.pickupAt ? { pickupAt: pickup.pickupAt } : {}),
+      ...(pickup?.pickupEmail ? { pickupEmail: pickup.pickupEmail } : {}),
+    }).catch(() => {});
   }
 
   const reason =
@@ -124,9 +139,10 @@ const notifyApplicationStatusChange = ({ record, petName, newStatus, note, rejec
 };
 
 /**
- * Adopter withdraws their own application while it is still open. The status
- * moves to `Cancelled` (never `Rejected`, which belongs to shelter decisions),
- * the reason lands in the audit history, and the applicant is emailed a
+ * Adopter withdraws their own application while it is still open — or after
+ * approval, as long as the pet has not been handed over yet. The status moves
+ * to `Cancelled` (never `Rejected`, which belongs to shelter decisions), the
+ * reason lands in the audit history, and the applicant is emailed a
  * confirmation at the address on their account.
  */
 export const cancelApplication = async (applicationId, applicantId, reason) => {
@@ -150,9 +166,9 @@ export const cancelApplication = async (applicationId, applicantId, reason) => {
     if (record.applicant_id !== applicantId) {
       throw new AppError('Forbidden. Application belongs to another applicant.', 403);
     }
-    if (!['Submitted', 'Under Review'].includes(record.status)) {
+    if (!['Submitted', 'Under Review', 'Approved'].includes(record.status)) {
       throw new AppError(
-        'Only applications that are still under review can be cancelled.',
+        'Only applications awaiting a decision or an approved adoption that has not been handed over can be cancelled.',
         409,
       );
     }
@@ -160,7 +176,8 @@ export const cancelApplication = async (applicationId, applicantId, reason) => {
     const note = reason?.trim() || 'Cancelled by applicant';
     await client.query(
       `UPDATE adoption_applications
-       SET status = 'Cancelled', updated_at = CURRENT_TIMESTAMP
+       SET status = 'Cancelled', pickup_at = NULL, pickup_email = NULL,
+           updated_at = CURRENT_TIMESTAMP
        WHERE id = $1`,
       [applicationId],
     );
@@ -168,6 +185,16 @@ export const cancelApplication = async (applicationId, applicantId, reason) => {
       `INSERT INTO application_history (application_id, status, note) VALUES ($1, 'Cancelled', $2)`,
       [applicationId, note],
     );
+
+    // Withdrawing an approved adoption puts the pet back on the market.
+    if (record.status === 'Approved') {
+      await client.query(
+        `UPDATE pets
+            SET status = 'Available', updated_at = CURRENT_TIMESTAMP
+          WHERE id = $1 AND status = 'In Process'`,
+        [record.pet_id],
+      );
+    }
 
     await client.query('COMMIT');
 
@@ -193,7 +220,14 @@ export const cancelApplication = async (applicationId, applicantId, reason) => {
 };
 
 // Atomic: application status + audit history + pet status move together.
-export const updateApplicationStatus = async (applicationId, shelterId, newStatus, note) => {
+// Approving also schedules the clinic pickup (`pickup.pickupAt` / `pickupEmail`).
+export const updateApplicationStatus = async (
+  applicationId,
+  shelterId,
+  newStatus,
+  note,
+  pickup = {},
+) => {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
@@ -215,9 +249,42 @@ export const updateApplicationStatus = async (applicationId, shelterId, newStatu
       throw new AppError('Forbidden. Application belongs to another shelter.', 403);
     }
     // Cancel adoption is only meaningful after approval; pending applications
-    // are declined with Rejected instead.
+    // are declined with Rejected instead. A completed handover is reversed with
+    // `Returned`, which is its own status.
     if (newStatus === 'Cancelled' && record.status !== 'Approved') {
       throw new AppError('Only an approved adoption can be cancelled.', 409);
+    }
+    if (newStatus === 'Returned' && record.status !== 'Adopted') {
+      throw new AppError('Only a completed adoption can be returned.', 409);
+    }
+
+    // Handover is not complete until the e-waiver has been issued. Legacy
+    // adopted rows without a waiver are still readable; this only guards the
+    // transition into `Adopted` from this point forward.
+    if (newStatus === 'Adopted') {
+      const waiver = await client.query(
+        'SELECT 1 FROM waivers WHERE application_id = $1 LIMIT 1',
+        [applicationId],
+      );
+      if (waiver.rowCount === 0) {
+        throw new AppError(
+          'Generate the e-waiver before marking this application as adopted.',
+          409,
+        );
+      }
+    }
+    // Approval always comes with the handover appointment, so the adopter knows
+    // when to come to the clinic and who to contact about it.
+    if (newStatus === 'Approved') {
+      if (!pickup.pickupAt || !pickup.pickupEmail) {
+        throw new AppError(
+          'A pickup date/time and contact email are required when approving an application.',
+          400,
+        );
+      }
+      if (new Date(pickup.pickupAt).getTime() <= Date.now()) {
+        throw new AppError('The pickup date and time must be in the future.', 400);
+      }
     }
 
     // Approving/adopting implies the application was reviewed. Legacy rows can
@@ -238,11 +305,27 @@ export const updateApplicationStatus = async (applicationId, shelterId, newStatu
       }
     }
 
+    // Approval sets the pickup appointment; cancelling or returning clears it.
+    const closesAdoption = newStatus === 'Cancelled' || newStatus === 'Returned';
+    const pickupAt =
+      newStatus === 'Approved'
+        ? new Date(pickup.pickupAt).toISOString()
+        : closesAdoption
+          ? null
+          : (record.pickup_at ?? null);
+    const pickupEmail =
+      newStatus === 'Approved'
+        ? pickup.pickupEmail
+        : closesAdoption
+          ? null
+          : (record.pickup_email ?? null);
+
     await client.query(
       `UPDATE adoption_applications
-       SET status = $1, staff_notes = $2, updated_at = CURRENT_TIMESTAMP
+       SET status = $1, staff_notes = $2, pickup_at = $4, pickup_email = $5,
+           updated_at = CURRENT_TIMESTAMP
        WHERE id = $3`,
-      [newStatus, note ?? null, applicationId],
+      [newStatus, note ?? null, applicationId, pickupAt, pickupEmail],
     );
 
     await client.query(
@@ -280,12 +363,13 @@ export const updateApplicationStatus = async (applicationId, shelterId, newStatu
         ['Submitted', 'Under Review', 'Approved'],
         'Auto-rejected: this pet has been adopted.',
       );
-    } else if (newStatus === 'Cancelled') {
-      // The adoption fell through: the pet is adoptable again.
+    } else if (newStatus === 'Cancelled' || newStatus === 'Returned') {
+      // The adoption fell through, before or after handover: the pet is
+      // adoptable again.
       await client.query(
         `UPDATE pets
             SET status = 'Available', updated_at = CURRENT_TIMESTAMP
-          WHERE id = $1 AND status = 'In Process'`,
+          WHERE id = $1 AND status IN ('In Process', 'Adopted')`,
         [record.pet_id],
       );
     }
@@ -300,6 +384,7 @@ export const updateApplicationStatus = async (applicationId, shelterId, newStatu
       newStatus,
       note,
       rejectedRows,
+      pickup: newStatus === 'Approved' ? { pickupAt, pickupEmail } : undefined,
     });
 
     const updated = await findApplicationById(applicationId);

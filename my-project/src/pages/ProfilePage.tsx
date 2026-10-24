@@ -1,8 +1,8 @@
-import { ArrowRight, Heart, HeartHandshake, Pencil } from 'lucide-react';
+import { ArrowRight, Check, Heart, HeartHandshake, Pencil, X } from 'lucide-react';
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { toast } from 'react-toastify';
-import { BlurText, GridOverlay, Reveal, focusFirstError, isBlank, isUrl } from '@/components/shared';
+import { BlurText, GridOverlay, Reveal, focusFirstError, isBlank } from '@/components/shared';
 import { ValidatedInput } from '@/components/shared';
 import { ApplicationCard } from '@/components/features/ApplicationCard';
 import { PetCard } from '@/components/features/PetCard';
@@ -36,16 +36,18 @@ export const ProfilePage = () => {
   const { shelters } = useShelters();
   const { favorites, loading: favLoading } = useFavorites();
 
-  const [form, setForm] = useState({ name: user?.name ?? '', avatarUrl: user?.avatarUrl ?? '' });
+  const [form, setForm] = useState({ name: user?.name ?? '' });
+  const [editing, setEditing] = useState(false);
   const [formUserId, setFormUserId] = useState<string | undefined>(user?.id);
-  const [fieldErrors, setFieldErrors] = useState<{ name?: string; avatarUrl?: string }>({});
+  const [fieldErrors, setFieldErrors] = useState<{ name?: string }>({});
   const [saving, setSaving] = useState(false);
 
   // Re-seed the form when a different account signs in (render-phase
   // adjustment — the documented alternative to syncing state in an effect).
   if (formUserId !== user?.id) {
     setFormUserId(user?.id);
-    setForm({ name: user?.name ?? '', avatarUrl: user?.avatarUrl ?? '' });
+    setForm({ name: user?.name ?? '' });
+    setEditing(false);
     setFieldErrors({});
   }
 
@@ -71,8 +73,6 @@ export const ProfilePage = () => {
     e.preventDefault();
     const next: typeof fieldErrors = {};
     if (isBlank(form.name)) next.name = 'Please enter your name.';
-    const avatar = form.avatarUrl.trim();
-    if (avatar !== '' && !isUrl(avatar)) next.avatarUrl = 'Enter a valid photo URL or leave it blank.';
     setFieldErrors(next);
     if (Object.keys(next).length > 0) {
       toast.warning('Please fix the highlighted fields.');
@@ -81,13 +81,21 @@ export const ProfilePage = () => {
     }
     setSaving(true);
     try {
-      await updateProfile({ name: form.name.trim(), avatarUrl: avatar === '' ? null : avatar });
+      const updated = await updateProfile({ name: form.name.trim() });
+      setForm({ name: updated?.name ?? form.name.trim() });
+      setEditing(false);
       toast.success('Profile updated successfully!');
     } catch (err) {
       toast.error(err instanceof ApiError ? err.message : 'Could not save your profile. Please try again.');
     } finally {
       setSaving(false);
     }
+  };
+
+  const handleCancel = () => {
+    setForm({ name: user?.name ?? '' });
+    setFieldErrors({});
+    setEditing(false);
   };
 
   return (
@@ -191,62 +199,101 @@ export const ProfilePage = () => {
             >
               <div className="lg:col-span-5">
                 <span className="font-mono text-[11px] uppercase tracking-[0.2em] text-muted-foreground">
-                  Display name
+                  Account details
                 </span>
-                <div className="mt-4">
-                  <Label htmlFor="profile-name">Full name</Label>
-                  <ValidatedInput
-                    id="profile-name"
-                    value={form.name}
-                    onChange={(e) => {
-                      setForm((prev) => ({ ...prev, name: e.target.value }));
-                      setFieldErrors((p) => ({ ...p, name: undefined }));
-                    }}
-                    placeholder="e.g. Juan Dela Cruz"
-                    required
-                    error={fieldErrors.name}
-                  />
+                <div className="mt-4 space-y-4">
+                  <div>
+                    <Label htmlFor={editing ? 'profile-name' : undefined}>Full name</Label>
+                    {editing ? (
+                      <ValidatedInput
+                        id="profile-name"
+                        value={form.name}
+                        onChange={(e) => {
+                          setForm((prev) => ({ ...prev, name: e.target.value }));
+                          setFieldErrors((p) => ({ ...p, name: undefined }));
+                        }}
+                        placeholder="e.g. Juan Dela Cruz"
+                        required
+                        error={fieldErrors.name}
+                      />
+                    ) : (
+                      <p className="text-[15px] text-foreground">{user?.name ?? '—'}</p>
+                    )}
+                  </div>
+                  <div>
+                    <Label htmlFor={editing ? 'profile-email' : undefined}>Email</Label>
+                    {editing ? (
+                      <>
+                        <ValidatedInput
+                          id="profile-email"
+                          type="email"
+                          value={user?.email ?? ''}
+                          readOnly
+                          className="bg-muted/50 text-muted-foreground"
+                        />
+                        <p className="mt-1.5 text-xs text-muted-foreground">
+                          Used to sign in to your account and can't be changed here.
+                        </p>
+                      </>
+                    ) : (
+                      <p className="break-all text-[15px] text-foreground">{user?.email ?? '—'}</p>
+                    )}
+                  </div>
                 </div>
-                <div className="mt-4">
-                  <Label htmlFor="profile-avatar">Photo URL (optional)</Label>
-                  <ValidatedInput
-                    id="profile-avatar"
-                    value={form.avatarUrl}
-                    onChange={(e) => {
-                      setForm((prev) => ({ ...prev, avatarUrl: e.target.value }));
-                      setFieldErrors((p) => ({ ...p, avatarUrl: undefined }));
-                    }}
-                    placeholder="https://…"
-                    error={fieldErrors.avatarUrl}
-                  />
+                <div className="mt-6 flex flex-wrap items-center gap-2">
+                  {editing ? (
+                    <>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        disabled={saving}
+                        onClick={handleCancel}
+                        className="h-11 rounded-full px-7 text-sm"
+                      >
+                        <X className="size-4" />
+                        Cancel
+                      </Button>
+                      <Button
+                        type="submit"
+                        disabled={saving}
+                        className="h-11 rounded-full px-7 text-sm"
+                      >
+                        <Check className="size-4" />
+                        {saving ? 'Saving…' : 'Save profile'}
+                      </Button>
+                    </>
+                  ) : (
+                    <Button
+                      type="button"
+                      onClick={() => setEditing(true)}
+                      className="h-11 rounded-full px-7 text-sm"
+                    >
+                      <Pencil className="size-4" />
+                      Edit profile
+                    </Button>
+                  )}
                 </div>
-                <Button
-                  type="submit"
-                  disabled={saving}
-                  className="mt-6 h-11 rounded-full px-7 text-sm"
-                >
-                  <Pencil className="size-4" />
-                  {saving ? 'Saving…' : 'Save profile'}
-                </Button>
               </div>
               <div className="flex items-center justify-center border-t border-border pt-6 lg:border-l lg:border-t-0 lg:pl-10 lg:pt-0 lg:col-span-7">
                 <div className="flex items-center gap-4">
-                  {form.avatarUrl.trim() ? (
+                  {user?.avatarUrl ? (
                     <img
-                      src={form.avatarUrl.trim()}
+                      src={user.avatarUrl}
                       alt="Profile preview"
                       className="size-16 rounded-full border border-border object-cover"
                     />
                   ) : (
                     <span className="flex size-16 items-center justify-center rounded-full bg-[var(--brand-tint)] font-display text-xl text-primary">
-                      {userInitials(form.name || '?')}
+                      {userInitials((editing ? form.name : user?.name) || '?')}
                     </span>
                   )}
                   <div>
-                    <p className="font-medium">{form.name || 'Your name'}</p>
-                    <p className="text-sm text-muted-foreground">{user?.email}</p>
+                    <p className="font-medium">
+                      {(editing ? form.name : user?.name) || 'Your name'}
+                    </p>
+                    <p className="break-all text-sm text-muted-foreground">{user?.email}</p>
                     <p className="mt-1 font-mono text-[11px] uppercase tracking-[0.18em] text-primary">
-                      Live preview
+                      {editing ? 'Live preview' : 'Profile preview'}
                     </p>
                   </div>
                 </div>

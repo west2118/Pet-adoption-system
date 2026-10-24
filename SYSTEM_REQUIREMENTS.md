@@ -100,7 +100,7 @@ The application implements a multi-portal architecture serving **three distinct 
     - Centralized table of incoming adoption applications for the shelter's pets.
     - Detailed applicant review modal, status workflow updating (*Approve*, *Reject*, *Cancel adoption*, *Mark adopted*), and internal staff notes.
     - Opening a *Submitted* application's details automatically moves it to *Under Review* and records the date in its status history.
-    - Approve, Reject, and Cancel adoption each open a confirmation dialog with an optional note; the applicant is emailed the decision at their account email. Cancelling an approved adoption returns the pet to *Available*.
+    - Approve, Reject, Mark adopted, Cancel adoption, and Return each open a confirmation dialog with an optional note; the applicant is emailed the decision at their account email. Cancelling an approved adoption returns the pet to *Available*; returning a completed handover records the application as *Returned* and also puts the pet back to *Available*.
   - `GET /shelter/inquiries` (`ShelterInquiriesPage`):
     - Read-only inbox of direct adopter inquiries about the shelter's pets. Details open in a view-only modal.
     - A one-time Email action opens a compose dialog and sends the shelter's reply through SMTP. After a successful send the action disappears, the inquiry is marked resolved, and the sent email is shown in the details modal.

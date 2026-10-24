@@ -4,8 +4,10 @@ import {
   editWaiverTemplate,
   generateApplicationWaiver,
   getApplicationWaiver,
+  getApplicationWaiverVersions,
   getWaiverById,
   getWaiverTemplates,
+  removeWaiverTemplate,
 } from '../controllers/waiverController.js';
 import { authenticate } from '../middlewares/authenticate.js';
 import { authorize } from '../middlewares/authorize.js';
@@ -32,6 +34,11 @@ waiverRoutes.patch(
   validate(updateWaiverTemplateSchema),
   editWaiverTemplate,
 );
+waiverRoutes.delete(
+  '/waiver-templates/:id',
+  validate(uuidParam, 'params'),
+  removeWaiverTemplate,
+);
 
 waiverRoutes.post(
   '/applications/:id/waiver',
@@ -43,5 +50,10 @@ waiverRoutes.get(
   '/applications/:id/waiver',
   validate(uuidParam, 'params'),
   getApplicationWaiver,
+);
+waiverRoutes.get(
+  '/applications/:id/waiver/versions',
+  validate(uuidParam, 'params'),
+  getApplicationWaiverVersions,
 );
 waiverRoutes.get('/waivers/:id', validate(uuidParam, 'params'), getWaiverById);

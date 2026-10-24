@@ -129,11 +129,17 @@ describe('application status emails (styled HTML)', () => {
       status: 'Approved',
       note: 'Pick-up this Saturday.',
       appUrl: APP_URL,
+      pickupAt: '2026-11-02T10:00:00.000Z',
+      pickupEmail: 'clinic@paws.ph',
     });
     assertStyledShell(approved);
     assert.match(approved, /<h1[^>]*>Your application was approved<\/h1>/);
     assert.match(approved, /background-color:#dcfce7/); // green chip
     assert.match(approved, /<strong>From the shelter:<\/strong> Pick-up this Saturday\./);
+    // The approval email carries the scheduled clinic pickup and its contact.
+    assert.match(approved, /<strong>Pickup scheduled:<\/strong>/);
+    assert.match(approved, /Your pickup at the clinic is scheduled below\./);
+    assert.match(approved, /mailto:clinic@paws\.ph/);
 
     const adopted = applicationDecisionHtml({
       name: 'Maria',
@@ -144,6 +150,7 @@ describe('application status emails (styled HTML)', () => {
     assertStyledShell(adopted);
     assert.match(adopted, /<h1[^>]*>Your adoption is complete<\/h1>/);
     assert.doesNotMatch(adopted, /From the shelter:/); // no note → no callout
+    assert.doesNotMatch(adopted, /Pickup scheduled:/); // pickup only on approval
 
     const rejected = applicationDecisionHtml({
       name: 'Maria',
@@ -179,6 +186,20 @@ describe('application status emails (styled HTML)', () => {
     });
     assertStyledShell(cancelledByShelter);
     assert.match(cancelledByShelter, /<strong>From the shelter:<\/strong> The adoption could not proceed\./);
+
+    // A completed adoption being returned reads as an ended adoption, not a
+    // cancelled application.
+    const returned = applicationDecisionHtml({
+      name: 'Maria',
+      petName: 'Simba',
+      status: 'Returned',
+      note: 'Returned after a week.',
+      appUrl: APP_URL,
+    });
+    assertStyledShell(returned);
+    assert.match(returned, /<h1[^>]*>Your adoption has ended<\/h1>/);
+    assert.match(returned, /has been returned to the shelter/);
+    assert.match(returned, /available for adoption again/);
 
     assert.throws(
       () => applicationDecisionHtml({ name: 'M', petName: 'S', status: 'Pending' }),

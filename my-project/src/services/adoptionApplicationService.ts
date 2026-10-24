@@ -196,14 +196,28 @@ export const cancelMyApplication = async (
   return updated;
 };
 
+/**
+ * Shelter decision. Approving also schedules the clinic pickup, so both
+ * `pickupAt` (ISO timestamp) and `pickupEmail` are required for `Approved`.
+ */
 export const updateShelterApplicationStatus = async (
   id: string,
   status: ApplicationStatus,
   note?: string,
+  pickup?: { pickupAt?: string | null; pickupEmail?: string | null },
 ): Promise<AdoptionApplication> => {
   const { application } = await apiRequest<{ application: AdoptionApplication }>(
     `/shelter/applications/${id}/status`,
-    { method: 'PATCH', body: { status, note: note ?? null }, auth: 'full' },
+    {
+      method: 'PATCH',
+      body: {
+        status,
+        note: note ?? null,
+        pickupAt: pickup?.pickupAt ?? null,
+        pickupEmail: pickup?.pickupEmail ?? null,
+      },
+      auth: 'full',
+    },
   );
   return application;
 };

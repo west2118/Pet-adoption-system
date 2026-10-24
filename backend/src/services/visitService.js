@@ -24,6 +24,7 @@ export const mapVisitThread = (row) => {
     preferredSlot: row.preferred_slot ?? '',
     confirmedSlot: row.confirmed_slot ?? null,
     cancelReason: row.cancel_reason ?? null,
+    shelterMessage: row.shelter_message ?? null,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -171,7 +172,9 @@ export const setVisitStatus = async (threadId, shelterId, input) => {
     petName: pet?.name ?? 'the pet',
     status: input.status,
     slot: confirmedSlot ?? updated.confirmed_slot ?? undefined,
-    reason: input.status === 'cancelled' ? input.cancelReason : undefined,
+    // The confirmation email carries the shelter's visit date + message; a
+    // decline/cancellation carries the reason instead.
+    reason: input.status === 'cancelled' ? input.cancelReason : input.message,
   }).catch(() => {});
 
   return mapVisitThread({

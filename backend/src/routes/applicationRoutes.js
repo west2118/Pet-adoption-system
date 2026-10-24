@@ -5,7 +5,10 @@ import {
   getMyApplications,
   getMyApplicationSummary,
 } from '../controllers/applicationController.js';
-import { getMyApplicationWaiver } from '../controllers/waiverController.js';
+import {
+  getMyApplicationWaiver,
+  signMyApplicationWaiver,
+} from '../controllers/waiverController.js';
 import { authenticate } from '../middlewares/authenticate.js';
 import { authorize } from '../middlewares/authorize.js';
 import { validate } from '../middlewares/validate.js';
@@ -14,6 +17,7 @@ import {
   cancelApplicationSchema,
   createApplicationSchema,
 } from '../validators/applicationValidator.js';
+import { signWaiverSchema } from '../validators/waiverValidator.js';
 
 export const applicationRoutes = Router();
 
@@ -52,4 +56,12 @@ applicationRoutes.get(
   authorize('adopter'),
   validate(uuidParam, 'params'),
   getMyApplicationWaiver,
+);
+applicationRoutes.post(
+  '/:id/waiver/sign',
+  authenticate,
+  authorize('adopter'),
+  validate(uuidParam, 'params'),
+  validate(signWaiverSchema),
+  signMyApplicationWaiver,
 );

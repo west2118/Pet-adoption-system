@@ -165,6 +165,7 @@ const STATUS_CHIPS = {
   Adopted: ['#dbeafe', '#1e40af'],
   Rejected: ['#fee2e2', '#991b1b'],
   Cancelled: ['#f3f4f6', '#4b5563'],
+  Returned: ['#fef3c7', '#92400e'],
   Closed: ['#f3f4f6', '#4b5563'],
 };
 
@@ -264,17 +265,46 @@ const DECISION_TITLES = {
   Adopted: 'Your adoption is complete',
   Rejected: 'Update on your application',
   Cancelled: 'Your application was cancelled',
+  Returned: 'Your adoption has ended',
+};
+
+/** "Monday, November 2, 2026 at 10:00 AM" — the clinic appointment as scheduled. */
+const formatPickup = (value) => {
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+  return date.toLocaleString('en-US', {
+    weekday: 'long',
+    month: 'long',
+    day: 'numeric',
+    year: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  });
+};
+
+/** Pickup appointment + contact address, shown on the approval email. */
+const pickupNotice = (pickupAt, pickupEmail) => {
+  const when = formatPickup(pickupAt);
+  if (!when) return '';
+  const contact = pickupEmail
+    ? `<br /><strong>Clinic email:</strong> <a href="mailto:${escapeHtml(pickupEmail)}" style="color:${BRAND.accentInk};">${escapeHtml(pickupEmail)}</a>`
+    : '';
+  return note(`<strong>Pickup scheduled:</strong> ${escapeHtml(when)}${contact}`);
 };
 
 const DECISION_COPY = {
-  Approved: (petName) =>
-    `Great news — your application to adopt <strong>${petName}</strong> has been approved! The shelter will get in touch with you to arrange the next steps.`,
+  Approved: (petName, { pickupScheduled = false } = {}) =>
+    pickupScheduled
+      ? `Great news — your application to adopt <strong>${petName}</strong> has been approved! Your pickup at the clinic is scheduled below.`
+      : `Great news — your application to adopt <strong>${petName}</strong> has been approved! The shelter will get in touch with you to arrange the next steps.`,
   Adopted: (petName) =>
     `<strong>${petName}</strong> has been adopted — thank you for giving them a home. Your application is now complete.`,
   Rejected: (petName) =>
     `After reviewing your application for <strong>${petName}</strong>, the shelter is unable to move forward with it this time.`,
   Cancelled: (petName) =>
     `Your application to adopt <strong>${petName}</strong> has been cancelled. You can apply again whenever you are ready.`,
+  Returned: (petName) =>
+    `<strong>${petName}</strong> has been returned to the shelter, so your adoption has ended. ${petName} is available for adoption again.`,
 };
 
 /** Final decision on an application: Approved / Adopted / Rejected. */
@@ -286,11 +316,15 @@ export const applicationDecisionHtml = ({
   appUrl,
   /** Adopter withdrew it themselves, so the note is theirs, not the shelter's. */
   cancelledByApplicant = false,
+  /** Scheduled clinic pickup (approval only). */
+  pickupAt = null,
+  pickupEmail = null,
 }) => {
   const copy = DECISION_COPY[status];
   if (!copy) {
     throw new Error(`Unsupported application decision: ${status}`);
   }
+  const pickup = status === 'Approved' ? pickupNotice(pickupAt, pickupEmail) : '';
   const noteLabel =
     status === 'Cancelled' && cancelledByApplicant ? 'Your note' : 'From the shelter';
   return renderEmail({
@@ -299,7 +333,8 @@ export const applicationDecisionHtml = ({
     content: [
       chipFor(status),
       paragraph(`Hi ${escapeHtml(name)},`),
-      paragraph(copy(escapeHtml(petName))),
+      paragraph(copy(escapeHtml(petName), { pickupScheduled: Boolean(pickup) })),
+      pickup,
       staffNote
         ? note(`<strong>${noteLabel}:</strong> ${escapeHtml(staffNote)}`)
         : '',

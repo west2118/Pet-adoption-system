@@ -7,8 +7,8 @@ describe('visit request status transitions (no database required)', () => {
     assert.deepEqual([...VISIT_TRANSITIONS.requested].sort(), ['cancelled', 'confirmed']);
   });
 
-  it('a confirmed visit can be completed or cancelled', () => {
-    assert.deepEqual([...VISIT_TRANSITIONS.confirmed].sort(), ['cancelled', 'completed']);
+  it('a confirmed visit can be re-confirmed (reschedule), completed, or cancelled', () => {
+    assert.deepEqual([...VISIT_TRANSITIONS.confirmed].sort(), ['cancelled', 'completed', 'confirmed']);
   });
 
   it('completed and cancelled are terminal', () => {

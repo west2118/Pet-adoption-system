@@ -1,4 +1,4 @@
-import { Check, Eye, FileSignature, Lock, Pencil, Plus, Search } from 'lucide-react';
+import { Eye, FileSignature, Lock, Pencil, Plus, Search, Trash2 } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 import type { FormEvent } from 'react';
 import { toast } from 'react-toastify';
@@ -26,6 +26,7 @@ import { Badge } from '@/components/ui/Badge';
 import { Input, Label, Select } from '@/components/ui/Form';
 import { Button } from '@/components/ui/button';
 import { EmptyState } from '@/components/ui/Feedback';
+import { ConfirmDeleteModal } from '@/components/shared/ConfirmDeleteModal';
 import { CustomWaiverTemplateDocument } from '@/components/features/CustomWaiverTemplateDocument';
 import { WaiverPrintDocument } from '@/components/features/WaiverPrintDocument';
 import { WaiverTemplateEditor } from '@/components/features/WaiverTemplateEditor';
@@ -34,7 +35,7 @@ import { waiverService } from '@/services/waiverService';
 import { useAuth } from '@/hooks/useAuth';
 import { usePets, useShelters } from '@/hooks/useData';
 import { formatWaiverBodyPreview } from '@/lib/waiverContent';
-import type { Pet, Shelter, Waiver, WaiverTemplate, WaiverTemplateStatus } from '@/types';
+import type { Pet, Shelter, Waiver, WaiverTemplate } from '@/types';
 import { formatDate } from '@/utils/formatters';
 
 const CATEGORY_OPTIONS = [
@@ -46,16 +47,10 @@ const CATEGORY_OPTIONS = [
   { value: 'General', label: 'General' },
 ];
 
-const STATUS_OPTIONS = [
-  { value: 'Active', label: 'Active' },
-  { value: 'Draft', label: 'Draft' },
-];
-
 const emptyForm = {
   name: '',
   category: 'Adoption',
   body: '',
-  status: 'Active' as WaiverTemplateStatus,
 };
 
 export const ShelterEWaiversPage = () => {
@@ -75,6 +70,8 @@ export const ShelterEWaiversPage = () => {
   const [isSaving, setIsSaving] = useState(false);
   const [form, setForm] = useState(emptyForm);
   const [formErrors, setFormErrors] = useState<{ name?: string; body?: string }>({});
+  const [pendingDelete, setPendingDelete] = useState<WaiverTemplate | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   const fetchTemplates = useCallback(async () => {
     setLoading(true);
@@ -176,10 +173,22 @@ export const ShelterEWaiversPage = () => {
             category: template.category,
             body: template.body,
             isDefault: template.isDefault,
+            updatedAt: now,
           },
         ],
         issuedAt: now,
+        version: 1,
+        generatedAt: now,
+        generatedBy: { id: null, name: 'Sample preview' },
       },
+      status: 'Issued',
+      version: 1,
+      generatedAt: now,
+      generatedBy: { id: null, name: 'Sample preview' },
+      signedAt: null,
+      signedBy: null,
+      signedByName: null,
+      signatureName: null,
       createdAt: now,
       updatedAt: now,
     };
@@ -210,20 +219,25 @@ export const ShelterEWaiversPage = () => {
       name: template.name,
       category: template.category,
       body: template.body,
-      status: template.status,
     });
     setFormErrors({});
     setEditorOpen(true);
   };
 
-  const toggleStatus = async (template: WaiverTemplate) => {
-    const next: WaiverTemplateStatus = template.status === 'Active' ? 'Draft' : 'Active';
+  /** Only shelter-created templates can be removed; defaults are locked. */
+  const removeTemplate = async () => {
+    if (!pendingDelete) return;
+    setIsDeleting(true);
     try {
-      const updated = await waiverService.updateTemplate(template.id, { status: next });
-      setTemplates((prev) => prev.map((t) => (t.id === updated.id ? updated : t)));
-      toast.success(`"${template.name}" is now ${next.toLowerCase()}.`);
+      await waiverService.deleteTemplate(pendingDelete.id);
+      toast.success(`"${pendingDelete.name}" deleted.`);
+      setPendingDelete(null);
+      setDetailsId(null);
+      await fetchTemplates();
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : 'Failed to update template.');
+      toast.error(err instanceof ApiError ? err.message : 'Failed to delete template.');
+    } finally {
+      setIsDeleting(false);
     }
   };
 
@@ -248,7 +262,6 @@ export const ShelterEWaiversPage = () => {
           name: form.name.trim(),
           category: form.category,
           body: form.body.trim(),
-          status: form.status,
         });
         setTemplates((prev) => prev.map((t) => (t.id === updated.id ? updated : t)));
         toast.success(`"${updated.name}" updated successfully!`);
@@ -257,7 +270,6 @@ export const ShelterEWaiversPage = () => {
           name: form.name.trim(),
           category: form.category,
           body: form.body.trim(),
-          status: form.status,
         });
         setTemplates((prev) => [...prev, created]);
         toast.success(`"${created.name}" created successfully!`);
@@ -355,13 +367,12 @@ export const ShelterEWaiversPage = () => {
                       <TableHead>Template</TableHead>
                       <TableHead>Category</TableHead>
                       <TableHead>Last updated</TableHead>
-                      <TableHead>Status</TableHead>
                       <TableHead className="text-center">Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {loading ? (
-                      <TableSkeletonRows columns={5} rows={5} />
+                      <TableSkeletonRows columns={4} rows={5} />
                     ) : templates.map((template) => (
                       <TableRow key={template.id}>
                         <TableCell>
@@ -382,11 +393,6 @@ export const ShelterEWaiversPage = () => {
                         </TableCell>
                         <TableCell className="whitespace-nowrap text-muted-foreground">
                           {formatDate(template.updatedAt)}
-                        </TableCell>
-                        <TableCell>
-                          <Badge variant={template.status === 'Active' ? 'success' : 'muted'}>
-                            {template.status}
-                          </Badge>
                         </TableCell>
                         <TableCell className="text-center">
                           <div className="flex justify-center gap-1">
@@ -413,15 +419,11 @@ export const ShelterEWaiversPage = () => {
                                 <Button
                                   variant="ghost"
                                   size="icon-sm"
-                                  className={
-                                    template.status === 'Active'
-                                      ? 'text-muted-foreground'
-                                      : 'text-green-600 hover:bg-green-50 hover:text-green-700 dark:text-green-400 dark:hover:bg-green-950/40'
-                                  }
-                                  aria-label={`${template.status === 'Active' ? 'Deactivate' : 'Activate'} ${template.name}`}
-                                  onClick={() => toggleStatus(template)}
+                                  className="text-red-600 hover:bg-red-50 hover:text-red-700 dark:text-red-400 dark:hover:bg-red-950/40"
+                                  aria-label={`Delete ${template.name}`}
+                                  onClick={() => setPendingDelete(template)}
                                 >
-                                  <Check className="size-4" />
+                                  <Trash2 className="size-4" />
                                 </Button>
                               </>
                             )}
@@ -443,18 +445,13 @@ export const ShelterEWaiversPage = () => {
                     title={template.name}
                     subtitle={`${template.category} · ${formatDate(template.updatedAt)}`}
                     badges={
-                      <>
-                        <Badge variant={template.status === 'Active' ? 'success' : 'muted'}>
-                          {template.status}
+                      template.isDefault ? (
+                        <Badge variant="info">Default</Badge>
+                      ) : (
+                        <Badge variant="muted">
+                          <Lock className="size-3" aria-hidden="true" /> Private
                         </Badge>
-                        {template.isDefault ? (
-                          <Badge variant="info">Default</Badge>
-                        ) : (
-                          <Badge variant="muted">
-                            <Lock className="size-3" aria-hidden="true" /> Private
-                          </Badge>
-                        )}
-                      </>
+                      )
                     }
                     actions={
                       <>
@@ -468,15 +465,26 @@ export const ShelterEWaiversPage = () => {
                           <Eye className="size-4" />
                         </Button>
                         {!template.isDefault && (
-                          <Button
-                            variant="ghost"
-                            size="icon-sm"
-                            className="text-blue-600 hover:bg-blue-50 hover:text-blue-700 dark:text-blue-400 dark:hover:bg-blue-950/40"
-                            aria-label={`Edit ${template.name}`}
-                            onClick={() => openEdit(template)}
-                          >
-                            <Pencil className="size-4" />
-                          </Button>
+                          <>
+                            <Button
+                              variant="ghost"
+                              size="icon-sm"
+                              className="text-blue-600 hover:bg-blue-50 hover:text-blue-700 dark:text-blue-400 dark:hover:bg-blue-950/40"
+                              aria-label={`Edit ${template.name}`}
+                              onClick={() => openEdit(template)}
+                            >
+                              <Pencil className="size-4" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon-sm"
+                              className="text-red-600 hover:bg-red-50 hover:text-red-700 dark:text-red-400 dark:hover:bg-red-950/40"
+                              aria-label={`Delete ${template.name}`}
+                              onClick={() => setPendingDelete(template)}
+                            >
+                              <Trash2 className="size-4" />
+                            </Button>
+                          </>
                         )}
                       </>
                     }
@@ -561,25 +569,14 @@ export const ShelterEWaiversPage = () => {
               error={formErrors.name}
             />
           </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <Label>Category</Label>
-              <Select
-                value={form.category}
-                onChange={(e) => setForm({ ...form, category: e.target.value })}
-                required
-                options={CATEGORY_OPTIONS}
-              />
-            </div>
-            <div>
-              <Label>Status</Label>
-              <Select
-                value={form.status}
-                onChange={(e) => setForm({ ...form, status: e.target.value as WaiverTemplateStatus })}
-                required
-                options={STATUS_OPTIONS}
-              />
-            </div>
+          <div>
+            <Label>Category</Label>
+            <Select
+              value={form.category}
+              onChange={(e) => setForm({ ...form, category: e.target.value })}
+              required
+              options={CATEGORY_OPTIONS}
+            />
           </div>
 
           <div className="grid gap-4 lg:grid-cols-2">
@@ -666,9 +663,6 @@ export const ShelterEWaiversPage = () => {
         {detailsTemplate && (
           <div className="space-y-4">
             <div className="flex flex-wrap items-center gap-1.5">
-              <Badge variant={detailsTemplate.status === 'Active' ? 'success' : 'muted'}>
-                {detailsTemplate.status}
-              </Badge>
               <Badge variant="muted">Updated {formatDate(detailsTemplate.updatedAt)}</Badge>
               {detailsTemplate.isDefault ? (
                 <Badge variant="info">
@@ -697,6 +691,17 @@ export const ShelterEWaiversPage = () => {
           </div>
         )}
       </DetailsModal>
+
+      <ConfirmDeleteModal
+        open={pendingDelete !== null}
+        onClose={() => (isDeleting ? undefined : setPendingDelete(null))}
+        onConfirm={() => void removeTemplate()}
+        title="Delete waiver template?"
+        description="This removes the template from your shelter's catalogue. Already-issued e-waivers keep their own copy and are not affected."
+        itemName={pendingDelete?.name}
+        confirmLabel="Delete template"
+        isDeleting={isDeleting}
+      />
     </div>
   );
 };

@@ -62,11 +62,6 @@ export const CustomWaiverTemplateDocument = ({
               {shelter ? ` · ${shelter.name}` : ''}
             </p>
           </div>
-          <span className="mt-1 shrink-0 rounded border border-teal-600 px-2 py-1 text-center text-[10px] font-extrabold uppercase leading-tight tracking-wide text-teal-700">
-            Shelter template
-            <br />
-            Custom form
-          </span>
         </div>
         <div className="mb-3 mt-1 border-b-2 border-teal-800" />
 

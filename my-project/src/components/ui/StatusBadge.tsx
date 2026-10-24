@@ -1,6 +1,13 @@
 import { cn } from '@/lib/utils';
-import type { ApplicationStatus, PetStatus, PetVisibility, VisitStatus } from '@/types';
+import type { ApplicationStatus, PetStatus, PetVisibility, Species, VisitStatus } from '@/types';
 import { Badge } from './Badge';
+
+/** Species pill — keeps the shelter inventory scannable at a glance. */
+export const SpeciesBadge = ({ species }: { species: Species }) => (
+  <Badge variant="info" className="capitalize">
+    {species}
+  </Badge>
+);
 
 export const PetStatusBadge = ({ status }: { status: PetStatus }) => {
   return (
@@ -25,7 +32,7 @@ export const ApplicationStatusBadge = ({ status }: { status: ApplicationStatus }
   const variant =
     status === 'Approved' || status === 'Adopted'
       ? 'success'
-      : status === 'Under Review'
+      : status === 'Under Review' || status === 'Returned'
         ? 'warning'
         : status === 'Rejected'
           ? 'destructive'

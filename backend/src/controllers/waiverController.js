@@ -1,10 +1,13 @@
 import {
   createWaiverTemplate,
+  deleteWaiverTemplate,
   generateWaiver,
   getAdopterWaiver,
   getWaiver,
   getWaiverForApplication,
   listWaiverTemplates,
+  listWaiverVersions,
+  signWaiver,
   updateWaiverTemplate,
 } from '../services/waiverService.js';
 import { sendSuccess, buildMeta } from '../utils/respond.js';
@@ -33,9 +36,29 @@ export const editWaiverTemplate = async (req, res) => {
   return sendSuccess(res, { template }, 'Waiver template updated successfully.');
 };
 
+export const removeWaiverTemplate = async (req, res) => {
+  const result = await deleteWaiverTemplate(req.params.id, req.user.shelterId);
+  return sendSuccess(res, result, 'Waiver template deleted successfully.');
+};
+
 export const generateApplicationWaiver = async (req, res) => {
-  const waiver = await generateWaiver(req.params.id, req.user.shelterId, req.body.templateIds);
+  const waiver = await generateWaiver(
+    req.params.id,
+    req.user.shelterId,
+    req.body.templateIds,
+    req.user.id,
+  );
   return sendSuccess(res, { waiver }, 'E-waiver generated successfully.', undefined, 201);
+};
+
+export const getApplicationWaiverVersions = async (req, res) => {
+  const versions = await listWaiverVersions(req.params.id, req.user.shelterId);
+  return sendSuccess(res, { versions });
+};
+
+export const signMyApplicationWaiver = async (req, res) => {
+  const waiver = await signWaiver(req.params.id, req.user.id, req.body);
+  return sendSuccess(res, { waiver }, 'E-waiver signed successfully.');
 };
 
 export const getApplicationWaiver = async (req, res) => {

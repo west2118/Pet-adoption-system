@@ -1,12 +1,13 @@
 import { apiRequest, apiRequestWithMeta } from '@/lib/apiClient';
 import type { PaginatedResult } from '@/services/api';
-import type { Waiver, WaiverTemplate, WaiverTemplateStatus } from '@/types';
+import type { Waiver, WaiverTemplate, WaiverTemplateStatus, WaiverVersion } from '@/types';
 
 export interface WaiverTemplateInput {
   name: string;
   category: string;
   body: string;
-  status: WaiverTemplateStatus;
+  /** Draft/Active is no longer a workflow — new templates are Active. */
+  status?: WaiverTemplateStatus;
 }
 
 /**
@@ -17,10 +18,21 @@ export interface WaiverTemplateInput {
  * - Adopter: GET /applications/:id/waiver (own applications only)
  */
 export const listWaiverTemplates = async (): Promise<WaiverTemplate[]> => {
-  const { templates } = await apiRequest<{ templates: WaiverTemplate[] }>(
-    '/shelter/waiver-templates',
-    { auth: 'full' },
-  );
+  // The picker needs the complete catalogue: hiding the only Active Adoption
+  // template behind the default page size would silently block generation.
+  const templates: WaiverTemplate[] = [];
+  let page = 1;
+  let total = Number.POSITIVE_INFINITY;
+  while (templates.length < total && page <= 50) {
+    const { data, meta } = await apiRequestWithMeta<{ templates: WaiverTemplate[] }>(
+      `/shelter/waiver-templates?page=${page}&limit=100`,
+      { auth: 'full' },
+    );
+    templates.push(...data.templates);
+    total = meta?.total ?? templates.length;
+    if (data.templates.length === 0) break;
+    page += 1;
+  }
   return templates;
 };
 
@@ -71,6 +83,13 @@ export const updateWaiverTemplate = async (
   return template;
 };
 
+export const deleteWaiverTemplate = async (id: string): Promise<void> => {
+  await apiRequest<{ id: string }>(
+    `/shelter/waiver-templates/${encodeURIComponent(id)}`,
+    { method: 'DELETE', auth: 'full' },
+  );
+};
+
 export const generateApplicationWaiver = async (
   applicationId: string,
   templateIds: string[],
@@ -105,13 +124,43 @@ export const getMyApplicationWaiver = async (applicationId: string): Promise<Wai
   return waiver;
 };
 
+export interface WaiverSignatureInput {
+  /** Full legal name typed by the adopter. */
+  signatureName: string;
+  consent: boolean;
+}
+
+export const signMyApplicationWaiver = async (
+  applicationId: string,
+  input: WaiverSignatureInput,
+): Promise<Waiver> => {
+  const { waiver } = await apiRequest<{ waiver: Waiver }>(
+    `/applications/${encodeURIComponent(applicationId)}/waiver/sign`,
+    { method: 'POST', body: input, auth: 'full' },
+  );
+  return waiver;
+};
+
+export const listApplicationWaiverVersions = async (
+  applicationId: string,
+): Promise<WaiverVersion[]> => {
+  const { versions } = await apiRequest<{ versions: WaiverVersion[] }>(
+    `/shelter/applications/${encodeURIComponent(applicationId)}/waiver/versions`,
+    { auth: 'full' },
+  );
+  return versions;
+};
+
 export const waiverService = {
   listTemplates: listWaiverTemplates,
   listTemplatesPaginated: listWaiverTemplatesPaginated,
   createTemplate: createWaiverTemplate,
   updateTemplate: updateWaiverTemplate,
+  deleteTemplate: deleteWaiverTemplate,
   generateForApplication: generateApplicationWaiver,
   getApplicationWaiver,
   getShelterWaiver,
   getMyWaiver: getMyApplicationWaiver,
+  signMyWaiver: signMyApplicationWaiver,
+  listVersions: listApplicationWaiverVersions,
 };

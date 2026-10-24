@@ -21,9 +21,12 @@ export const createApplication = async (input, applicantId) => {
 
 export const findApplicationById = async (id) => {
   const { rows } = await pool.query(
-    `SELECT a.*, p.name AS pet_name, p.image_url AS pet_image, p.breed AS pet_breed
+    `SELECT a.*, p.name AS pet_name, p.image_url AS pet_image, p.breed AS pet_breed,
+            w.status AS waiver_status, w.version AS waiver_version,
+            w.signed_at AS waiver_signed_at
        FROM adoption_applications a
        JOIN pets p ON p.id = a.pet_id
+       LEFT JOIN waivers w ON w.application_id = a.id
       WHERE a.id = $1`,
     [id],
   );
@@ -40,9 +43,12 @@ export const getApplicationHistory = async (applicationId, client = pool) => {
 
 export const listApplicationsByApplicant = async (applicantId, { limit, offset }) => {
   const { rows } = await pool.query(
-    `SELECT a.*, p.name AS pet_name, p.image_url AS pet_image, p.breed AS pet_breed
+    `SELECT a.*, p.name AS pet_name, p.image_url AS pet_image, p.breed AS pet_breed,
+            w.status AS waiver_status, w.version AS waiver_version,
+            w.signed_at AS waiver_signed_at
        FROM adoption_applications a
        JOIN pets p ON p.id = a.pet_id
+       LEFT JOIN waivers w ON w.application_id = a.id
       WHERE a.applicant_id = $1
       ORDER BY a.submitted_at DESC LIMIT $2 OFFSET $3`,
     [applicantId, limit, offset],
@@ -92,9 +98,12 @@ export const listApplicationsByShelter = async (shelterId, { limit = 10, offset 
   }
   const where = `WHERE ${conditions.join(' AND ')}`;
   const { rows } = await pool.query(
-    `SELECT a.*, p.name AS pet_name, p.image_url AS pet_image, p.breed AS pet_breed
+    `SELECT a.*, p.name AS pet_name, p.image_url AS pet_image, p.breed AS pet_breed,
+            w.status AS waiver_status, w.version AS waiver_version,
+            w.signed_at AS waiver_signed_at
      FROM adoption_applications a
      JOIN pets p ON a.pet_id = p.id
+     LEFT JOIN waivers w ON w.application_id = a.id
      ${where}
      ORDER BY a.submitted_at DESC LIMIT $${values.length + 1} OFFSET $${values.length + 2}`,
     [...values, limit, offset],

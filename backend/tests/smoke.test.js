@@ -64,6 +64,27 @@ describe('smoke (no database required)', () => {
     assert.equal(res.status, 401);
   });
 
+  it('POST /applications/:id/waiver/sign without token returns 401', async () => {
+    const res = await request
+      .post('/api/v1/applications/00000000-0000-0000-0000-000000000000/waiver/sign')
+      .send({ signatureName: 'Test Adopter', consent: true });
+    assert.equal(res.status, 401);
+  });
+
+  it('POST /shelter/applications/:id/waiver without token returns 401', async () => {
+    const res = await request
+      .post('/api/v1/shelter/applications/00000000-0000-0000-0000-000000000000/waiver')
+      .send({ templateIds: [] });
+    assert.equal(res.status, 401);
+  });
+
+  it('GET /shelter/applications/:id/waiver/versions without token returns 401', async () => {
+    const res = await request.get(
+      '/api/v1/shelter/applications/00000000-0000-0000-0000-000000000000/waiver/versions',
+    );
+    assert.equal(res.status, 401);
+  });
+
   it('GET /admin/stats without token returns 401', async () => {
     const res = await request.get('/api/v1/admin/stats');
     assert.equal(res.status, 401);

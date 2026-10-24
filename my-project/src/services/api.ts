@@ -337,6 +337,10 @@ export const listMyListingsPaginated = async (options: {
   limit?: number;
   search?: string;
   visibility?: string;
+  /** Server-side species filter (`all` or a species value). */
+  species?: string;
+  /** Server-side status filter (`all` or a PetStatus). */
+  status?: string;
   shelterId?: string | null;
 } = {}): Promise<PaginatedResult<Pet>> => {
   const page = options.page ?? 1;
@@ -348,6 +352,8 @@ export const listMyListingsPaginated = async (options: {
       queryParams.set('limit', String(limit));
       if (options.search) queryParams.set('search', options.search);
       if (options.visibility && options.visibility !== 'all') queryParams.set('visibility', options.visibility);
+      if (options.species && options.species !== 'all') queryParams.set('species', options.species);
+      if (options.status && options.status !== 'all') queryParams.set('status', options.status);
 
       const { data, meta } = await apiRequestWithMeta<PetsListResponse>(
         `/shelter/listings?${queryParams.toString()}`,
@@ -370,6 +376,12 @@ export const listMyListingsPaginated = async (options: {
   }
   if (options.visibility && options.visibility !== 'all') {
     filtered = filtered.filter((p) => p.visibility === options.visibility);
+  }
+  if (options.species && options.species !== 'all') {
+    filtered = filtered.filter((p) => p.species === options.species);
+  }
+  if (options.status && options.status !== 'all') {
+    filtered = filtered.filter((p) => p.status === options.status);
   }
   if (options.search) {
     const s = options.search.toLowerCase();
@@ -846,6 +858,7 @@ export const updateApplicationStatus = async (
   id: string,
   status: ApplicationStatus,
   note?: string,
+  pickup?: { pickupAt?: string | null; pickupEmail?: string | null },
 ): Promise<AdoptionApplication | undefined> => {
   await delay();
   const now = new Date().toISOString().slice(0, 10);
@@ -871,6 +884,15 @@ export const updateApplicationStatus = async (
         ...a,
         status,
         updatedAt: now,
+        // Approval carries the pickup appointment; cancelling clears it.
+        pickupAt:
+          status === 'Approved' ? (pickup?.pickupAt ?? null) : status === 'Cancelled' ? null : a.pickupAt,
+        pickupEmail:
+          status === 'Approved'
+            ? (pickup?.pickupEmail ?? null)
+            : status === 'Cancelled'
+              ? null
+              : a.pickupEmail,
         staffNotes: note ?? a.staffNotes,
         history: [...a.history, { status, date: now, note }],
       };

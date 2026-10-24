@@ -7,6 +7,7 @@ import {
   HeartHandshake,
   Printer,
   Search,
+  Undo2,
   X,
 } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -30,14 +31,16 @@ import {
   TableRow,
 } from '@/components/ui/Table';
 import { Input, Label, Select, Textarea } from '@/components/ui/Form';
+import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/button';
 import { ApplicationStatusBadge } from '@/components/ui/StatusBadge';
+import { useAuth } from '@/hooks/useAuth';
 import { usePets } from '@/hooks/useData';
 import { applicationService } from '@/services/api';
 import { adoptionApplicationService } from '@/services/adoptionApplicationService';
-import { sessionStore } from '@/lib/apiClient';
+import { ApiError, sessionStore } from '@/lib/apiClient';
 import type { AdoptionApplication, ApplicationStatus } from '@/types';
-import { formatDate } from '@/utils/formatters';
+import { formatDate, formatDateTime } from '@/utils/formatters';
 
 const STATUS_FILTER_OPTIONS = [
   { value: 'all', label: 'All statuses' },
@@ -47,10 +50,68 @@ const STATUS_FILTER_OPTIONS = [
   { value: 'Rejected', label: 'Rejected' },
   { value: 'Cancelled', label: 'Cancelled' },
   { value: 'Adopted', label: 'Adopted' },
+  { value: 'Returned', label: 'Returned' },
 ];
+
+/**
+ * What the shelter is about to do. `Return` reverses a completed handover and
+ * is persisted as the application's `Cancelled` status.
+ */
+type DecisionAction = 'Approved' | 'Rejected' | 'Cancelled' | 'Adopted' | 'Return';
+
+const waiverStatusOf = (app: AdoptionApplication) => app.waiverStatus ?? 'None';
+
+/** Small at-a-glance handover-document state used in tables, cards, details. */
+const WaiverStatusIndicator = ({ app }: { app: AdoptionApplication }) => {
+  const status = waiverStatusOf(app);
+  if (status === 'Signed') {
+    return (
+      <Badge
+        variant="success"
+        title={
+          app.waiverSignedAt
+            ? `Signed ${formatDateTime(app.waiverSignedAt)}`
+            : 'Signed waiver on file'
+        }
+      >
+        Signed{app.waiverVersion ? ` v${app.waiverVersion}` : ''}
+      </Badge>
+    );
+  }
+  if (status === 'Issued') {
+    return (
+      <Badge variant="info" title="Issued but waiting for the adopter's signature">
+        Issued{app.waiverVersion ? ` v${app.waiverVersion}` : ''}
+      </Badge>
+    );
+  }
+  if (app.status === 'Adopted') {
+    return (
+      <Badge variant="destructive" title="Adopted without handover documents on file">
+        Missing
+      </Badge>
+    );
+  }
+  if (app.status === 'Approved') {
+    return (
+      <Badge variant="warning" title="Generate the waiver before completing the adoption">
+        Not issued
+      </Badge>
+    );
+  }
+  return <span className="text-xs text-muted-foreground">—</span>;
+};
+
+/** `datetime-local` value for "now" in the browser's own timezone. */
+const nowForDateTimeInput = () => {
+  const d = new Date();
+  d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
+  return d.toISOString().slice(0, 16);
+};
 
 export const ShelterApplicationsPage = () => {
   const { pets, setPets } = usePets();
+  const { user } = useAuth();
 
   const [applications, setApplications] = useState<AdoptionApplication[]>([]);
   const [totalApplications, setTotalApplications] = useState<number>(0);
@@ -62,11 +123,20 @@ export const ShelterApplicationsPage = () => {
   const [detailsApp, setDetailsApp] = useState<AdoptionApplication | null>(null);
   const [decision, setDecision] = useState<{
     app: AdoptionApplication;
-    status: 'Approved' | 'Rejected' | 'Cancelled';
+    action: DecisionAction;
   } | null>(null);
   const [decisionNote, setDecisionNote] = useState('');
+  // Pickup appointment collected before an application is approved.
+  const [pickupAt, setPickupAt] = useState('');
+  const [pickupEmail, setPickupEmail] = useState('');
   const [deciding, setDeciding] = useState(false);
   const [waiverAppId, setWaiverAppId] = useState<string | null>(null);
+  // When adoption is requested before a waiver exists, the waiver modal opens
+  // first and this pending record completes the status change after issue.
+  const [pendingAdoption, setPendingAdoption] = useState<{
+    id: string;
+    note: string;
+  } | null>(null);
   // Opening details of a Submitted application moves it to Under Review once.
   const pendingReview = useRef<Set<string>>(new Set());
 
@@ -89,6 +159,8 @@ export const ShelterApplicationsPage = () => {
   }, [page, pageSize, statusFilter, query]);
 
   useEffect(() => {
+    // Initial load and filter/search changes; refresh owns the loading flag.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     refresh();
   }, [refresh]);
 
@@ -96,7 +168,12 @@ export const ShelterApplicationsPage = () => {
     ? (applications.find((a) => a.id === waiverAppId) ?? null)
     : null;
 
-  const handleStatusChange = async (id: string, status: ApplicationStatus, note?: string) => {
+  const handleStatusChange = async (
+    id: string,
+    status: ApplicationStatus,
+    note?: string,
+    pickup?: { pickupAt: string; pickupEmail: string },
+  ) => {
     // Local mirror of the server rule: accepting one application auto-rejects
     // the other open ones for the same pet and moves the pet itself, so the
     // table stays correct without a refetch.
@@ -138,8 +215,8 @@ export const ShelterApplicationsPage = () => {
         setPets((prev) => prev.map((p) => (p.id === updated.petId ? { ...p, status: petStatus } : p)));
       } else {
         setApplications((prev) => prev.map((a) => (a.id === id ? updated : a)));
-        if (status === 'Cancelled') {
-          // A cancelled adoption returns the pet to the adoptable pool.
+        if (status === 'Cancelled' || status === 'Returned') {
+          // A cancelled or returned adoption puts the pet back in the pool.
           setPets((prev) =>
             prev.map((p) => (p.id === updated.petId ? { ...p, status: 'Available' } : p)),
           );
@@ -158,6 +235,7 @@ export const ShelterApplicationsPage = () => {
             id,
             status,
             note ?? 'Updated by staff',
+            pickup,
           );
           const autoRejected = syncAcceptanceSideEffects(updated);
           toast.success(`Application ${status.toLowerCase()}!`);
@@ -167,7 +245,13 @@ export const ShelterApplicationsPage = () => {
             );
           }
           return true;
-        } catch {
+        } catch (err) {
+          // Surface real server rules (e.g. a missing waiver) instead of
+          // completing the action against the demo store.
+          if (err instanceof ApiError && ![0, 401, 403].includes(err.status)) {
+            toast.error(err.message);
+            return false;
+          }
           // fall through to the local mock store (demo mode / unreachable API)
         }
       }
@@ -175,6 +259,7 @@ export const ShelterApplicationsPage = () => {
         id,
         status,
         note ?? 'Updated by staff',
+        pickup,
       );
       if (updated) {
         const autoRejected = syncAcceptanceSideEffects(updated);
@@ -194,36 +279,91 @@ export const ShelterApplicationsPage = () => {
   };
 
   /**
-   * Approve / reject / cancel adoption are decisions, not one-click toggles —
-   * confirm them in a modal first (with an optional note that is emailed).
+   * Approve / reject / cancel adoption / complete the handover are decisions,
+   * not one-click toggles — confirm them in a modal first (with an optional note
+   * that is emailed).
    */
-  const requestDecision = (
-    app: AdoptionApplication,
-    status: 'Approved' | 'Rejected' | 'Cancelled',
-  ) => {
+  const requestDecision = (app: AdoptionApplication, action: DecisionAction) => {
     setDetailsApp(null);
     setDecisionNote('');
-    setDecision({ app, status });
+    // Approving books the clinic pickup, so start from an empty appointment and
+    // the signed-in staff address as the default contact.
+    setPickupAt('');
+    setPickupEmail(action === 'Approved' ? (user?.email ?? '') : '');
+    setDecision({ app, action });
   };
 
   const confirmDecision = async () => {
     if (!decision) return;
-    setDeciding(true);
+
+    // Handover documents are mandatory. If none exist yet, open the waiver
+    // builder first; `handleWaiverGenerated` finishes the adoption afterwards.
+    const currentApp = applications.find((app) => app.id === decision.app.id) ?? decision.app;
+    if (decision.action === 'Adopted' && waiverStatusOf(currentApp) === 'None') {
+      setDecision(null);
+      setDetailsApp(null);
+      setPendingAdoption({
+        id: decision.app.id,
+        note: decisionNote.trim() || 'Adoption completed by shelter',
+      });
+      setDecisionNote('');
+      setPickupAt('');
+      setPickupEmail('');
+      setWaiverAppId(decision.app.id);
+      return;
+    }
+
+    let pickup: { pickupAt: string; pickupEmail: string } | undefined;
+    if (decision.action === 'Approved') {
+      const email = pickupEmail.trim();
+      if (!pickupAt) {
+        toast.error('Choose the date and time the adopter can pick up the pet.');
+        return;
+      }
+      if (!email) {
+        toast.error('Enter the email the adopter should contact about the pickup.');
+        return;
+      }
+      const when = new Date(pickupAt);
+      // Event-handler validation: compare against the current clock once.
+      // eslint-disable-next-line react-hooks/purity
+      if (Number.isNaN(when.getTime()) || when.getTime() <= Date.now()) {
+        toast.error('The pickup date and time must be in the future.');
+        return;
+      }
+      pickup = { pickupAt: when.toISOString(), pickupEmail: email };
+    }
+
+    const nextStatus: ApplicationStatus =
+      decision.action === 'Return' ? 'Returned' : decision.action;
     const fallbackNote =
-      decision.status === 'Approved'
+      decision.action === 'Approved'
         ? 'Application approved by shelter'
-        : decision.status === 'Rejected'
-          ? 'Application rejected by shelter'
-          : 'Adoption cancelled by shelter';
+        : decision.action === 'Adopted'
+          ? 'Adoption completed by shelter'
+          : decision.action === 'Rejected'
+            ? 'Application rejected by shelter'
+            : decision.action === 'Return'
+              ? 'Adopted pet returned to the shelter'
+              : 'Adoption cancelled by shelter';
+
+    setDeciding(true);
     const ok = await handleStatusChange(
       decision.app.id,
-      decision.status,
+      nextStatus,
       decisionNote.trim() || fallbackNote,
+      pickup,
     );
     setDeciding(false);
     if (ok) {
+      const adoptedId = decision.action === 'Adopted' ? decision.app.id : null;
       setDecision(null);
       setDecisionNote('');
+      setPickupAt('');
+      setPickupEmail('');
+      // Handover complete — open the e-waiver so staff can print the documents
+      // immediately (no navigation).
+      if (adoptedId) openWaiver(adoptedId);
     }
   };
 
@@ -234,12 +374,23 @@ export const ShelterApplicationsPage = () => {
    */
   const openWaiver = (id: string) => {
     setDetailsApp(null);
+    setPendingAdoption(null);
     setWaiverAppId(id);
   };
 
-  const handleMarkAdopted = async (id: string) => {
-    const ok = await handleStatusChange(id, 'Adopted');
-    if (ok) openWaiver(id);
+  /** Complete a pending adoption once the waiver has been issued. */
+  const handleWaiverGenerated = async () => {
+    if (!pendingAdoption) {
+      await refresh();
+      return;
+    }
+    const ok = await handleStatusChange(
+      pendingAdoption.id,
+      'Adopted',
+      pendingAdoption.note,
+    );
+    if (ok) setPendingAdoption(null);
+    await refresh();
   };
 
   const toolbar = (
@@ -312,7 +463,10 @@ export const ShelterApplicationsPage = () => {
     ) : null;
 
   const isTerminal = (app: AdoptionApplication) =>
-    app.status === 'Adopted' || app.status === 'Rejected' || app.status === 'Cancelled';
+    app.status === 'Adopted' ||
+    app.status === 'Rejected' ||
+    app.status === 'Cancelled' ||
+    app.status === 'Returned';
   const isApproved = (app: AdoptionApplication) => app.status === 'Approved';
 
   /** Opening details marks a Submitted application as Under Review. */
@@ -357,8 +511,12 @@ export const ShelterApplicationsPage = () => {
       size="icon-sm"
       className="text-blue-600 hover:bg-blue-50 hover:text-blue-700 dark:text-blue-400 dark:hover:bg-blue-950/40"
       aria-label={`Mark ${app.applicantName} as adopted`}
-      title="Mark as adopted & print e-waiver"
-      onClick={() => handleMarkAdopted(app.id)}
+      title={
+        waiverStatusOf(app) === 'None'
+          ? 'Generate the e-waiver & mark as adopted'
+          : 'Mark as adopted & open e-waiver'
+      }
+      onClick={() => requestDecision(app, 'Adopted')}
     >
       <HeartHandshake className="size-4" />
     </Button>
@@ -374,6 +532,20 @@ export const ShelterApplicationsPage = () => {
       onClick={() => requestDecision(app, 'Cancelled')}
     >
       <Ban className="size-4" />
+    </Button>
+  );
+
+  /** Completed handover → the pet comes back to the shelter (pet Available). */
+  const returnAction = (app: AdoptionApplication) => (
+    <Button
+      variant="ghost"
+      size="icon-sm"
+      className="text-amber-600 hover:bg-amber-50 hover:text-amber-700 dark:text-amber-400 dark:hover:bg-amber-950/40"
+      aria-label={`Return ${petOf(app)?.name ?? 'pet'} to the shelter`}
+      title="Return pet to the shelter"
+      onClick={() => requestDecision(app, 'Return')}
+    >
+      <Undo2 className="size-4" />
     </Button>
   );
 
@@ -409,13 +581,14 @@ export const ShelterApplicationsPage = () => {
                   <TableHead>Pet</TableHead>
                   <TableHead>Applicant</TableHead>
                   <TableHead>Status</TableHead>
+                  <TableHead>Waiver</TableHead>
                   <TableHead>Submitted</TableHead>
                   <TableHead className="text-center">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {loading ? (
-                  <TableSkeletonRows columns={5} rows={5} avatar />
+                  <TableSkeletonRows columns={6} rows={5} avatar />
                 ) : applications.map((app) => {
                   const pet = petOf(app);
                   return (
@@ -446,6 +619,9 @@ export const ShelterApplicationsPage = () => {
                       <TableCell>
                         <ApplicationStatusBadge status={app.status} />
                       </TableCell>
+                      <TableCell>
+                        <WaiverStatusIndicator app={app} />
+                      </TableCell>
                       <TableCell className="whitespace-nowrap text-muted-foreground">
                         {formatDate(app.submittedAt)}
                       </TableCell>
@@ -464,6 +640,13 @@ export const ShelterApplicationsPage = () => {
                             <>
                               {markAdoptedAction(app)}
                               {cancelAdoptionAction(app)}
+                              {waiverAction(app, `Print e-waiver for ${app.applicantName}`)}
+                            </>
+                          ) : app.status === 'Adopted' ? (
+                            // A completed handover can still be reversed when
+                            // the pet is returned to the shelter.
+                            <>
+                              {returnAction(app)}
                               {waiverAction(app, `Print e-waiver for ${app.applicantName}`)}
                             </>
                           ) : isTerminal(app) ? (
@@ -496,7 +679,12 @@ export const ShelterApplicationsPage = () => {
                   imageAlt={pet?.name}
                   title={app.applicantName}
                   subtitle={app.email}
-                  badges={<ApplicationStatusBadge status={app.status} />}
+                  badges={
+                    <>
+                      <ApplicationStatusBadge status={app.status} />
+                      <WaiverStatusIndicator app={app} />
+                    </>
+                  }
                   actions={
                     <>
                       <Button
@@ -512,6 +700,11 @@ export const ShelterApplicationsPage = () => {
                         <>
                           {markAdoptedAction(app)}
                           {cancelAdoptionAction(app)}
+                          {waiverAction(app, `Print e-waiver for ${app.applicantName}`)}
+                        </>
+                      ) : app.status === 'Adopted' ? (
+                        <>
+                          {returnAction(app)}
                           {waiverAction(app, `Print e-waiver for ${app.applicantName}`)}
                         </>
                       ) : isTerminal(app) ? (
@@ -560,9 +753,12 @@ export const ShelterApplicationsPage = () => {
                   <Button
                     size="sm"
                     className="w-full bg-blue-600 text-white hover:bg-blue-700"
-                    onClick={() => handleMarkAdopted(detailsApp.id)}
+                    onClick={() => requestDecision(detailsApp, 'Adopted')}
                   >
-                    <HeartHandshake className="size-4" /> Mark as adopted & print e-waiver
+                    <HeartHandshake className="size-4" />
+                    {waiverStatusOf(detailsApp) === 'None'
+                      ? 'Generate waiver & mark adopted'
+                      : 'Mark as adopted & open e-waiver'}
                   </Button>
                   <Button
                     size="sm"
@@ -573,9 +769,18 @@ export const ShelterApplicationsPage = () => {
                     <Ban className="size-4" /> Cancel adoption
                   </Button>
                 </>
-              ) : detailsApp.status === 'Adopted' ||
-                detailsApp.status === 'Rejected' ||
-                detailsApp.status === 'Cancelled' ? null : (
+              ) : detailsApp.status === 'Adopted' ? (
+                <Button
+                  size="sm"
+                  variant="destructive"
+                  className="w-full"
+                  onClick={() => requestDecision(detailsApp, 'Return')}
+                >
+                  <Undo2 className="size-4" /> Return pet to the shelter
+                </Button>
+              ) : detailsApp.status === 'Rejected' ||
+                detailsApp.status === 'Cancelled' ||
+                detailsApp.status === 'Returned' ? null : (
                 <div className="flex gap-2">
                   <Button
                     size="sm"
@@ -614,8 +819,24 @@ export const ShelterApplicationsPage = () => {
                   {petOf(detailsApp)?.breed ?? '—'}
                 </p>
               </div>
-              <ApplicationStatusBadge status={detailsApp.status} />
+              <div className="flex flex-col items-end gap-1">
+                <ApplicationStatusBadge status={detailsApp.status} />
+                <WaiverStatusIndicator app={detailsApp} />
+              </div>
             </div>
+
+            {waiverStatusOf(detailsApp) === 'None' && detailsApp.status === 'Approved' ? (
+              <p className="rounded-lg border border-amber-500/30 bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:bg-amber-950/30 dark:text-amber-200">
+                No handover waiver has been issued. Marking this adoption as complete will open
+                the waiver builder first.
+              </p>
+            ) : null}
+            {waiverStatusOf(detailsApp) === 'None' && detailsApp.status === 'Adopted' ? (
+              <p className="rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive">
+                This adoption has no waiver on file. Generate one now to complete the handover
+                record.
+              </p>
+            ) : null}
 
             <dl className="grid grid-cols-2 gap-2 text-sm">
               <div className="rounded-lg border p-2.5">
@@ -635,6 +856,24 @@ export const ShelterApplicationsPage = () => {
                 <dd className="truncate font-medium">{detailsApp.address}</dd>
               </div>
             </dl>
+
+            {detailsApp.pickupAt ? (
+              <div className="rounded-lg border border-green-600/30 bg-green-50/60 p-3 dark:bg-green-950/20">
+                <h3 className="text-sm font-semibold">Pickup scheduled</h3>
+                <p className="mt-1 text-sm">{formatDateTime(detailsApp.pickupAt)}</p>
+                {detailsApp.pickupEmail ? (
+                  <p className="mt-0.5 text-xs text-muted-foreground">
+                    Contact:{' '}
+                    <a
+                      className="underline underline-offset-2"
+                      href={`mailto:${detailsApp.pickupEmail}`}
+                    >
+                      {detailsApp.pickupEmail}
+                    </a>
+                  </p>
+                ) : null}
+              </div>
+            ) : null}
 
             <div>
               <h3 className="text-sm font-semibold">Experience</h3>
@@ -673,33 +912,55 @@ export const ShelterApplicationsPage = () => {
         open={decision !== null}
         onClose={deciding ? () => undefined : () => setDecision(null)}
         title={
-          decision?.status === 'Approved'
+          decision?.action === 'Approved'
             ? 'Approve this application?'
-            : decision?.status === 'Rejected'
-              ? 'Reject this application?'
-              : 'Cancel this adoption?'
+            : decision?.action === 'Adopted'
+              ? 'Mark this adoption as complete?'
+              : decision?.action === 'Return'
+                ? 'Return this pet to the shelter?'
+                : decision?.action === 'Rejected'
+                  ? 'Reject this application?'
+                  : 'Cancel this adoption?'
         }
         description={
           decision ? `${decision.app.applicantName} · ${decision.app.email}` : undefined
         }
         icon={
-          decision?.status === 'Approved'
+          decision?.action === 'Approved'
             ? Check
-            : decision?.status === 'Rejected'
-              ? AlertTriangle
-              : Ban
+            : decision?.action === 'Adopted'
+              ? HeartHandshake
+              : decision?.action === 'Return'
+                ? Undo2
+                : decision?.action === 'Rejected'
+                  ? AlertTriangle
+                  : Ban
         }
       >
         {decision && (
           <div className="space-y-4">
             <div
               className={
-                decision.status === 'Approved'
+                decision.action === 'Approved'
                   ? 'rounded-lg border border-green-600/30 bg-green-50 px-3 py-2.5 text-sm dark:bg-green-950/40'
-                  : 'rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2.5 text-sm'
+                  : decision.action === 'Adopted'
+                    ? 'rounded-lg border border-blue-600/30 bg-blue-50 px-3 py-2.5 text-sm dark:bg-blue-950/40'
+                    : decision.action === 'Return'
+                      ? 'rounded-lg border border-amber-600/30 bg-amber-50 px-3 py-2.5 text-sm dark:bg-amber-950/40'
+                      : 'rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2.5 text-sm'
               }
             >
-              {decision.status === 'Cancelled' ? (
+              {decision.action === 'Return' ? (
+                <>
+                  You are about to return{' '}
+                  <span className="font-semibold">
+                    {petOf(decision.app)?.name ?? 'this pet'}
+                  </span>{' '}
+                  from{' '}
+                  <span className="font-semibold">{decision.app.applicantName}</span>. The adoption
+                  ends and the pet goes back up for adoption.
+                </>
+              ) : decision.action === 'Cancelled' ? (
                 <>
                   You are about to cancel the approved adoption of{' '}
                   <span className="font-semibold">
@@ -708,9 +969,19 @@ export const ShelterApplicationsPage = () => {
                   for{' '}
                   <span className="font-semibold">{decision.app.applicantName}</span>.
                 </>
+              ) : decision.action === 'Adopted' ? (
+                <>
+                  You are about to complete{' '}
+                  <span className="font-semibold">{decision.app.applicantName}</span>&apos;s
+                  adoption of{' '}
+                  <span className="font-semibold">
+                    {petOf(decision.app)?.name ?? 'this pet'}
+                  </span>
+                  .
+                </>
               ) : (
                 <>
-                  You are about to {decision.status === 'Approved' ? 'approve' : 'reject'}{' '}
+                  You are about to {decision.action === 'Approved' ? 'approve' : 'reject'}{' '}
                   <span className="font-semibold">{decision.app.applicantName}</span>&apos;s
                   application for{' '}
                   <span className="font-semibold">
@@ -721,16 +992,66 @@ export const ShelterApplicationsPage = () => {
               )}
             </div>
             <p className="text-sm leading-relaxed text-muted-foreground">
-              The status will be set to{' '}
-              <span className="font-medium text-foreground">{decision.status}</span>, and an email
-              with this status is sent to the applicant&apos;s account email.
-              {decision.status === 'Approved'
-                ? ' Other open applications for this pet will be auto-rejected.'
-                : ''}
-              {decision.status === 'Cancelled'
-                ? ' The pet will be returned to Available so other adopters can apply.'
-                : ''}
+              {decision.action === 'Return' ? (
+                <>
+                  The adoption ends, the application is marked{' '}
+                  <span className="font-medium text-foreground">Returned</span>, and an email is
+                  sent to the applicant&apos;s account email. The pet returns to{' '}
+                  <span className="font-medium text-foreground">Available</span> and the pickup
+                  appointment is cleared.
+                </>
+              ) : (
+                <>
+                  The status will be set to{' '}
+                  <span className="font-medium text-foreground">{decision.action}</span>, and an
+                  email with this status is sent to the applicant&apos;s account email.
+                  {decision.action === 'Approved'
+                    ? ' The adopter is emailed this pickup appointment, and other open applications for this pet will be auto-rejected.'
+                    : ''}
+                  {decision.action === 'Adopted'
+                    ? waiverStatusOf(
+                        applications.find((app) => app.id === decision.app.id) ?? decision.app,
+                      ) === 'None'
+                      ? ' This adoption has no e-waiver yet. The waiver builder opens first; the adoption is completed automatically after the waiver is issued.'
+                      : ' The pet becomes Adopted, any other open applications for it are auto-rejected, and the e-waiver opens so you can print the handover documents.'
+                    : ''}
+                  {decision.action === 'Cancelled'
+                    ? ' The pet will be returned to Available so other adopters can apply.'
+                    : ''}
+                </>
+              )}
             </p>
+            {decision.action === 'Approved' && (
+              <div className="space-y-3 rounded-lg border border-green-600/30 bg-green-50/60 p-3 dark:bg-green-950/20">
+                <div>
+                  <Label htmlFor="pickup-at">Clinic pickup date &amp; time</Label>
+                  <Input
+                    id="pickup-at"
+                    type="datetime-local"
+                    min={nowForDateTimeInput()}
+                    value={pickupAt}
+                    onChange={(e) => setPickupAt(e.target.value)}
+                    disabled={deciding}
+                    required
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="pickup-email">Pickup contact email</Label>
+                  <Input
+                    id="pickup-email"
+                    type="email"
+                    value={pickupEmail}
+                    onChange={(e) => setPickupEmail(e.target.value)}
+                    placeholder="clinic@example.com"
+                    disabled={deciding}
+                    required
+                  />
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Shown to the adopter so they can ask about the appointment.
+                  </p>
+                </div>
+              </div>
+            )}
             <div>
               <Label htmlFor="decision-note">Note (optional)</Label>
               <Textarea
@@ -751,26 +1072,46 @@ export const ShelterApplicationsPage = () => {
                 Keep application
               </Button>
               <Button
-                variant={decision.status === 'Approved' ? 'default' : 'destructive'}
+                variant={
+                  decision.action === 'Rejected' ||
+                  decision.action === 'Cancelled' ||
+                  decision.action === 'Return'
+                    ? 'destructive'
+                    : 'default'
+                }
                 className={
-                  decision.status === 'Approved'
+                  decision.action === 'Approved'
                     ? 'flex-1 bg-green-600 text-white hover:bg-green-700'
-                    : 'flex-1'
+                    : decision.action === 'Adopted'
+                      ? 'flex-1 bg-blue-600 text-white hover:bg-blue-700'
+                      : 'flex-1'
                 }
                 onClick={() => void confirmDecision()}
                 disabled={deciding}
               >
                 {deciding
-                  ? decision.status === 'Approved'
+                  ? decision.action === 'Approved'
                     ? 'Approving…'
-                    : decision.status === 'Rejected'
-                      ? 'Rejecting…'
-                      : 'Cancelling…'
-                  : decision.status === 'Approved'
+                    : decision.action === 'Adopted'
+                      ? 'Marking as adopted…'
+                      : decision.action === 'Return'
+                        ? 'Returning…'
+                        : decision.action === 'Rejected'
+                          ? 'Rejecting…'
+                          : 'Cancelling…'
+                  : decision.action === 'Approved'
                     ? 'Approve application'
-                    : decision.status === 'Rejected'
-                      ? 'Reject application'
-                      : 'Cancel adoption'}
+                    : decision.action === 'Adopted'
+                      ? waiverStatusOf(
+                          applications.find((app) => app.id === decision.app.id) ?? decision.app,
+                        ) === 'None'
+                        ? 'Generate waiver & mark adopted'
+                        : 'Mark as adopted'
+                      : decision.action === 'Return'
+                        ? 'Return pet'
+                        : decision.action === 'Rejected'
+                          ? 'Reject application'
+                          : 'Cancel adoption'}
               </Button>
             </div>
           </div>
@@ -780,9 +1121,13 @@ export const ShelterApplicationsPage = () => {
       <WaiverModal
         key={waiverAppId ?? 'closed'}
         open={waiverAppId !== null}
-        onClose={() => setWaiverAppId(null)}
+        onClose={() => {
+          setWaiverAppId(null);
+          setPendingAdoption(null);
+        }}
         applicationId={waiverAppId}
         applicantName={waiverApp?.applicantName}
+        onGenerated={handleWaiverGenerated}
       />
     </div>
   );

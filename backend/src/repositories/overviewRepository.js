@@ -8,7 +8,15 @@ import { pool } from '../config/database.js';
  */
 
 const PET_STATUSES = ['Available', 'In Process', 'Adopted', 'Fostered'];
-const APP_STATUSES = ['Submitted', 'Under Review', 'Approved', 'Rejected', 'Cancelled', 'Adopted'];
+const APP_STATUSES = [
+  'Submitted',
+  'Under Review',
+  'Approved',
+  'Rejected',
+  'Cancelled',
+  'Adopted',
+  'Returned',
+];
 
 export const getShelterOverview = async (shelterId) => {
   const [

@@ -12,3 +12,14 @@ export const updateWaiverTemplateSchema = createWaiverTemplateSchema.partial();
 export const generateWaiverSchema = z.object({
   templateIds: z.array(z.string().uuid('Invalid template ID format')).min(1, 'Select at least one template'),
 });
+
+export const signWaiverSchema = z.object({
+  signatureName: z
+    .string()
+    .trim()
+    .min(2, 'Type your full legal name to sign')
+    .max(255, 'Signature name is too long'),
+  consent: z
+    .boolean()
+    .refine((value) => value === true, 'You must agree before signing the waiver'),
+});

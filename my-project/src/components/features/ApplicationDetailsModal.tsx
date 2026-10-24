@@ -5,7 +5,7 @@ import type { AdoptionApplication, Pet } from '@/types';
 import { DetailsModal } from '@/components/shared';
 import { ApplicationStatusBadge } from '@/components/ui/StatusBadge';
 import { Button } from '@/components/ui/button';
-import { formatDate } from '@/utils/formatters';
+import { formatDate, formatDateTime } from '@/utils/formatters';
 
 interface ApplicationDetailsModalProps {
   application: AdoptionApplication;
@@ -89,6 +89,28 @@ export const ApplicationDetailsModal = ({
           />
         </div>
       </section>
+
+      {/* Clinic pickup — scheduled by the shelter on approval. */}
+      {application.pickupAt &&
+      (application.status === 'Approved' || application.status === 'Adopted') && (
+        <section className="border-t border-border pt-5">
+          <h3 className="text-sm font-semibold">Clinic pickup</h3>
+          <p className="mt-2 text-sm text-foreground">
+            {formatDateTime(application.pickupAt)}
+          </p>
+          {application.pickupEmail && (
+            <p className="mt-1 text-sm text-muted-foreground">
+              Contact:{' '}
+              <a
+                className="underline underline-offset-2"
+                href={`mailto:${application.pickupEmail}`}
+              >
+                {application.pickupEmail}
+              </a>
+            </p>
+          )}
+        </section>
+      )}
 
       {/* Reason */}
       <section className="border-t border-border pt-5">

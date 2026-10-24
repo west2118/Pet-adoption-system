@@ -7,7 +7,9 @@ import { pool } from '../config/database.js';
  */
 export const VISIT_TRANSITIONS = {
   requested: ['confirmed', 'cancelled'],
-  confirmed: ['completed', 'cancelled'],
+  // Confirmed can be confirmed again: the shelter may reschedule and send the
+  // adopter a new date/message.
+  confirmed: ['confirmed', 'completed', 'cancelled'],
   completed: [],
   cancelled: [],
 };
@@ -110,15 +112,19 @@ export const listThreadsByShelter = async (shelterId, { limit = 10, offset = 0, 
   return { rows, total: count.rows[0].total };
 };
 
-export const updateThreadStatus = async (threadId, { status, confirmedSlot, cancelReason }) => {
+export const updateThreadStatus = async (
+  threadId,
+  { status, confirmedSlot, cancelReason, message },
+) => {
   const { rows } = await pool.query(
     `UPDATE visit_threads
-        SET status = $2,
+        SET status = $2::visit_thread_status,
             confirmed_slot = COALESCE($3, confirmed_slot),
-            cancel_reason = CASE WHEN $2 = 'cancelled' THEN $4 ELSE NULL END,
+            cancel_reason = CASE WHEN $2::visit_thread_status = 'cancelled' THEN $4 ELSE NULL END,
+            shelter_message = COALESCE($5, shelter_message),
             updated_at = CURRENT_TIMESTAMP
       WHERE id = $1 RETURNING *`,
-    [threadId, status, confirmedSlot ?? null, cancelReason ?? null],
+    [threadId, status, confirmedSlot ?? null, cancelReason ?? null, message ?? null],
   );
   return rows[0] ?? null;
 };

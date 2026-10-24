@@ -164,13 +164,25 @@ export const findPetById = async (id) => {
   return rows[0] ?? null;
 };
 
-export const listPetsByShelter = async (shelterId, { limit = 10, offset = 0, search, visibility } = {}) => {
+export const listPetsByShelter = async (
+  shelterId,
+  { limit = 10, offset = 0, search, visibility, species, status } = {},
+) => {
   const conditions = ['shelter_id = $1'];
   const values = [shelterId];
 
   if (visibility && visibility !== 'all') {
     values.push(visibility);
     conditions.push(`visibility = $${values.length}`);
+  }
+  // Species/status filtering is server-side so paging stays correct.
+  if (species && species !== 'all') {
+    values.push(species);
+    conditions.push(`species = $${values.length}`);
+  }
+  if (status && status !== 'all') {
+    values.push(status);
+    conditions.push(`status = $${values.length}`);
   }
   if (search) {
     values.push(`%${search}%`);

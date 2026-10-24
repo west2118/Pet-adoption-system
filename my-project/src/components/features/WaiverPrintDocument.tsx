@@ -6,6 +6,7 @@ import { LiabilityWaiverDocument } from './LiabilityWaiverDocument';
 import { MediaReleaseDocument } from './MediaReleaseDocument';
 import { MedicalDisclosureDocument } from './MedicalDisclosureDocument';
 import { TransportWaiverDocument } from './TransportWaiverDocument';
+import { WaiverSignatureCertificate } from './WaiverSignatureCertificate';
 
 /**
  * Print dispatcher for a handover waiver bundle.
@@ -101,6 +102,14 @@ export const WaiverPrintDocument = ({
       key: `custom-${template.id}`,
       label: `${template.category} — ${template.name}`,
       content: <CustomWaiverTemplateDocument template={template} waiver={waiver} preview={preview} />,
+    });
+  }
+
+  if (waiver.status === 'Signed' && waiver.snapshot.signature) {
+    sections.push({
+      key: 'signature-certificate',
+      label: 'Signature — Electronic Signature Certificate',
+      content: <WaiverSignatureCertificate waiver={waiver} />,
     });
   }
 

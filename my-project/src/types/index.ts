@@ -10,7 +10,9 @@ export type ApplicationStatus =
   | 'Approved'
   | 'Rejected'
   | 'Cancelled'
-  | 'Adopted';
+  | 'Adopted'
+  // A completed adoption that fell through: the pet came back to the shelter.
+  | 'Returned';
 
 export type UserRole = 'adopter' | 'shelter_staff' | 'platform_admin';
 
@@ -85,8 +87,16 @@ export interface AdoptionApplication {
   experience: string;
   reason: string;
   status: ApplicationStatus;
+  /** Current issued waiver state; `None` means handover documents are missing. */
+  waiverStatus?: WaiverStatus | 'None';
+  waiverVersion?: number;
+  waiverSignedAt?: string;
   submittedAt: string;
   updatedAt: string;
+  /** Clinic appointment set when the shelter approves the application. */
+  pickupAt?: string | null;
+  /** Contact address for questions about the pickup. */
+  pickupEmail?: string | null;
   staffNotes?: string;
   /** Joined pet summary so the card still renders when the pet is not public. */
   pet?: { id: string; name: string; imageUrl: string; breed?: string };
@@ -156,6 +166,8 @@ export interface VisitThread {
   preferredSlot: string;
   confirmedSlot?: string | null;
   cancelReason?: string | null;
+  /** Message the shelter emailed with the confirmed visit date. */
+  shelterMessage?: string | null;
   createdAt: string;
   updatedAt: string;
   pet?: { id: string; name: string; imageUrl: string };
@@ -164,6 +176,10 @@ export interface VisitThread {
 }
 
 export type WaiverTemplateStatus = 'Active' | 'Draft';
+
+/** `Issued` is unsigned but usable; `Signed` is immutable. */
+export type WaiverStatus = 'Issued' | 'Signed';
+export type WaiverVersionStatus = WaiverStatus | 'Superseded';
 
 export interface WaiverTemplate {
   id: string;
@@ -195,8 +211,23 @@ export interface WaiverSnapshot {
     body: string;
     /** Locked platform template vs. shelter-authored template. */
     isDefault?: boolean;
+    /** Template revision captured when this snapshot was generated. */
+    updatedAt?: string;
   }[];
   issuedAt: string;
+  /** Snapshot format version (matches the waiver row while current). */
+  version?: number;
+  generatedAt?: string;
+  generatedBy?: { id: string | null; name: string } | null;
+  signature?: {
+    name: string;
+    signedAt: string;
+    signedByName?: string;
+    method?: 'typed' | 'drawn';
+    /** Consent was explicitly confirmed when the signature was recorded. */
+    consent?: boolean;
+    consentText?: string;
+  };
 }
 
 export interface Waiver {
@@ -204,8 +235,32 @@ export interface Waiver {
   applicationId: string;
   shelterId: string;
   snapshot: WaiverSnapshot;
+  status: WaiverStatus;
+  version: number;
+  generatedAt: string;
+  generatedBy: { id: string | null; name: string } | null;
+  signedAt: string | null;
+  signedBy: string | null;
+  signedByName: string | null;
+  signatureName: string | null;
   createdAt: string;
   updatedAt: string;
+}
+
+/** An archived regeneration of a waiver, immutable even after later edits. */
+export interface WaiverVersion {
+  id: string;
+  version: number;
+  status: WaiverVersionStatus;
+  snapshot: WaiverSnapshot;
+  generatedAt: string;
+  generatedBy: { id: string | null; name: string } | null;
+  signedAt: string | null;
+  signedBy: string | null;
+  signedByName: string | null;
+  signatureName: string | null;
+  archivedAt: string | null;
+  isCurrent: boolean;
 }
 
 export interface AppNotification {

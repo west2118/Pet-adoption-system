@@ -307,7 +307,7 @@ interface ApiErrorResponse {
 | `POST` | `/api/v1/shelters` | `platform_admin` | Register new shelter |
 | `PATCH` | `/api/v1/shelters/:id` | `shelter_staff` / `admin` | Update shelter profile |
 | **Shelter Inventory Management** | | | |
-| `GET` | `/api/v1/shelter/listings` | `shelter_staff` | List all pets (public + private inventory) for staff's shelter |
+| `GET` | `/api/v1/shelter/listings` | `shelter_staff` | List all pets (public + private inventory) for staff's shelter; `species` and `status` filters run in SQL (`all` to clear) |
 | `POST` | `/api/v1/shelter/listings` | `shelter_staff` | Create new pet listing (public or private) |
 | `PATCH` | `/api/v1/shelter/listings/:id` | `shelter_staff` | Update pet listing details / toggle visibility |
 | `DELETE` | `/api/v1/shelter/listings/:id` | `shelter_staff` | Archive / remove pet record |
@@ -315,9 +315,9 @@ interface ApiErrorResponse {
 | `POST` | `/api/v1/applications` | `adopter` | Submit adoption application for a pet |
 | `GET` | `/api/v1/applications/my` | `adopter` | Get logged-in user's submitted applications |
 | `GET` | `/api/v1/applications/my/stats` | `adopter` | Status counters for own applications |
-| `PATCH` | `/api/v1/applications/:id/cancel` | `adopter` | Withdraw an open application (`Cancelled`) + optional reason; emails the applicant |
+| `PATCH` | `/api/v1/applications/:id/cancel` | `adopter` | Withdraw an application (`Cancelled`) while it is open **or after approval** — an approved cancellation returns the pet to `Available` and clears the pickup; optional reason; emails the applicant |
 | `GET` | `/api/v1/shelter/applications` | `shelter_staff` | List applications submitted to staff's shelter |
-| `PATCH` | `/api/v1/shelter/applications/:id/status` | `shelter_staff` | Update status (`Approved`, `Rejected`, `Cancelled` for an approved adoption, `Adopted`) + note; emails the applicant |
+| `PATCH` | `/api/v1/shelter/applications/:id/status` | `shelter_staff` | Update status (`Approved`, `Rejected`, `Cancelled` for an approved adoption, `Returned` for a completed adoption that comes back — both put the pet back to `Available`, `Adopted`) + note; `Approved` also requires `pickupAt` (future ISO date-time) and `pickupEmail` for the clinic handover, both included in the approval email; emails the applicant |
 | **Inquiries** | | | |
 | `POST` | `/api/v1/inquiries` | Public / `adopter` | Submit direct inquiry for a pet |
 | `GET` | `/api/v1/shelter/inquiries` | `shelter_staff` | Fetch inquiries inbox for staff's shelter |
@@ -331,7 +331,7 @@ interface ApiErrorResponse {
 | `PATCH` | `/api/v1/visits/:id/cancel` | `adopter` | Cancel own open request |
 | `GET` | `/api/v1/shelter/visits` | `shelter_staff` | List shelter visit requests (paginated, optional `status`) |
 | `GET` | `/api/v1/shelter/visits/:id` | `shelter_staff` | Read one visit request |
-| `PATCH` | `/api/v1/shelter/visits/:id/status` | `shelter_staff` | Approve (`confirmed`), decline (`cancelled`), or `completed`; emails the adopter |
+| `PATCH` | `/api/v1/shelter/visits/:id/status` | `shelter_staff` | Approve (`confirmed` with `confirmedSlot` + optional `message`), reschedule (re-`confirmed`), decline/cancel (`cancelled` with `cancelReason`), or `completed`; emails the adopter |
 | **Platform Admin Governance** | | | |
 | `GET` | `/api/v1/admin/stats` | `platform_admin` | System-wide overview dashboard KPI stats + shelter summaries + recent applications |
 | `GET` | `/api/v1/admin/users` | `platform_admin` | List all platform registered users |

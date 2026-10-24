@@ -24,7 +24,11 @@ import {
   TableSkeletonRows,
 } from '@/components/shared';
 import { ConfirmDeleteModal } from '@/components/shared/ConfirmDeleteModal';
-import { PetStatusBadge, VisibilityBadge } from '@/components/ui/StatusBadge';
+import {
+  PetStatusBadge,
+  SpeciesBadge,
+  VisibilityBadge,
+} from '@/components/ui/StatusBadge';
 import {
   Table,
   TableBody,
@@ -63,6 +67,23 @@ const VISIBILITY_FILTER_OPTIONS = [
   { value: 'all', label: 'All visibility' },
   { value: 'public', label: 'Public' },
   { value: 'private', label: 'Private' },
+];
+
+const SPECIES_FILTER_OPTIONS = [
+  { value: 'all', label: 'All species' },
+  { value: 'dog', label: 'Dog' },
+  { value: 'cat', label: 'Cat' },
+  { value: 'rabbit', label: 'Rabbit' },
+  { value: 'bird', label: 'Bird' },
+  { value: 'other', label: 'Other' },
+];
+
+const STATUS_FILTER_OPTIONS = [
+  { value: 'all', label: 'All statuses' },
+  { value: 'Available', label: 'Available' },
+  { value: 'In Process', label: 'In Process' },
+  { value: 'Adopted', label: 'Adopted' },
+  { value: 'Fostered', label: 'Fostered' },
 ];
 
 const CARE_FLAG_OPTIONS = [
@@ -333,6 +354,8 @@ export const ShelterListingsPage = () => {
   const [pageSize, setPageSize] = useState<number>(10);
   const [query, setQuery] = useState('');
   const [visibilityFilter, setVisibilityFilter] = useState<'all' | PetVisibility>('all');
+  const [speciesFilter, setSpeciesFilter] = useState('all');
+  const [statusFilter, setStatusFilter] = useState<'all' | PetStatus>('all');
   const [loadingListings, setLoadingListings] = useState<boolean>(true);
 
   const [slideOpen, setSlideOpen] = useState(false);
@@ -349,6 +372,8 @@ export const ShelterListingsPage = () => {
         limit: pageSize,
         search: query.trim(),
         visibility: visibilityFilter,
+        species: speciesFilter,
+        status: statusFilter,
         shelterId: myShelterId,
       });
       setPets(res.items);
@@ -358,7 +383,7 @@ export const ShelterListingsPage = () => {
     } finally {
       setLoadingListings(false);
     }
-  }, [page, pageSize, query, visibilityFilter, myShelterId]);
+  }, [page, pageSize, query, visibilityFilter, speciesFilter, statusFilter, myShelterId]);
 
   useEffect(() => {
     fetchListings();
@@ -765,16 +790,38 @@ export const ShelterListingsPage = () => {
           className="h-9 w-full pl-8 sm:w-[240px]"
         />
       </div>
-      <Select
-        aria-label="Filter by visibility"
-        className="h-9 w-[180px]"
-        value={visibilityFilter}
-        onChange={(e) => {
-          setVisibilityFilter(e.target.value as 'all' | PetVisibility);
-          setPage(1);
-        }}
-        options={VISIBILITY_FILTER_OPTIONS}
-      />
+      <div className="flex flex-wrap items-center gap-2">
+        <Select
+          aria-label="Filter by species"
+          className="h-9 w-[150px]"
+          value={speciesFilter}
+          onChange={(e) => {
+            setSpeciesFilter(e.target.value);
+            setPage(1);
+          }}
+          options={SPECIES_FILTER_OPTIONS}
+        />
+        <Select
+          aria-label="Filter by status"
+          className="h-9 w-[150px]"
+          value={statusFilter}
+          onChange={(e) => {
+            setStatusFilter(e.target.value as 'all' | PetStatus);
+            setPage(1);
+          }}
+          options={STATUS_FILTER_OPTIONS}
+        />
+        <Select
+          aria-label="Filter by visibility"
+          className="h-9 w-[150px]"
+          value={visibilityFilter}
+          onChange={(e) => {
+            setVisibilityFilter(e.target.value as 'all' | PetVisibility);
+            setPage(1);
+          }}
+          options={VISIBILITY_FILTER_OPTIONS}
+        />
+      </div>
     </div>
   );
 
@@ -858,14 +905,14 @@ export const ShelterListingsPage = () => {
                         </div>
                       </div>
                     </TableCell>
-                    <TableCell className="capitalize text-muted-foreground">
-                      {pet.species}
+                    <TableCell>
+                      <SpeciesBadge species={pet.species} />
                     </TableCell>
-                    <TableCell className="capitalize text-muted-foreground">
-                      {pet.status}
+                    <TableCell>
+                      <PetStatusBadge status={pet.status} />
                     </TableCell>
-                    <TableCell className="capitalize text-muted-foreground">
-                      {pet.visibility}
+                    <TableCell>
+                      <VisibilityBadge visibility={pet.visibility} />
                     </TableCell>
                     <TableCell className="whitespace-nowrap text-muted-foreground">
                       {formatDate(pet.dateAdded)}
@@ -920,6 +967,7 @@ export const ShelterListingsPage = () => {
                 subtitle={pet.breed}
                 badges={
                   <>
+                    <SpeciesBadge species={pet.species} />
                     <PetStatusBadge status={pet.status} />
                     <VisibilityBadge visibility={pet.visibility} />
                   </>
