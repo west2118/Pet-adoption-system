@@ -1,15 +1,9 @@
-import { useMemo, useState } from 'react';
-import type { LucideIcon } from 'lucide-react';
+import { useState } from 'react';
 import {
   ArrowRight,
   BadgeCheck,
-  Building2,
-  CalendarCheck,
   ChevronRight,
-  FileCheck2,
-  HeartHandshake,
   MapPin,
-  Search,
   ShieldCheck,
   Sparkles,
 } from 'lucide-react';
@@ -19,124 +13,29 @@ import { PetCard } from '@/components/features/PetCard';
 import { ShelterCard } from '@/components/features/ShelterCard';
 import { EmptyState, LoadingGrid } from '@/components/ui/Feedback';
 import { Button } from '@/components/ui/button';
-import { usePets, useShelters } from '@/hooks/useData';
-import { publicPets } from '@/data/mockData';
+import { useFeaturedPets, usePetFacets, useShelters } from '@/hooks/useData';
+import { pillars, steps, testimonials } from '@/data/home';
 import { formatAge } from '@/utils/formatters';
 import heroDogsGroupImg from '@/assets/landing-page/Firefly (2).png';
 
 /** 1400px content frame — matches the reference's editorial measure. */
 const frame = 'mx-auto w-full max-w-[1400px] px-6 lg:px-12';
 
-interface Step {
-  id: string;
-  icon: LucideIcon;
-  verb: string;
-  title: string;
-  text: string;
-}
-
-const steps: Step[] = [
-  {
-    id: 'browse',
-    icon: Search,
-    verb: 'Browse',
-    title: 'Find your match',
-    text: 'Filter by species, breed, age, size, gender, temperament, and shelter location. Every listing shows verified medical and behavioural records up front.',
-  },
-  {
-    id: 'apply',
-    icon: FileCheck2,
-    verb: 'Apply',
-    title: 'Submit online',
-    text: 'Send an adoption application in minutes and follow it in real time: Submitted, Under Review, Approved, Adopted. No chasing, no guessing.',
-  },
-  {
-    id: 'home',
-    icon: HeartHandshake,
-    verb: 'Welcome',
-    title: 'Give a rescue a home',
-    text: 'Message the shelter directly, schedule a visit, and bring your new companion home. Every rescue gets a profile, a medical trail, and a real adopter.',
-  },
-];
-
-const pillars = [
-  {
-    icon: BadgeCheck,
-    tag: 'Verified',
-    title: 'Verified shelters only',
-    text: 'Every partner is reviewed before it can publish a listing, so you are always talking to a real organisation.',
-  },
-  {
-    icon: ShieldCheck,
-    tag: 'Transparent',
-    title: 'Full medical records',
-    text: 'Vaccination, deworming, spay or neuter, and microchip status sit on every profile — not buried in a phone call.',
-  },
-  {
-    icon: FileCheck2,
-    tag: 'Tracked',
-    title: 'Application timeline',
-    text: 'Every application carries a dated status history, so you always know exactly where your request stands.',
-  },
-  {
-    icon: CalendarCheck,
-    tag: 'Direct',
-    title: 'Visit scheduling',
-    text: 'Request a meet and greet for a pet and track its status — the shelter emails you their decision.',
-  },
-  {
-    icon: Building2,
-    tag: 'Managed',
-    title: 'Shelter-first tools',
-    text: 'Shelters manage listings, applications, and e-waivers from a single dashboard built for rescue operations.',
-  },
-  {
-    icon: Sparkles,
-    tag: 'Free',
-    title: 'Free for adopters',
-    text: 'Browsing, favouriting, and applying cost nothing. Adoption fees go straight to the shelter caring for the animal.',
-  },
-];
-
-const testimonials = [
-  {
-    quote:
-      'I had been looking for weeks with no idea who I was dealing with. Paws&Homes showed me the medical history up front and let me track the application myself. Luna came home in nine days.',
-    name: 'Ana Reyes',
-    role: 'Adopted Luna',
-  },
-  {
-    quote:
-      'Our intake list used to live in a spreadsheet and a group chat. Now every animal has a profile, every applicant has a status, and our phone finally stopped ringing.',
-    name: 'Maria Santos',
-    role: 'Shelter staff, Happy Tails Rescue',
-  },
-  {
-    quote:
-      'The adoption fee and the vet records were on one page. I did not have to make a single phone call before deciding, and that is exactly what I wanted.',
-    name: 'Juan Dela Cruz',
-    role: 'Adopted two cats',
-  },
-];
-
 export const HomePage = () => {
-  const { pets, loading } = usePets();
+  // The backend filters/limits the featured cards and returns the totals, so
+  // this page never filters the catalogue client-side.
+  const { pets: featured, loading } = useFeaturedPets();
+  const facets = usePetFacets();
   const { shelters } = useShelters();
   const [activeStep, setActiveStep] = useState(0);
-  const visiblePets = useMemo(() => publicPets(pets), [pets]);
 
-  const featured = useMemo(
-    () => visiblePets.filter((p) => p.status === 'Available').slice(0, 6),
-    [visiblePets],
-  );
   const spotlight = featured[0];
   const supporting = featured.slice(1, 4);
 
-  const adoptedCount = pets.filter((p) => p.status === 'Adopted').length;
   const stats = [
-    { value: visiblePets.length || '—', label: 'pets listed' },
+    { value: facets ? facets.stats.listed : '—', label: 'pets listed' },
     { value: shelters.length || '—', label: 'partner shelters' },
-    { value: adoptedCount || '—', label: 'happy adoptions' },
+    { value: facets ? facets.stats.adopted : '—', label: 'happy adoptions' },
   ];
 
   return (

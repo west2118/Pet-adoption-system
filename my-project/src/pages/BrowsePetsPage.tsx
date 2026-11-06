@@ -14,6 +14,7 @@ import { Button } from '@/components/ui/button';
 import { useBrowsePetsPage, useHeroPets, usePetFacets, useShelters } from '@/hooks/useData';
 import { useNearbyPets } from '@/hooks/useNearbyPets';
 import { usePetFilter } from '@/hooks/usePetFilter';
+import type { PetFacetValues } from '@/data/petFilters';
 import { cn } from '@/lib/utils';
 
 export const BrowsePetsPage = () => {
@@ -27,13 +28,10 @@ export const BrowsePetsPage = () => {
   /** The hero orbit + ticker only ever show a handful of pets. */
   const heroPets = useHeroPets();
 
-  // This hook only owns filter *state* — the actual filtering happens in the
-  // backend, which also owns the page size (10 per page).
-  const { filters, updateFilter, clearFilter, resetFilters, activeFilterCount } = usePetFilter(
-    [],
-    shelters,
-    presetLocation,
-  );
+  // This hook only owns filter *state* — every facet is applied by the backend
+  // (`GET /pets`), which also owns the page size (12 per page — four rows of three).
+  const { filters, updateFilter, clearFilter, resetFilters, activeFilterCount } =
+    usePetFilter(presetLocation);
 
   // "Near me": browser location → backend distance filter/sort. It activates
   // automatically for visitors who already granted location access.
@@ -84,11 +82,14 @@ export const BrowsePetsPage = () => {
       .sort((a, b) => statusRank[a.status] - statusRank[b.status]);
   }, [heroPets]);
 
-  const breeds = facets?.breeds ?? [];
-  const temperaments = facets?.temperaments ?? [];
-  const locations = useMemo(
-    () => Array.from(new Set(shelters.map((s) => s.location))).sort(),
-    [shelters],
+  // Dropdown options come from the backend facets, not from a downloaded catalogue.
+  const facetValues = useMemo<PetFacetValues>(
+    () => ({
+      breeds: facets?.breeds ?? [],
+      temperaments: facets?.temperaments ?? [],
+      locations: Array.from(new Set(shelters.map((s) => s.location))).sort(),
+    }),
+    [facets, shelters],
   );
 
   const locationByShelter = useMemo(
@@ -168,9 +169,7 @@ export const BrowsePetsPage = () => {
             onClear={clearOne}
             onReset={resetAll}
             activeCount={activeFilterCount}
-            breeds={breeds}
-            locations={locations}
-            temperaments={temperaments}
+            facets={facetValues}
             actions={
               <NearbyFilter
                 active={nearby.enabled}
@@ -254,7 +253,7 @@ export const BrowsePetsPage = () => {
           )}
         </div>
 
-        {/* Backend-owned paging: 10 pets per request, `total` from its meta. */}
+        {/* Backend-owned paging: 12 pets per request, `total` from its meta. */}
         {total > 0 && (
           <div className="mt-8">
             <TablePagination

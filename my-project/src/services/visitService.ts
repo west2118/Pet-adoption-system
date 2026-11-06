@@ -12,6 +12,7 @@ import type { VisitStatus, VisitThread } from '@/types';
 export interface RequestVisitInput {
   petId: string;
   preferredSlot: string;
+  reason: string;
 }
 
 export interface VisitSummary {

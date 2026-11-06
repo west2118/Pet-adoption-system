@@ -9,6 +9,8 @@ import {
   ImageIcon,
   ShieldCheck,
   FileCheck2,
+  UploadCloud,
+  X,
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -73,7 +75,28 @@ export const ShelterOnboardingPage = () => {
     if (key === 'address') setCoords(null);
   };
 
-  // Fills the address (and city/region) from the shelter's current GPS location.
+  const handleImageFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      toast.error('Please select an image file (PNG, JPG, WEBP).');
+      return;
+    }
+    // Limit to 5MB before base64 encoding
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error('Image file must be under 5MB.');
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      const base64 = String(reader.result);
+      set('imageUrl', base64);
+    };
+    reader.onerror = () => {
+      toast.error('Failed to read image file.');
+    };
+    reader.readAsDataURL(file);
+  };
   const handleUseLocation = async () => {
     if (locating) return;
     setLocating(true);
@@ -119,8 +142,14 @@ export const ShelterOnboardingPage = () => {
     if (isBlank(form.description)) next.description = 'Please describe the shelter.';
     else if (form.description.trim().length < 20)
       next.description = 'Description must be at least 20 characters.';
-    if (isBlank(form.imageUrl)) next.imageUrl = 'Please enter a logo or photo URL.';
-    else if (!isUrl(form.imageUrl)) next.imageUrl = 'Enter a valid image URL (https://…).';
+    if (isBlank(form.imageUrl)) {
+      next.imageUrl = 'Please upload a logo/photo or provide an image URL.';
+    } else if (
+      !form.imageUrl.startsWith('data:image/') &&
+      !isUrl(form.imageUrl)
+    ) {
+      next.imageUrl = 'Enter a valid image URL (https://…) or upload an image file.';
+    }
     setFieldErrors(next);
     if (Object.keys(next).length > 0) {
       focusFirstError();
@@ -378,22 +407,75 @@ export const ShelterOnboardingPage = () => {
                     />
                   </div>
 
-                  <div className="space-y-2 sm:col-span-2">
-                    <label className={labelClass} htmlFor="ob-image">
-                      Logo / photo URL <span className="text-destructive font-medium ml-0.5">*</span>
+                  <div className="space-y-3 sm:col-span-2">
+                    <label className={labelClass} htmlFor="ob-image-file">
+                      Shelter Logo / Photo <span className="text-destructive font-medium ml-0.5">*</span>
                     </label>
-                    <div className="relative">
-                      <ImageIcon className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-                      <ValidatedInput
-                        id="ob-image"
-                        type="url"
-                        required
-                        value={form.imageUrl}
-                        onChange={(e) => set('imageUrl', e.target.value)}
-                        placeholder="https://…"
-                        error={fieldErrors.imageUrl}
-                        className={`${controlClass} pl-9`}
-                      />
+
+                    {/* Upload Drop/Picker Area */}
+                    <div className="flex flex-col gap-3">
+                      <label
+                        htmlFor="ob-image-file"
+                        className="flex min-h-[120px] cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed border-border bg-muted/30 px-6 py-4 text-center transition-colors hover:border-primary/50 hover:bg-muted/50"
+                      >
+                        <UploadCloud className="size-8 text-muted-foreground" />
+                        <span className="mt-2 text-sm font-medium text-foreground">
+                          Click to upload an image file
+                        </span>
+                        <span className="mt-1 text-xs text-muted-foreground">
+                          PNG, JPG, or WEBP (max 5MB)
+                        </span>
+                        <input
+                          id="ob-image-file"
+                          type="file"
+                          accept="image/*"
+                          className="sr-only"
+                          onChange={handleImageFile}
+                        />
+                      </label>
+
+                      {/* Image Preview if base64 or URL present */}
+                      {form.imageUrl && (
+                        <div className="relative flex items-center gap-3 rounded-lg border border-border bg-card p-2.5">
+                          <img
+                            src={form.imageUrl}
+                            alt="Shelter preview"
+                            className="size-14 rounded-lg object-cover"
+                          />
+                          <div className="min-w-0 flex-1">
+                            <p className="truncate text-xs font-mono text-muted-foreground">
+                              {form.imageUrl.startsWith('data:image/')
+                                ? 'Uploaded image'
+                                : form.imageUrl}
+                            </p>
+                            <span className="text-xs text-primary font-medium">Ready for approval</span>
+                          </div>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            className="h-8 w-8 p-0 text-muted-foreground hover:text-destructive"
+                            onClick={() => set('imageUrl', '')}
+                            title="Remove image"
+                          >
+                            <X className="size-4" />
+                          </Button>
+                        </div>
+                      )}
+
+                      {/* Fallback direct URL input */}
+                      <div className="relative">
+                        <ImageIcon className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+                        <ValidatedInput
+                          id="ob-image"
+                          type="text"
+                          value={form.imageUrl}
+                          onChange={(e) => set('imageUrl', e.target.value)}
+                          placeholder="Or paste an image URL (https://…)"
+                          error={fieldErrors.imageUrl}
+                          className={`${controlClass} pl-9 text-xs`}
+                        />
+                      </div>
                     </div>
                   </div>
 

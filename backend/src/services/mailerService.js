@@ -78,13 +78,14 @@ export const sendApplicationReceivedEmail = async ({ to, name }) =>
     html: applicationReceivedHtml({ name }),
   });
 
-export const sendShelterApprovedEmail = async ({ to, name, shelterName }) =>
+export const sendShelterApprovedEmail = async ({ to, name, shelterName, message }) =>
   send({
     to,
     subject: 'Your shelter account is approved 🎉',
     html: shelterApprovedHtml({
       name,
       shelterName,
+      message,
       loginUrl: `${env.APP_URL}/login`,
     }),
   });
@@ -160,11 +161,11 @@ export const sendApplicationAutoRejectedEmail = async ({ to, name, petName, reas
  * Visit scheduling thread notifications (fire-and-forget)
  * ------------------------------------------------------------------ */
 
-export const sendVisitRequestedEmail = async ({ to, name, petName, preferredSlot }) =>
+export const sendVisitRequestedEmail = async ({ to, name, petName, preferredSlot, reason }) =>
   send({
     to,
     subject: `New visit request for ${petName}`,
-    html: visitRequestedHtml({ name, petName, preferredSlot }),
+    html: visitRequestedHtml({ name, petName, preferredSlot, reason }),
   });
 
 const VISIT_STATUS_SUBJECTS = {

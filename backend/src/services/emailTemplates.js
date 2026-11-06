@@ -123,7 +123,7 @@ export const applicationReceivedHtml = ({ name }) =>
   });
 
 /** "Your shelter account is approved" — includes the sign-in CTA. */
-export const shelterApprovedHtml = ({ name, shelterName, loginUrl }) =>
+export const shelterApprovedHtml = ({ name, shelterName, message, loginUrl }) =>
   renderEmail({
     preheader: `${shelterName} has been approved — sign in to start managing your listings.`,
     title: 'Your shelter account is approved',
@@ -132,9 +132,12 @@ export const shelterApprovedHtml = ({ name, shelterName, loginUrl }) =>
       paragraph(
         `Great news — <strong>${escapeHtml(shelterName)}</strong> has been approved and your account is now active as the shelter owner.`,
       ),
+      message ? note(`<strong>Message from platform admin:</strong><br/>${escapeHtml(message)}`) : '',
       paragraph('You can sign in and start managing your shelter listings:'),
       button(loginUrl, 'Sign in to Paws&Homes'),
-    ].join('\n                '),
+    ]
+      .filter(Boolean)
+      .join('\n                '),
   });
 
 /** "Update on your shelter application" — rejection with an optional reason. */
@@ -147,8 +150,8 @@ export const shelterRejectedHtml = ({ name, reason }) =>
       paragraph(
         'After reviewing your shelter application, we are unable to approve it at this time.',
       ),
-      reason ? note(`<strong>Reason:</strong> ${escapeHtml(reason)}`) : '',
-      paragraph('You are welcome to reply to this email with more details.'),
+      reason ? note(`<strong>Message from platform admin:</strong><br/>${escapeHtml(reason)}`) : '',
+      paragraph('You are welcome to reply to this email with more details or submit a new application once requirements are met.'),
     ]
       .filter(Boolean)
       .join('\n                '),
@@ -185,7 +188,7 @@ const applicationsUrl = (appUrl) => `${appUrl}/applications`;
 const visitsUrl = (appUrl) => `${appUrl}/visits`;
 
 /** New visit request received from an adopter (to the shelter contact). */
-export const visitRequestedHtml = ({ name, petName, preferredSlot }) =>
+export const visitRequestedHtml = ({ name, petName, preferredSlot, reason }) =>
   renderEmail({
     preheader: `${name} requested a visit with ${petName}.`,
     title: 'New visit request',
@@ -196,6 +199,7 @@ export const visitRequestedHtml = ({ name, petName, preferredSlot }) =>
         `<strong>${escapeHtml(name)}</strong> would like to schedule a visit with <strong>${escapeHtml(petName)}</strong>.`,
       ),
       paragraph(`<strong>Preferred slot:</strong> ${escapeHtml(preferredSlot)}`),
+      reason ? paragraph(`<strong>Reason for visit:</strong> ${escapeHtml(reason)}`) : '',
       paragraph(
         'Approve or decline this request from your visits dashboard. The adopter will be emailed automatically with your decision.',
       ),

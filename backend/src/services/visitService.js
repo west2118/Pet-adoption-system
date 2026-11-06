@@ -22,6 +22,7 @@ export const mapVisitThread = (row) => {
     adopterId: row.adopter_id,
     status: row.status,
     preferredSlot: row.preferred_slot ?? '',
+    reason: row.reason ?? null,
     confirmedSlot: row.confirmed_slot ?? null,
     cancelReason: row.cancel_reason ?? null,
     shelterMessage: row.shelter_message ?? null,
@@ -70,6 +71,7 @@ export const requestVisit = async (adopterId, input) => {
       petId: input.petId,
       adopterId,
       preferredSlot: input.preferredSlot,
+      reason: input.reason,
     });
   } catch (err) {
     // The unique (pet_id, adopter_id) constraint backstops the check above
@@ -92,6 +94,7 @@ export const requestVisit = async (adopterId, input) => {
       name: adopter?.name ?? 'An adopter',
       petName: pet.name,
       preferredSlot: input.preferredSlot,
+      reason: input.reason,
     }).catch(() => {});
   }
 

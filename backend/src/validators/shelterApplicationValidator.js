@@ -8,7 +8,18 @@ export const createShelterApplicationSchema = z.object({
   email: z.string().email('Invalid email format'),
   operatingHours: z.string().min(1, 'Operating hours are required'),
   description: z.string().min(10, 'Description must be at least 10 characters'),
-  imageUrl: z.string().url('Invalid image URL format').optional().or(z.literal('')),
+  imageUrl: z
+    .string()
+    .refine(
+      (v) => !v || v.startsWith('data:image/') || /^https?:\/\/.+/.test(v),
+      'Photo must be an image upload or an http(s) URL',
+    )
+    .optional()
+    .or(z.literal('')),
+});
+
+export const approveShelterApplicationSchema = z.object({
+  message: z.string().max(1000).optional(),
 });
 
 export const reviewShelterApplicationSchema = z.object({

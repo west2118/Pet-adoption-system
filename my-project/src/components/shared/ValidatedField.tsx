@@ -3,6 +3,7 @@ import type {
   InputHTMLAttributes,
   ReactElement,
   ReactNode,
+  Ref,
   SelectHTMLAttributes,
   TextareaHTMLAttributes,
 } from 'react';
@@ -115,6 +116,8 @@ export const isUrl = (value: string): boolean => {
 
 interface ValidatedInputProps extends InputHTMLAttributes<HTMLInputElement> {
   error?: string | null;
+  /** Lets react-hook-form's `register()` attach its ref through this wrapper. */
+  ref?: Ref<HTMLInputElement>;
 }
 
 export const ValidatedInput = ({ error, className, id, ...props }: ValidatedInputProps) => {
@@ -135,6 +138,7 @@ export const ValidatedInput = ({ error, className, id, ...props }: ValidatedInpu
 
 interface ValidatedTextareaProps extends TextareaHTMLAttributes<HTMLTextAreaElement> {
   error?: string | null;
+  ref?: Ref<HTMLTextAreaElement>;
 }
 
 export const ValidatedTextarea = ({ error, className, id, ...props }: ValidatedTextareaProps) => {
@@ -156,6 +160,7 @@ export const ValidatedTextarea = ({ error, className, id, ...props }: ValidatedT
 interface ValidatedSelectProps extends SelectHTMLAttributes<HTMLSelectElement> {
   options: { value: string; label: string }[];
   error?: string | null;
+  ref?: Ref<HTMLSelectElement>;
 }
 
 export const ValidatedSelect = ({ error, className, id, ...props }: ValidatedSelectProps) => {

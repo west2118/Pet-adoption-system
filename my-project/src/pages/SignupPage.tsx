@@ -1,18 +1,18 @@
+import { zodResolver } from '@hookform/resolvers/zod';
 import { ArrowUpRight, Building2, Heart, MapPin, Plus, ShieldCheck } from 'lucide-react';
 import { useState } from 'react';
+import { useForm } from 'react-hook-form';
 import { Link, useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
+import { useMutation } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/Form';
-import {
-  ValidatedInput,
-  focusFirstError,
-  isBlank,
-  isEmail,
-} from '@/components/shared';
+import { PasswordInput, ValidatedInput, focusFirstError } from '@/components/shared';
 import { useAuth } from '@/hooks/useAuth';
-import { ApiError } from '@/lib/apiClient';
+import { apiErrorMessage } from '@/lib/apiClient';
 import { cn } from '@/lib/utils';
+import { signupSchema } from '@/lib/validators';
+import type { SignupValues } from '@/lib/validators';
 import type { UserRole } from '@/types';
 
 /** Only roles an adopter or shelter can actually register as. */
@@ -25,38 +25,27 @@ export const SignupPage = () => {
   const { signup } = useAuth();
   const navigate = useNavigate();
 
-  const [name, setName] = useState('');
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [confirm, setConfirm] = useState('');
   const [role, setRole] = useState<UserRole>('adopter');
-  const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [fieldErrors, setFieldErrors] = useState<{
-    name?: string;
-    email?: string;
-    password?: string;
-    confirm?: string;
-  }>({});
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const next: typeof fieldErrors = {};
-    if (isBlank(name)) next.name = 'Please enter your full name.';
-    if (!isEmail(email)) next.email = 'Enter a valid email address.';
-    if (password.length < 8) next.password = 'Password must be at least 8 characters.';
-    if (confirm !== password) next.confirm = 'Passwords do not match.';
-    else if (isBlank(confirm)) next.confirm = 'Please confirm your password.';
-    setFieldErrors(next);
-    if (Object.keys(next).length > 0) {
-      focusFirstError();
-      return;
-    }
-    setError(null);
-    setSubmitting(true);
-    try {
-      const result = await signup({ name, email, password, role });
+  const {
+    register,
+    handleSubmit,
+    formState: { errors },
+  } = useForm<SignupValues>({
+    resolver: zodResolver(signupSchema),
+    defaultValues: { name: '', email: '', password: '', confirm: '' },
+  });
 
+  const signupMutation = useMutation({
+    mutationFn: (values: SignupValues) =>
+      signup({
+        name: values.name,
+        email: values.email,
+        password: values.password,
+        role,
+      }),
+    onSuccess: (result) => {
       // Shelter accounts must complete onboarding, then wait for admin approval.
       if (result.requiresOnboarding || role === 'shelter_staff') {
         toast.success('Account created! Please complete your shelter details.');
@@ -67,16 +56,12 @@ export const SignupPage = () => {
       // Adopters are active immediately — send them to sign in.
       toast.success('Account created successfully! Please sign in.');
       navigate('/login', { replace: true });
-    } catch (err) {
-      const message =
-        err instanceof ApiError
-          ? err.message
-          : 'Something went wrong. Please try again.';
-      setError(message);
-    } finally {
-      setSubmitting(false);
-    }
-  };
+    },
+    // Covers network/unexpected failures, not just API error responses.
+    onError: (error) => {
+      setSubmitError(apiErrorMessage(error, 'Something went wrong. Please try again.'));
+    },
+  });
 
   return (
     <div className="relative flex min-h-[calc(100vh-5rem)] w-full items-center justify-center overflow-hidden bg-background px-4 py-10 md:px-6 md:py-14">
@@ -98,21 +83,27 @@ export const SignupPage = () => {
                 </p>
               </div>
 
-              <form onSubmit={handleSubmit} noValidate className="space-y-4">
+              <form
+                onSubmit={handleSubmit(
+                  (values) => {
+                    setSubmitError(null);
+                    signupMutation.mutate(values);
+                  },
+                  () => focusFirstError(),
+                )}
+                noValidate
+                className="space-y-4"
+              >
                 <div className="space-y-2">
                   <Label className="text-[13px] font-normal" htmlFor="su-name">
                     Full name
                   </Label>
                   <ValidatedInput
                     id="su-name"
-                    value={name}
-                    onChange={(e) => {
-                      setName(e.target.value);
-                      setFieldErrors((p) => ({ ...p, name: undefined }));
-                    }}
                     placeholder="Juan Dela Cruz"
-                    error={fieldErrors.name}
+                    error={errors.name?.message}
                     className="h-[50px] rounded-xl bg-background text-[15px]"
+                    {...register('name')}
                   />
                 </div>
 
@@ -123,14 +114,10 @@ export const SignupPage = () => {
                   <ValidatedInput
                     id="su-email"
                     type="email"
-                    value={email}
-                    onChange={(e) => {
-                      setEmail(e.target.value);
-                      setFieldErrors((p) => ({ ...p, email: undefined }));
-                    }}
                     placeholder="name@email.com"
-                    error={fieldErrors.email}
+                    error={errors.email?.message}
                     className="h-[50px] rounded-xl bg-background text-[15px]"
+                    {...register('email')}
                   />
                 </div>
 
@@ -138,17 +125,12 @@ export const SignupPage = () => {
                   <Label className="text-[13px] font-normal" htmlFor="su-pass">
                     Password
                   </Label>
-                  <ValidatedInput
+                  <PasswordInput
                     id="su-pass"
-                    type="password"
-                    value={password}
-                    onChange={(e) => {
-                      setPassword(e.target.value);
-                      setFieldErrors((p) => ({ ...p, password: undefined, confirm: undefined }));
-                    }}
                     placeholder="Min. 8 characters"
-                    error={fieldErrors.password}
+                    error={errors.password?.message}
                     className="h-[50px] rounded-xl bg-background text-[15px]"
+                    {...register('password')}
                   />
                 </div>
 
@@ -156,17 +138,12 @@ export const SignupPage = () => {
                   <Label className="text-[13px] font-normal" htmlFor="su-confirm">
                     Confirm password
                   </Label>
-                  <ValidatedInput
+                  <PasswordInput
                     id="su-confirm"
-                    type="password"
-                    value={confirm}
-                    onChange={(e) => {
-                      setConfirm(e.target.value);
-                      setFieldErrors((p) => ({ ...p, confirm: undefined }));
-                    }}
                     placeholder="Re-enter your password"
-                    error={fieldErrors.confirm}
+                    error={errors.confirm?.message}
                     className="h-[50px] rounded-xl bg-background text-[15px]"
+                    {...register('confirm')}
                   />
                 </div>
 
@@ -196,18 +173,18 @@ export const SignupPage = () => {
                   </div>
                 </fieldset>
 
-                {error && (
+                {submitError && (
                   <p role="alert" className="text-[13px] text-destructive">
-                    {error}
+                    {submitError}
                   </p>
                 )}
 
                 <Button
                   type="submit"
-                  disabled={submitting}
+                  disabled={signupMutation.isPending}
                   className="h-[50px] w-full rounded-xl text-[15px]"
                 >
-                  {submitting ? 'Creating account…' : 'Create account'}
+                  {signupMutation.isPending ? 'Creating account…' : 'Create account'}
                 </Button>
 
                 {role === 'shelter_staff' && (

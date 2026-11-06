@@ -4,6 +4,13 @@ import { ChevronDown, RotateCcw, Search, SlidersHorizontal, X } from 'lucide-rea
 import type { PetFilters } from '@/types';
 import { cn } from '@/lib/utils';
 import { ALL_FILTERS } from '@/hooks/usePetFilter';
+import {
+  PET_FILTER_FIELDS,
+  SPECIES_OPTIONS,
+  filterFieldLabel,
+  filterFieldOptions,
+} from '@/data/petFilters';
+import type { PetFacetValues } from '@/data/petFilters';
 import { Label, Input, Select } from '@/components/ui/Form';
 import { Button } from '@/components/ui/button';
 
@@ -13,28 +20,11 @@ interface FilterBarProps {
   onClear: (key: keyof PetFilters) => void;
   onReset: () => void;
   activeCount: number;
-  breeds: string[];
-  locations: string[];
-  temperaments: string[];
+  /** Backend-supplied facet values for the dynamic dropdowns. */
+  facets: PetFacetValues;
   /** Extra controls rendered with Filters / Reset (e.g. the NearbyFilter). */
   actions?: ReactNode;
 }
-
-interface FilterField {
-  key: keyof PetFilters;
-  label: string;
-  options: { value: string; label: string }[];
-}
-
-/** The primary facet stays visible as chips — it is the one people reach for first. */
-const speciesOptions = [
-  { value: ALL_FILTERS, label: 'All' },
-  { value: 'dog', label: 'Dogs' },
-  { value: 'cat', label: 'Cats' },
-  { value: 'rabbit', label: 'Rabbits' },
-  { value: 'bird', label: 'Birds' },
-  { value: 'other', label: 'Other' },
-];
 
 export const FilterBar = ({
   filters,
@@ -42,85 +32,18 @@ export const FilterBar = ({
   onClear,
   onReset,
   activeCount,
-  breeds,
-  locations,
-  temperaments,
+  facets,
   actions,
 }: FilterBarProps) => {
   const [panelOpen, setPanelOpen] = useState(false);
 
-  // Everything that is not `species` or `visibility` — the adopter-facing facets.
-  const fields: FilterField[] = [
-    {
-      key: 'breed',
-      label: 'Breed',
-      options: [
-        { value: ALL_FILTERS, label: 'Any breed' },
-        ...breeds.map((b) => ({ value: b, label: b })),
-      ],
-    },
-    {
-      key: 'ageGroup',
-      label: 'Age',
-      options: [
-        { value: ALL_FILTERS, label: 'Any age' },
-        { value: 'puppy-kitten', label: 'Puppy / Kitten' },
-        { value: 'young', label: 'Young' },
-        { value: 'adult', label: 'Adult' },
-        { value: 'senior', label: 'Senior' },
-      ],
-    },
-    {
-      key: 'size',
-      label: 'Size',
-      options: [
-        { value: ALL_FILTERS, label: 'Any size' },
-        { value: 'small', label: 'Small' },
-        { value: 'medium', label: 'Medium' },
-        { value: 'large', label: 'Large' },
-      ],
-    },
-    {
-      key: 'gender',
-      label: 'Gender',
-      options: [
-        { value: ALL_FILTERS, label: 'Any gender' },
-        { value: 'male', label: 'Male' },
-        { value: 'female', label: 'Female' },
-      ],
-    },
-    {
-      key: 'temperament',
-      label: 'Temperament',
-      options: [
-        { value: ALL_FILTERS, label: 'Any temperament' },
-        ...temperaments.map((t) => ({ value: t, label: t })),
-      ],
-    },
-    {
-      key: 'location',
-      label: 'Shelter location',
-      options: [
-        { value: ALL_FILTERS, label: 'Any location' },
-        ...locations.map((l) => ({ value: l, label: l })),
-      ],
-    },
-    {
-      key: 'status',
-      label: 'Adoption status',
-      options: [
-        { value: ALL_FILTERS, label: 'Any status' },
-        { value: 'Available', label: 'Available' },
-        { value: 'Fostered', label: 'Fostered' },
-      ],
-    },
-  ];
+  const labelFor = (key: keyof PetFilters, value: string) => {
+    const field = PET_FILTER_FIELDS.find((f) => f.key === key);
+    if (field) return filterFieldLabel(field, value);
+    return SPECIES_OPTIONS.find((option) => option.value === value)?.label ?? value;
+  };
 
-  const labelFor = (key: keyof PetFilters, value: string) =>
-    fields.find((f) => f.key === key)?.options.find((o) => o.value === value)?.label ??
-    speciesOptions.find((o) => o.value === value)?.label ??
-    value;
-
+  // Chips are derived from the same config as the panel, so they cannot drift.
   const activeChips: { key: keyof PetFilters; label: string }[] = [
     ...(filters.search.trim()
       ? [{ key: 'search' as const, label: `“${filters.search.trim()}”` }]
@@ -128,9 +51,10 @@ export const FilterBar = ({
     ...(filters.species !== ALL_FILTERS
       ? [{ key: 'species' as const, label: labelFor('species', filters.species) }]
       : []),
-    ...fields
-      .filter((f) => filters[f.key] !== ALL_FILTERS)
-      .map((f) => ({ key: f.key, label: labelFor(f.key, filters[f.key]) })),
+    ...PET_FILTER_FIELDS.filter((field) => filters[field.key] !== ALL_FILTERS).map((field) => ({
+      key: field.key,
+      label: labelFor(field.key, filters[field.key]),
+    })),
   ];
 
   return (
@@ -203,7 +127,7 @@ export const FilterBar = ({
 
       {/* -------------------------------------------------- species quick-switch chips */}
       <div className="flex flex-wrap items-center gap-2">
-        {speciesOptions.map((option) => {
+        {SPECIES_OPTIONS.map((option) => {
           const active = filters.species === option.value;
           return (
             <button
@@ -234,7 +158,7 @@ export const FilterBar = ({
         <div className="overflow-hidden" inert={!panelOpen}>
           <div className="rounded-2xl border bg-muted/30 p-5">
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-              {fields.map((field) => (
+              {PET_FILTER_FIELDS.map((field) => (
                 <div key={field.key}>
                   <Label
                     htmlFor={`pet-filter-${field.key}`}
@@ -247,7 +171,7 @@ export const FilterBar = ({
                     aria-label={field.label}
                     value={filters[field.key]}
                     onChange={(e) => onChange(field.key, e.target.value)}
-                    options={field.options}
+                    options={filterFieldOptions(field, facets)}
                     className="h-10 bg-background"
                   />
                 </div>

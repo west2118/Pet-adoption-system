@@ -1,9 +1,10 @@
-import { Check, X } from 'lucide-react';
+import { AlertTriangle, Check, X } from 'lucide-react';
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import type { VisitStatus, VisitThread } from '@/types';
 import { formatDate } from '@/utils/formatters';
 import { cn } from '@/lib/utils';
+import { DetailsModal } from '@/components/shared/DetailsModal';
 import { VisitStatusBadge } from '@/components/ui/StatusBadge';
 import { Button } from '@/components/ui/button';
 import { Label, Textarea } from '@/components/ui/Form';
@@ -98,16 +99,18 @@ interface VisitCardProps {
 export const VisitCard = ({ thread, onChanged }: VisitCardProps) => {
   const [cancelling, setCancelling] = useState(false);
   const [cancelReason, setCancelReason] = useState('');
-  const [showCancel, setShowCancel] = useState(false);
+  const [cancelOpen, setCancelOpen] = useState(false);
 
   const closed = thread.status === 'completed' || thread.status === 'cancelled';
+  const isConfirmed = thread.status === 'confirmed';
 
   const handleCancel = async () => {
     setCancelling(true);
     try {
       await visitService.cancelMine(thread.id, cancelReason.trim() || undefined);
       toast.success('Visit request cancelled.');
-      setShowCancel(false);
+      setCancelOpen(false);
+      setCancelReason('');
       onChanged();
     } catch (err) {
       toast.error(err instanceof ApiError ? err.message : 'Failed to cancel visit.');
@@ -144,7 +147,13 @@ export const VisitCard = ({ thread, onChanged }: VisitCardProps) => {
               <p className="mt-1 font-mono text-[11px] uppercase tracking-[0.18em] text-primary">
                 Preferred {thread.preferredSlot}
               </p>
-              <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
+              {thread.reason && (
+                <p className="mt-2 text-sm leading-relaxed text-foreground">
+                  <span className="font-medium text-muted-foreground">Reason: </span>
+                  {thread.reason}
+                </p>
+              )}
+              <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
                 {thread.confirmedSlot
                   ? `Confirmed ${thread.confirmedSlot}`
                   : thread.status === 'cancelled'
@@ -164,39 +173,13 @@ export const VisitCard = ({ thread, onChanged }: VisitCardProps) => {
                   variant="outline"
                   size="sm"
                   className="text-destructive"
-                  onClick={() => setShowCancel((v) => !v)}
+                  onClick={() => setCancelOpen(true)}
                 >
                   <X className="size-3.5" /> Cancel request
                 </Button>
               )}
             </div>
           </div>
-
-          {showCancel && !closed ? (
-            <div className="mt-5 space-y-2 rounded-lg border p-3">
-              <Label htmlFor={`cancel-${thread.id}`}>Cancellation note (optional)</Label>
-              <Textarea
-                id={`cancel-${thread.id}`}
-                value={cancelReason}
-                onChange={(e) => setCancelReason(e.target.value)}
-                placeholder="Let the shelter know why…"
-              />
-              <div className="flex gap-2">
-                <Button
-                  size="sm"
-                  variant="destructive"
-                  className="flex-1"
-                  onClick={() => void handleCancel()}
-                  disabled={cancelling}
-                >
-                  {cancelling ? 'Cancelling…' : 'Confirm cancellation'}
-                </Button>
-                <Button size="sm" variant="ghost" onClick={() => setShowCancel(false)} disabled={cancelling}>
-                  Keep request
-                </Button>
-              </div>
-            </div>
-          ) : null}
 
           <div className="mt-6 border-t border-border pt-6">
             <StatusTrack thread={thread} />
@@ -208,6 +191,66 @@ export const VisitCard = ({ thread, onChanged }: VisitCardProps) => {
           </p>
         </div>
       </div>
+
+      <DetailsModal
+        open={cancelOpen}
+        onClose={cancelling ? () => undefined : () => setCancelOpen(false)}
+        title={isConfirmed ? 'Cancel this confirmed visit?' : 'Cancel this visit request?'}
+        description={
+          thread.pet
+            ? `${thread.pet.name} · Preferred ${thread.preferredSlot}`
+            : `Preferred ${thread.preferredSlot}`
+        }
+        icon={AlertTriangle}
+      >
+        <div className="space-y-4">
+          <p className="text-sm leading-relaxed text-muted-foreground">
+            {isConfirmed ? (
+              <>
+                Your visit for{' '}
+                <span className="font-medium text-foreground">{thread.pet?.name ?? 'this pet'}</span>{' '}
+                has already been confirmed for{' '}
+                <span className="font-medium text-foreground">{thread.confirmedSlot}</span>. Cancelling
+                withdraws the request and frees up the scheduled appointment. It cannot be undone.
+              </>
+            ) : (
+              <>
+                This withdraws your visit request for{' '}
+                <span className="font-medium text-foreground">{thread.pet?.name ?? 'this pet'}</span>. It
+                cannot be undone.
+              </>
+            )}
+          </p>
+          <div>
+            <Label htmlFor={`cancel-${thread.id}`}>Reason (optional)</Label>
+            <Textarea
+              id={`cancel-${thread.id}`}
+              value={cancelReason}
+              onChange={(e) => setCancelReason(e.target.value)}
+              placeholder="Let the shelter know why you are cancelling…"
+              disabled={cancelling}
+            />
+          </div>
+          <div className="flex gap-2">
+            <Button
+              variant="outline"
+              className="flex-1"
+              onClick={() => setCancelOpen(false)}
+              disabled={cancelling}
+            >
+              Keep request
+            </Button>
+            <Button
+              variant="destructive"
+              className="flex-1"
+              onClick={() => void handleCancel()}
+              disabled={cancelling}
+            >
+              {cancelling ? 'Cancelling…' : 'Confirm cancellation'}
+            </Button>
+          </div>
+        </div>
+      </DetailsModal>
     </article>
   );
 };

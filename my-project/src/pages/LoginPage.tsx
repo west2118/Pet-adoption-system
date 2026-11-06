@@ -1,12 +1,17 @@
+import { zodResolver } from '@hookform/resolvers/zod';
 import { ArrowUpRight, MapPin, Plus } from 'lucide-react';
 import { useState } from 'react';
+import { useForm } from 'react-hook-form';
 import { Link, useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
+import { useMutation } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/Form';
-import { ValidatedInput, focusFirstError, isBlank, isEmail } from '@/components/shared';
+import { PasswordInput, ValidatedInput, focusFirstError } from '@/components/shared';
 import { useAuth } from '@/hooks/useAuth';
-import { ApiError } from '@/lib/apiClient';
+import { ApiError, apiErrorMessage, tokenStore } from '@/lib/apiClient';
+import { loginSchema } from '@/lib/validators';
+import type { LoginValues } from '@/lib/validators';
 import type { UserRole } from '@/types';
 
 const landingRouteFor = (role: UserRole) =>
@@ -15,36 +20,45 @@ const landingRouteFor = (role: UserRole) =>
 export const LoginPage = () => {
   const { login } = useAuth();
   const navigate = useNavigate();
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [fieldErrors, setFieldErrors] = useState<{ email?: string; password?: string }>({});
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const next: typeof fieldErrors = {};
-    if (!isEmail(email)) next.email = 'Enter a valid email address.';
-    if (isBlank(password)) next.password = 'Please enter your password.';
-    setFieldErrors(next);
-    if (Object.keys(next).length > 0) {
-      focusFirstError();
-      return;
-    }
-    setError(null);
-    setSubmitting(true);
-    try {
-      const user = await login(email, password);
+  const {
+    register,
+    handleSubmit,
+    formState: { errors },
+  } = useForm<LoginValues>({
+    resolver: zodResolver(loginSchema),
+    defaultValues: { email: '', password: '' },
+  });
+
+  const [submitError, setSubmitError] = useState<string | null>(null);
+
+  const loginMutation = useMutation({
+    mutationFn: (values: LoginValues) => login(values.email, values.password),
+    onSuccess: (user) => {
       toast.success(`Welcome back, ${user.name}!`);
       navigate(landingRouteFor(user.role), { replace: true });
-    } catch (err) {
-      const message =
-        err instanceof ApiError ? err.message : 'Unable to sign in. Please try again.';
-      setError(message);
-    } finally {
-      setSubmitting(false);
-    }
-  };
+    },
+    // Covers network/unexpected failures, not just API error responses.
+    onError: (error) => {
+      if (error instanceof ApiError && error.status === 403 && error.details) {
+        const { requiresOnboarding, onboardingToken } = error.details;
+        if (onboardingToken) {
+          tokenStore.setOnboarding(onboardingToken);
+        }
+        if (requiresOnboarding) {
+          toast.info('Please complete your shelter registration to continue.');
+          navigate('/onboarding/shelter', { replace: true });
+          return;
+        }
+        if (requiresOnboarding === false) {
+          toast.info('Your shelter registration is awaiting approval.');
+          navigate('/onboarding/shelter/pending', { replace: true });
+          return;
+        }
+      }
+      setSubmitError(apiErrorMessage(error, 'Unable to sign in. Please try again.'));
+    },
+  });
 
   return (
     <div className="relative flex min-h-[calc(100vh-5rem)] w-full items-center justify-center overflow-hidden bg-background px-4 py-10 md:px-6 md:py-14">
@@ -65,7 +79,17 @@ export const LoginPage = () => {
                 </p>
               </div>
 
-              <form onSubmit={handleSubmit} noValidate className="space-y-4">
+              <form
+                onSubmit={handleSubmit(
+                  (values) => {
+                    setSubmitError(null);
+                    loginMutation.mutate(values);
+                  },
+                  () => focusFirstError(),
+                )}
+                noValidate
+                className="space-y-4"
+              >
                 <div className="space-y-2">
                   <Label className="text-[13px] font-normal" htmlFor="login-email">
                     Email
@@ -73,14 +97,10 @@ export const LoginPage = () => {
                   <ValidatedInput
                     id="login-email"
                     type="email"
-                    value={email}
-                    onChange={(e) => {
-                      setEmail(e.target.value);
-                      setFieldErrors((p) => ({ ...p, email: undefined }));
-                    }}
                     placeholder="name@email.com"
-                    error={fieldErrors.email}
+                    error={errors.email?.message}
                     className="h-[50px] rounded-xl bg-background text-[15px]"
+                    {...register('email')}
                   />
                 </div>
 
@@ -88,32 +108,27 @@ export const LoginPage = () => {
                   <Label className="text-[13px] font-normal" htmlFor="login-pass">
                     Password
                   </Label>
-                  <ValidatedInput
+                  <PasswordInput
                     id="login-pass"
-                    type="password"
-                    value={password}
-                    onChange={(e) => {
-                      setPassword(e.target.value);
-                      setFieldErrors((p) => ({ ...p, password: undefined }));
-                    }}
                     placeholder="••••••••"
-                    error={fieldErrors.password}
+                    error={errors.password?.message}
                     className="h-[50px] rounded-xl bg-background text-[15px]"
+                    {...register('password')}
                   />
                 </div>
 
-                {error && (
+                {submitError && (
                   <p role="alert" className="text-[13px] text-destructive">
-                    {error}
+                    {submitError}
                   </p>
                 )}
 
                 <Button
                   type="submit"
-                  disabled={submitting}
+                  disabled={loginMutation.isPending}
                   className="h-[50px] w-full rounded-xl text-[15px]"
                 >
-                  {submitting ? 'Signing in…' : 'Sign in'}
+                  {loginMutation.isPending ? 'Signing in…' : 'Sign in'}
                 </Button>
               </form>
 

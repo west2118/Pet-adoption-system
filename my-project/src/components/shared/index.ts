@@ -20,6 +20,7 @@ export { Breadcrumbs } from './Breadcrumbs';
 export { SlideOver } from './SlideOver';
 export { DetailsModal } from './DetailsModal';
 export { ConfirmDeleteModal } from './ConfirmDeleteModal';
+export { PasswordInput } from './PasswordInput';
 export { Reveal } from './Reveal';
 export { BlurText } from './BlurText';
 export { GridOverlay } from './GridOverlay';

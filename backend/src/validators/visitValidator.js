@@ -2,7 +2,8 @@ import { z } from 'zod';
 
 export const createVisitSchema = z.object({
   petId: z.string().uuid('Invalid pet ID format'),
-  preferredSlot: z.string().min(1, 'Preferred date/time is required').max(255),
+  preferredSlot: z.string().min(1, 'Preferred date and time is required').max(255),
+  reason: z.string().min(1, 'Reason for visit is required').max(1000, 'Reason must not exceed 1000 characters'),
 });
 
 export const visitPetParam = z.object({

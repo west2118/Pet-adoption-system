@@ -9,7 +9,12 @@ import { cn } from '@/lib/utils';
 const fieldBase =
   'w-full rounded-lg border border-input bg-background px-3 py-2 text-sm shadow-xs outline-none transition-colors placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30 disabled:cursor-not-allowed disabled:opacity-50';
 
-export const Input = ({ className, ...props }: InputHTMLAttributes<HTMLInputElement>) => {
+interface InputProps extends InputHTMLAttributes<HTMLInputElement> {
+  /** React 19 passes `ref` as a normal prop to function components. */
+  ref?: Ref<HTMLInputElement>;
+}
+
+export const Input = ({ className, ...props }: InputProps) => {
   return <input className={cn(fieldBase, 'h-9', className)} {...props} />;
 };
 
@@ -28,6 +33,8 @@ export const Textarea = ({
 
 interface SelectProps extends SelectHTMLAttributes<HTMLSelectElement> {
   options: { value: string; label: string }[];
+  /** React 19 passes `ref` as a normal prop to function components. */
+  ref?: Ref<HTMLSelectElement>;
 }
 
 export const Select = ({ options, className, ...props }: SelectProps) => {

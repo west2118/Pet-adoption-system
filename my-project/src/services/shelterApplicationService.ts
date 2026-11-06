@@ -42,12 +42,16 @@ export interface ReviewEmailStatus {
   emailStubbed: boolean;
 }
 
-export const approveShelterApplication = async (id: string): Promise<ReviewEmailStatus> => {
+export const approveShelterApplication = async (
+  id: string,
+  message?: string,
+): Promise<ReviewEmailStatus> => {
   const data = await apiRequest<ReviewEmailStatus>(
     `/admin/shelter-applications/${id}/approve`,
     {
       method: 'PATCH',
       auth: 'full',
+      body: { message },
     },
   );
   return {

@@ -93,6 +93,8 @@ export interface PetFacets {
 /** Filters the browse page sends to the backend instead of applying itself. */
 export interface PublicPetsQuery {
   page?: number;
+  /** Page size override; the backend applies its own default when omitted. */
+  limit?: number;
   search?: string;
   species?: string;
   breed?: string;
@@ -129,8 +131,9 @@ type PublicPetFacet =
 /**
  * Page size the backend applies to GET /pets when no `limit` is sent — kept
  * only for the in-memory demo fallback; the real limit lives on the server.
+ * 12 fills four rows of the browse page's three-column grid.
  */
-const PUBLIC_PAGE_SIZE = 10;
+const PUBLIC_PAGE_SIZE = 12;
 
 const FACET_KEYS: PublicPetFacet[] = [
   'species',
@@ -151,6 +154,7 @@ const FACET_KEYS: PublicPetFacet[] = [
 const toPublicPetsQuery = (options: PublicPetsQuery): string => {
   const params = new URLSearchParams();
   params.set('page', String(options.page ?? 1));
+  if (options.limit) params.set('limit', String(options.limit));
   const search = options.search?.trim();
   if (search) params.set('search', search);
   FACET_KEYS.forEach((key) => {
@@ -235,7 +239,7 @@ export const listPetsPaginated = async (
     const { data, meta } = await apiRequestWithMeta<PetsListResponse>(
       `/pets${toPublicPetsQuery(options)}`,
     );
-    const limit = meta?.limit ?? PUBLIC_PAGE_SIZE;
+    const limit = meta?.limit ?? options.limit ?? PUBLIC_PAGE_SIZE;
     const total = meta?.total ?? data.pets.length;
     return {
       items: data.pets,
@@ -245,14 +249,15 @@ export const listPetsPaginated = async (
       totalPages: meta?.totalPages ?? Math.ceil(total / limit),
     };
   } catch {
+    const pageSize = options.limit ?? PUBLIC_PAGE_SIZE;
     const matches = browsableMockPets(options);
-    const start = (page - 1) * PUBLIC_PAGE_SIZE;
+    const start = (page - 1) * pageSize;
     return {
-      items: matches.slice(start, start + PUBLIC_PAGE_SIZE),
+      items: matches.slice(start, start + pageSize),
       total: matches.length,
       page,
-      limit: PUBLIC_PAGE_SIZE,
-      totalPages: Math.ceil(matches.length / PUBLIC_PAGE_SIZE),
+      limit: pageSize,
+      totalPages: Math.ceil(matches.length / pageSize),
     };
   }
 };

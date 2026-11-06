@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 interface ShelterContactCardProps {
   shelter: Shelter;
   className?: string;
+  showBrowseButton?: boolean;
 }
 
 /**
@@ -14,7 +15,11 @@ interface ShelterContactCardProps {
  * `mailto:` actions. Used by the public shelter profile — the portal has its own
  * editable form in `pages/shelter/ShelterProfilePage.tsx`.
  */
-export const ShelterContactCard = ({ shelter, className }: ShelterContactCardProps) => {
+export const ShelterContactCard = ({
+  shelter,
+  className,
+  showBrowseButton = true,
+}: ShelterContactCardProps) => {
   const rows = [
     { icon: MapPin, label: 'Address', value: shelter.address },
     { icon: Phone, label: 'Phone', value: shelter.phone, href: `tel:${shelter.phone.replace(/\s+/g, '')}` },
@@ -48,11 +53,6 @@ export const ShelterContactCard = ({ shelter, className }: ShelterContactCardPro
       </ul>
 
       <div className="mt-7 flex flex-wrap gap-3">
-        <Link to={`/pets?location=${encodeURIComponent(shelter.location)}`}>
-          <Button variant="outline" size="sm">
-            Browse {shelter.location} listings
-          </Button>
-        </Link>
         <a href={`mailto:${shelter.email}`}>
           <Button size="sm">Email this shelter</Button>
         </a>

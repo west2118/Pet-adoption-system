@@ -89,10 +89,14 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     return result;
   }, []);
 
-  const logout = useCallback(() => {
+  const logout = useCallback(async () => {
     // Revoke server-side best-effort; local state always clears so a dead
     // network can never trap the user in a logged-in UI.
-    void authService.logoutSession().catch(() => undefined);
+    try {
+      await authService.logoutSession();
+    } catch {
+      // Ignore failure to ensure local state clears
+    }
     tokenStore.clearOnboarding();
     setUser(null);
   }, []);

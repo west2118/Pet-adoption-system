@@ -47,7 +47,7 @@ export const listShelterApplications = async (pagination) => {
  * Approves a shelter application atomically: creates the shelter, promotes the
  * registrant to its owner (approved), and marks the application approved.
  */
-export const approveShelterApplication = async (applicationId) => {
+export const approveShelterApplication = async (applicationId, message) => {
   const client = await pool.connect();
   let result;
   try {
@@ -81,7 +81,7 @@ export const approveShelterApplication = async (applicationId) => {
       shelterId: shelterRow.id,
     });
 
-    await updateApplicationStatus(client, applicationId, 'approved');
+    await updateApplicationStatus(client, applicationId, 'approved', message ?? null);
 
     await client.query('COMMIT');
     result = { shelter: mapShelter(shelterRow, 0, 0), user: mapUser(userRow), application };
@@ -96,6 +96,7 @@ export const approveShelterApplication = async (applicationId) => {
     to: result.application.email,
     name: result.application.name,
     shelterName: result.shelter.name,
+    message,
   }).catch(() => ({ sent: false, stubbed: false, error: true }));
   const emailSent = mail.sent === true;
   const emailStubbed = mail.stubbed === true;

@@ -164,6 +164,7 @@ export interface VisitThread {
   adopterId: string;
   status: VisitStatus;
   preferredSlot: string;
+  reason?: string | null;
   confirmedSlot?: string | null;
   cancelReason?: string | null;
   /** Message the shelter emailed with the confirmed visit date. */

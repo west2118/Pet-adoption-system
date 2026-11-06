@@ -9,6 +9,7 @@ import {
   findUserById,
   updateUserProfile,
 } from '../repositories/userRepository.js';
+import { findApplicationByUserId } from '../repositories/shelterApplicationRepository.js';
 import { issueSession, revokeSession, rotateSession } from './sessionService.js';
 
 // Short-lived, limited token issued to a pending shelter registrant so they can
@@ -66,9 +67,22 @@ export const login = async (input) => {
     throw new AppError('Invalid email or password.', 401);
   }
   if (row.account_status === 'pending') {
+    const application = await findApplicationByUserId(row.id);
+    const onboardingToken = signOnboardingToken(row);
+
+    if (!application) {
+      // User registered as shelter staff/admin but hasn't submitted their shelter onboarding yet!
+      throw new AppError(
+        'Please complete your shelter registration.',
+        403,
+        { requiresOnboarding: true, onboardingToken },
+      );
+    }
+
     throw new AppError(
       'Your account is awaiting admin approval. You will be notified by email.',
       403,
+      { requiresOnboarding: false, onboardingToken },
     );
   }
   if (row.account_status === 'rejected' || row.account_status === 'suspended') {

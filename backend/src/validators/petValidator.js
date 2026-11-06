@@ -44,14 +44,15 @@ export const updatePetSchema = createPetSchema.partial();
 /**
  * Public catalogue query.
  *
- * `limit` defaults to 10 — the page size the browse page relies on. The
+ * `limit` defaults to 12 — the page size the browse page relies on (four full
+ * rows of its three-column grid). The
  * backend owns pagination: clients ask for a `page` and get back a `meta`
  * block (page/limit/total/totalPages), so no caller has to slice results.
  * `parsePagination` still clamps an explicit limit to 1..100.
  */
 export const petQuerySchema = z.object({
   page: z.string().optional().default('1'),
-  limit: z.string().optional().default('10'),
+  limit: z.string().optional().default('12'),
   search: z.string().optional().default(''),
   species: z.string().optional().default(''),
   breed: z.string().optional().default(''),

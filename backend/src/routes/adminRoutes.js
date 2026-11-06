@@ -11,7 +11,7 @@ import { authorize } from '../middlewares/authorize.js';
 import { validate } from '../middlewares/validate.js';
 import { uuidParam } from '../validators/commonValidator.js';
 import { updateUserRoleSchema } from '../validators/adminValidator.js';
-import { reviewShelterApplicationSchema } from '../validators/shelterApplicationValidator.js';
+import { approveShelterApplicationSchema, reviewShelterApplicationSchema } from '../validators/shelterApplicationValidator.js';
 
 export const adminRoutes = Router();
 
@@ -33,6 +33,7 @@ adminRoutes.get('/shelter-applications', getShelterApplications);
 adminRoutes.patch(
   '/shelter-applications/:id/approve',
   validate(uuidParam, 'params'),
+  validate(approveShelterApplicationSchema),
   approveApplication,
 );
 adminRoutes.patch(

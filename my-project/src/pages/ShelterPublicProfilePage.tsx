@@ -219,7 +219,7 @@ export const ShelterPublicProfilePage = () => {
                 Visiting hours, phone, and email for {shelter.name}. Walk-ins welcome
                 during opening hours — please call ahead for same-day meet and greets.
               </p>
-              <ShelterContactCard shelter={shelter} className="mt-8" />
+              <ShelterContactCard shelter={shelter} showBrowseButton={false} className="mt-8" />
             </Reveal>
           </div>
         </div>
@@ -248,13 +248,6 @@ export const ShelterPublicProfilePage = () => {
                   ? `${shelter.name} has no public listings at the moment. New arrivals are added every week.`
                   : `${speciesBreakdown} in ${shelter.location}. Private shelter records are never shown here.`}
               </p>
-              <Link
-                to={`/pets?location=${encodeURIComponent(shelter.location)}`}
-                className="group mt-8 inline-flex items-center gap-3 font-mono text-xs uppercase tracking-[0.2em] text-primary transition-colors hover:text-primary/75"
-              >
-                Browse all listings
-                <span className="h-px w-8 bg-current transition-all duration-300 group-hover:w-12" />
-              </Link>
             </Reveal>
           </div>
 
@@ -331,7 +324,7 @@ export const ShelterPublicProfilePage = () => {
                   variant="outline"
                   className="h-11 rounded-full px-7 text-[15px]"
                 >
-                  Email {shelter.location}
+                  Email {shelter.name}
                 </Button>
               </a>
             </div>

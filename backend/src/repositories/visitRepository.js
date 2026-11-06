@@ -39,11 +39,11 @@ export const findThreadByPetAndAdopter = async (petId, adopterId) => {
   return rows[0] ?? null;
 };
 
-export const createThread = async ({ petId, adopterId, preferredSlot }) => {
+export const createThread = async ({ petId, adopterId, preferredSlot, reason }) => {
   const { rows } = await pool.query(
-    `INSERT INTO visit_threads (pet_id, adopter_id, status, preferred_slot)
-     VALUES ($1, $2, 'requested', $3) RETURNING *`,
-    [petId, adopterId, preferredSlot],
+    `INSERT INTO visit_threads (pet_id, adopter_id, status, preferred_slot, reason)
+     VALUES ($1, $2, 'requested', $3, $4) RETURNING *`,
+    [petId, adopterId, preferredSlot, reason ?? null],
   );
   return rows[0] ?? null;
 };

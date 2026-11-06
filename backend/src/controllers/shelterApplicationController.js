@@ -39,7 +39,7 @@ export const getShelterApplications = async (req, res) => {
 };
 
 export const approveApplication = async (req, res) => {
-  const result = await approveShelterApplication(req.params.id);
+  const result = await approveShelterApplication(req.params.id, req.body?.message);
   return sendSuccess(res, result, 'Shelter application approved.');
 };
 

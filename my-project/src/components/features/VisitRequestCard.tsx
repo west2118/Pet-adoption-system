@@ -5,7 +5,7 @@ import { toast } from 'react-toastify';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/Card';
 import { Label } from '@/components/ui/Form';
 import { Button } from '@/components/ui/button';
-import { ValidatedInput, focusFirstError } from '@/components/shared';
+import { ValidatedInput, ValidatedTextarea, focusFirstError } from '@/components/shared';
 import { VisitStatusBadge } from '@/components/ui/StatusBadge';
 import { useAuth } from '@/hooks/useAuth';
 import { ApiError } from '@/lib/apiClient';
@@ -48,6 +48,8 @@ export const VisitRequestCard = ({ petId, petName }: { petId: string; petName: s
   const [sending, setSending] = useState(false);
   const [slot, setSlot] = useState('');
   const [slotError, setSlotError] = useState<string | undefined>(undefined);
+  const [reason, setReason] = useState('');
+  const [reasonError, setReasonError] = useState<string | undefined>(undefined);
 
   useEffect(() => {
     if (!isAdopter || !userId) return;
@@ -91,24 +93,38 @@ export const VisitRequestCard = ({ petId, petName }: { petId: string; petName: s
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    let hasError = false;
+
     const picked = slot.trim() === '' ? null : new Date(slot);
     if (!picked || Number.isNaN(picked.getTime())) {
       setSlotError('Pick a preferred date and time.');
-      toast.warning('Please fix the highlighted fields.');
-      focusFirstError();
-      return;
-    }
-    if (picked.getTime() <= Date.now()) {
+      hasError = true;
+    } else if (picked.getTime() <= Date.now()) {
       setSlotError('Pick a date and time in the future.');
+      hasError = true;
+    } else {
+      setSlotError(undefined);
+    }
+
+    if (!reason.trim()) {
+      setReasonError('Please let the shelter know why you want to visit.');
+      hasError = true;
+    } else {
+      setReasonError(undefined);
+    }
+
+    if (hasError) {
       toast.warning('Please fix the highlighted fields.');
       focusFirstError();
       return;
     }
+
     setSending(true);
     try {
       const thread = await visitService.request({
         petId,
         preferredSlot: formatSlot(slot),
+        reason: reason.trim(),
       });
       setExisting(thread);
       setSent(true);
@@ -210,12 +226,15 @@ export const VisitRequestCard = ({ petId, petName }: { petId: string; petName: s
         </CardDescription>
       </CardHeader>
       <CardContent>
-        <form onSubmit={handleSubmit} noValidate className="space-y-3">
+        <form onSubmit={handleSubmit} noValidate className="space-y-4">
           <div>
-            <Label htmlFor="visit-slot">Preferred date/time</Label>
+            <Label htmlFor="visit-slot" className="text-foreground">
+              Preferred date/time <span className="text-destructive">*</span>
+            </Label>
             <ValidatedInput
               id="visit-slot"
               type="datetime-local"
+              required
               min={nowLocalInput()}
               value={slot}
               onChange={(e) => {
@@ -223,6 +242,23 @@ export const VisitRequestCard = ({ petId, petName }: { petId: string; petName: s
                 setSlotError(undefined);
               }}
               error={slotError}
+            />
+          </div>
+          <div>
+            <Label htmlFor="visit-reason" className="text-foreground">
+              Reason for visit <span className="text-destructive">*</span>
+            </Label>
+            <ValidatedTextarea
+              id="visit-reason"
+              required
+              rows={3}
+              placeholder="Tell the shelter why you would like to meet this pet (e.g., family compatibility, readiness to adopt)…"
+              value={reason}
+              onChange={(e) => {
+                setReason(e.target.value);
+                setReasonError(undefined);
+              }}
+              error={reasonError}
             />
           </div>
           <Button type="submit" className="w-full" size="sm" disabled={sending}>

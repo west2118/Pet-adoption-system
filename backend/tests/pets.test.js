@@ -12,9 +12,9 @@ const { parsePagination } = await import('../src/validators/commonValidator.js')
 const { buildPublicFilters } = await import('../src/repositories/petRepository.js');
 
 describe('GET /pets pagination (backend owns the limit)', () => {
-  it('defaults to 10 items per page', () => {
+  it('defaults to 12 items per page — four rows of the 3-column browse grid', () => {
     const parsed = petQuerySchema.parse({});
-    assert.equal(parsed.limit, '10');
+    assert.equal(parsed.limit, '12');
     assert.equal(parsed.page, '1');
   });
 

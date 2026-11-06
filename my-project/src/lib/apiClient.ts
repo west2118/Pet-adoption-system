@@ -33,9 +33,9 @@ export interface ApiFieldError {
 export class ApiError extends Error {
   status: number;
   code: string;
-  details?: ApiFieldError[];
+  details?: any;
 
-  constructor(message: string, status: number, code = 'ERROR', details?: ApiFieldError[]) {
+  constructor(message: string, status: number, code = 'ERROR', details?: any) {
     super(message);
     this.name = 'ApiError';
     this.status = status;
@@ -43,6 +43,13 @@ export class ApiError extends Error {
     this.details = details;
   }
 }
+
+/**
+ * Message to show for a failed request: the server's own message when we have
+ * one, otherwise the caller's wording for an unexpected failure.
+ */
+export const apiErrorMessage = (error: unknown, fallback: string): string =>
+  error instanceof ApiError ? error.message : fallback;
 
 export interface ApiMeta {
   page: number;

@@ -1,8 +1,9 @@
 export class AppError extends Error {
-  constructor(message, statusCode = 500) {
+  constructor(message, statusCode = 500, details = undefined) {
     super(message);
     this.statusCode = statusCode;
     this.isOperational = true;
+    this.details = details;
     Object.setPrototypeOf(this, new.target.prototype);
     if (Error.captureStackTrace) {
       Error.captureStackTrace(this, this.constructor);

@@ -20,6 +20,7 @@ export const errorHandler = (err, _req, res, _next) => {
       error: {
         code: codeForStatus(err.statusCode),
         message: err.message,
+        details: err.details,
       },
     });
   }

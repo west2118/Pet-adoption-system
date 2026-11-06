@@ -17,7 +17,6 @@ import {
 } from '@/services/adoptionApplicationService';
 import type { ApplicationSummary } from '@/services/adoptionApplicationService';
 import { sessionStore } from '@/lib/apiClient';
-import { ALL_FILTERS } from '@/hooks/usePetFilter';
 import type { NearbySearch } from '@/hooks/useNearbyPets';
 import type { AdoptionApplication, Pet, PetFilters, Shelter, User } from '@/types';
 
@@ -65,12 +64,20 @@ export const useShelters = () => {
 
   useEffect(() => {
     let mounted = true;
-    shelterService.list().then((data) => {
-      if (mounted) {
-        setShelters(data);
-        setLoading(false);
+    const fetchShelters = async () => {
+      try {
+        const data = await shelterService.list();
+        if (mounted) {
+          setShelters(data);
+          setLoading(false);
+        }
+      } catch {
+        if (mounted) {
+          setLoading(false);
+        }
       }
-    });
+    };
+    fetchShelters();
     return () => {
       mounted = false;
     };
@@ -79,15 +86,22 @@ export const useShelters = () => {
   return { shelters, setShelters, loading };
 };
 
+/** Typing a search should not hit the API on every keystroke. */
+const SEARCH_DEBOUNCE_MS = 350;
+
 /**
  * One page of the browse grid, paginated by the backend.
  *
  * `filters` come straight from `usePetFilter` and are forwarded to
- * `GET /pets`, which applies them together with its own 10-per-page limit and
+ * `GET /pets`, which applies them together with its own 12-per-page limit and
  * answers with `total` / `totalPages`. When `nearby` is present the backend
  * also filters by radius and orders closest-first, returning `distanceKm`.
  * The hook only owns the page number and resets it whenever the filter set
  * changes (the page wraps `setPage` for that).
+ *
+ * `search` is debounced so the input stays instant while the request (and the
+ * resulting loading state) only fires once the user pauses typing. Every other
+ * facet is applied immediately.
  */
 export const useBrowsePetsPage = (
   filters: PetFilters,
@@ -103,34 +117,61 @@ export const useBrowsePetsPage = (
     error: string | null;
   } | null>(null);
 
+  const [debouncedSearch, setDebouncedSearch] = useState(filters.search);
+
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedSearch(filters.search), SEARCH_DEBOUNCE_MS);
+    return () => clearTimeout(timer);
+  }, [filters.search]);
+
+  // Rebuilt from primitives so a keystroke (which only changes the raw search)
+  // does not change this object's identity, and therefore fires no request.
+  const query = useMemo<PetFilters>(
+    () => ({ ...filters, search: debouncedSearch }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [
+      debouncedSearch,
+      filters.species,
+      filters.breed,
+      filters.ageGroup,
+      filters.size,
+      filters.gender,
+      filters.temperament,
+      filters.location,
+      filters.status,
+      filters.visibility,
+    ],
+  );
+
   // Identifies the request a result belongs to — a changed filter or page
   // reads as "loading" without any setState inside the effect itself.
   const requestKey = useMemo(
-    () => `${page}|${JSON.stringify(filters)}|${nearby ? JSON.stringify(nearby) : 'none'}`,
-    [filters, nearby, page],
+    () => `${page}|${JSON.stringify(query)}|${nearby ? JSON.stringify(nearby) : 'none'}`,
+    [query, nearby, page],
   );
 
   useEffect(() => {
     let mounted = true;
-    listPetsPaginated({
-      page,
-      search: filters.search,
-      species: filters.species === ALL_FILTERS ? undefined : filters.species,
-      breed: filters.breed === ALL_FILTERS ? undefined : filters.breed,
-      ageGroup: filters.ageGroup === ALL_FILTERS ? undefined : filters.ageGroup,
-      size: filters.size === ALL_FILTERS ? undefined : filters.size,
-      gender: filters.gender === ALL_FILTERS ? undefined : filters.gender,
-      temperament: filters.temperament === ALL_FILTERS ? undefined : filters.temperament,
-      location: filters.location === ALL_FILTERS ? undefined : filters.location,
-      status: filters.status === ALL_FILTERS ? undefined : filters.status,
-      // The grid only lists pets still looking for a home.
-      excludeAdopted: true,
-      latitude: nearby?.latitude,
-      longitude: nearby?.longitude,
-      radiusKm: nearby?.radiusKm,
-      sortByDistance: Boolean(nearby),
-    })
-      .then((res) => {
+    const fetchPage = async () => {
+      try {
+        const res = await listPetsPaginated({
+          page,
+          search: query.search,
+          species: query.species,
+          breed: query.breed,
+          ageGroup: query.ageGroup,
+          size: query.size,
+          gender: query.gender,
+          temperament: query.temperament,
+          location: query.location,
+          status: query.status,
+          // The grid only lists pets still looking for a home.
+          excludeAdopted: true,
+          latitude: nearby?.latitude,
+          longitude: nearby?.longitude,
+          radiusKm: nearby?.radiusKm,
+          sortByDistance: Boolean(nearby),
+        });
         if (!mounted) return;
         const totalPages = res.totalPages ?? Math.max(1, Math.ceil(res.total / res.limit));
         // A filter change can leave us on a page that no longer exists.
@@ -146,8 +187,7 @@ export const useBrowsePetsPage = (
           totalPages,
           error: null,
         });
-      })
-      .catch(() => {
+      } catch {
         if (!mounted) return;
         setResult({
           key: requestKey,
@@ -157,18 +197,21 @@ export const useBrowsePetsPage = (
           totalPages: 1,
           error: 'Failed to load pets. Please try again.',
         });
-      });
+      }
+    };
+
+    fetchPage();
     return () => {
       mounted = false;
     };
-  }, [filters, nearby, page, requestKey]);
+  }, [query, nearby, page, requestKey]);
 
   const loading = result?.key !== requestKey;
 
   return {
     pets: result?.pets ?? [],
     total: result?.total ?? 0,
-    pageSize: result?.limit ?? 10,
+    pageSize: result?.limit ?? 12,
     totalPages: result?.totalPages ?? 1,
     page,
     setPage,
@@ -187,9 +230,15 @@ export const usePetFacets = () => {
 
   useEffect(() => {
     let mounted = true;
-    getPetFacets().then((data) => {
-      if (mounted) setFacets(data);
-    });
+    const fetchFacets = async () => {
+      try {
+        const data = await getPetFacets();
+        if (mounted) setFacets(data);
+      } catch {
+        // Ignore failure
+      }
+    };
+    fetchFacets();
     return () => {
       mounted = false;
     };
@@ -207,15 +256,53 @@ export const useHeroPets = () => {
 
   useEffect(() => {
     let mounted = true;
-    listPetsPaginated({ page: 1 }).then((res) => {
-      if (mounted) setPets(res.items);
-    });
+    const fetchHeroPets = async () => {
+      try {
+        const res = await listPetsPaginated({ page: 1 });
+        if (mounted) setPets(res.items);
+      } catch {
+        // Ignore failure
+      }
+    };
+    fetchHeroPets();
     return () => {
       mounted = false;
     };
   }, []);
 
   return pets;
+};
+
+/**
+ * The handful of adoptable pets the landing page features.
+ *
+ * The backend does the filtering (public, `Available`, non-adopted) and the
+ * limiting, so the home page no longer downloads the whole catalogue just to
+ * render six cards.
+ */
+export const useFeaturedPets = (limit = 6) => {
+  const [pets, setPets] = useState<Pet[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let mounted = true;
+    const fetchFeatured = async () => {
+      try {
+        const res = await listPetsPaginated({ page: 1, limit, status: 'Available', excludeAdopted: true });
+        if (mounted) setPets(res.items);
+      } catch {
+        if (mounted) setPets([]);
+      } finally {
+        if (mounted) setLoading(false);
+      }
+    };
+    fetchFeatured();
+    return () => {
+      mounted = false;
+    };
+  }, [limit]);
+
+  return { pets, loading };
 };
 
 /**
@@ -237,8 +324,9 @@ export const useSheltersPage = () => {
 
   useEffect(() => {
     let mounted = true;
-    listSheltersPaginated({ page })
-      .then((res) => {
+    const fetchSheltersPage = async () => {
+      try {
+        const res = await listSheltersPaginated({ page });
         if (!mounted) return;
         const totalPages = res.totalPages ?? Math.max(1, Math.ceil(res.total / res.limit));
         // Data changes can leave us on a page that no longer exists.
@@ -254,8 +342,7 @@ export const useSheltersPage = () => {
           totalPages,
           error: null,
         });
-      })
-      .catch(() => {
+      } catch {
         if (!mounted) return;
         setResult({
           key: requestKey,
@@ -265,7 +352,10 @@ export const useSheltersPage = () => {
           totalPages: 1,
           error: 'Failed to load shelters. Please try again.',
         });
-      });
+      }
+    };
+
+    fetchSheltersPage();
     return () => {
       mounted = false;
     };
@@ -291,9 +381,15 @@ export const useShelterStats = () => {
 
   useEffect(() => {
     let mounted = true;
-    getShelterStats().then((data) => {
-      if (mounted) setStats(data);
-    });
+    const fetchStats = async () => {
+      try {
+        const data = await getShelterStats();
+        if (mounted) setStats(data);
+      } catch {
+        // Ignore failure
+      }
+    };
+    fetchStats();
     return () => {
       mounted = false;
     };
@@ -323,8 +419,9 @@ export const useMyApplicationsPage = (applicantId?: string) => {
 
   useEffect(() => {
     let mounted = true;
-    listMyApplicationsPaginated({ page, applicantId })
-      .then((res) => {
+    const fetchApplications = async () => {
+      try {
+        const res = await listMyApplicationsPaginated({ page, applicantId });
         if (!mounted) return;
         const totalPages = res.totalPages ?? Math.max(1, Math.ceil(res.total / res.limit));
         if (totalPages > 0 && page > totalPages) {
@@ -339,8 +436,7 @@ export const useMyApplicationsPage = (applicantId?: string) => {
           totalPages,
           error: null,
         });
-      })
-      .catch(() => {
+      } catch {
         if (!mounted) return;
         setResult({
           key: requestKey,
@@ -350,7 +446,10 @@ export const useMyApplicationsPage = (applicantId?: string) => {
           totalPages: 1,
           error: 'Failed to load your applications. Please try again.',
         });
-      });
+      }
+    };
+
+    fetchApplications();
     return () => {
       mounted = false;
     };
@@ -380,13 +479,15 @@ export const useMyApplicationSummary = (applicantId?: string, reload = 0) => {
 
   useEffect(() => {
     let mounted = true;
-    getMyApplicationSummary(applicantId)
-      .then((data) => {
+    const fetchSummary = async () => {
+      try {
+        const data = await getMyApplicationSummary(applicantId);
         if (mounted) setSummary(data);
-      })
-      .catch(() => {
+      } catch {
         // Summary bar degrades to placeholders when the counts are unavailable.
-      });
+      }
+    };
+    fetchSummary();
     return () => {
       mounted = false;
     };
@@ -443,12 +544,20 @@ export const useUsers = () => {
 
   useEffect(() => {
     let mounted = true;
-    userService.list().then((data) => {
-      if (mounted) {
-        setUsers(data);
-        setLoading(false);
+    const fetchUsers = async () => {
+      try {
+        const data = await userService.list();
+        if (mounted) {
+          setUsers(data);
+          setLoading(false);
+        }
+      } catch {
+        if (mounted) {
+          setLoading(false);
+        }
       }
-    });
+    };
+    fetchUsers();
     return () => {
       mounted = false;
     };
