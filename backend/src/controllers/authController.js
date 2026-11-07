@@ -1,17 +1,21 @@
 import { getMe, login, logoutSession, refreshSession as rotateUserSession, signup, updateProfile } from '../services/authService.js';
 import {
   clearAuthCookies,
+  clearOnboardingCookie,
   getCookie,
   REFRESH_COOKIE,
   setAuthCookies,
+  setOnboardingCookie,
 } from '../services/sessionService.js';
 import { sendSuccess } from '../utils/respond.js';
 
 export const signupUser = async (req, res) => {
   const result = await signup(req.body);
-  const { refreshToken, ...body } = result;
+  const { refreshToken, token, onboardingToken, ...body } = result;
   if (refreshToken) {
-    setAuthCookies(res, { accessToken: result.token, refreshToken });
+    setAuthCookies(res, { accessToken: token, refreshToken });
+  } else if (onboardingToken) {
+    setOnboardingCookie(res, onboardingToken);
   }
   const message = result.requiresOnboarding
     ? 'Account created. Complete your shelter details to continue.'
@@ -22,7 +26,8 @@ export const signupUser = async (req, res) => {
 export const loginUser = async (req, res) => {
   const result = await login(req.body);
   setAuthCookies(res, { accessToken: result.token, refreshToken: result.refreshToken });
-  return sendSuccess(res, { user: result.user, token: result.token }, 'Logged in successfully.');
+  clearOnboardingCookie(res);
+  return sendSuccess(res, { user: result.user }, 'Logged in successfully.');
 };
 
 export const getCurrentUser = async (req, res) => {

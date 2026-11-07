@@ -1,21 +1,22 @@
 import { useMemo } from 'react';
 import { ArrowRight, Heart } from 'lucide-react';
 import { Link } from 'react-router-dom';
-import { BlurText, GridOverlay, Reveal } from '@/components/shared';
+import { BlurText, ErrorState, GridOverlay, Reveal } from '@/components/shared';
 import { PetCard } from '@/components/features/PetCard';
 import { EmptyState, LoadingGrid } from '@/components/ui/Feedback';
 import { Button } from '@/components/ui/button';
 import { useFavorites } from '@/hooks/useFavorites';
 import { usePets, useShelters } from '@/hooks/useData';
-import { publicPets } from '@/data/mockData';
+import { publicPets } from '@/utils/pets';
 
 const frame = 'mx-auto w-full max-w-[1400px] px-6 lg:px-12';
 
 export const FavoritesPage = () => {
-  const { favorites, loading: favoritesLoading } = useFavorites();
-  const { pets, loading } = usePets();
+  const { favorites, loading: favoritesLoading, error: favoritesError } = useFavorites();
+  const { pets, loading, error: petsError } = usePets();
   const { shelters } = useShelters();
   const listLoading = loading || favoritesLoading;
+  const listError = petsError ?? favoritesError;
 
   const locationByShelter = useMemo(
     () => new Map(shelters.map((s) => [s.id, s.location])),
@@ -131,6 +132,8 @@ export const FavoritesPage = () => {
           <div className="mt-12">
             {listLoading ? (
               <LoadingGrid count={6} />
+            ) : listError ? (
+              <ErrorState title="Could not load your favorites" description={listError} />
             ) : saved.length === 0 ? (
               <EmptyState
                 title="No favorites saved"

@@ -9,10 +9,12 @@ import {
   PieChart,
   Users,
 } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   ChartCard,
+  ErrorState,
+  RefreshButton,
   SectionHeader,
   SummaryStatCard,
   SummaryStatCardSkeleton,
@@ -30,29 +32,27 @@ import type { AdminStats } from '@/services/api';
 export const AdminOverviewPage = () => {
   const [adminStats, setAdminStats] = useState<AdminStats | null>(null);
   const [statsError, setStatsError] = useState<string | null>(null);
-  const [reloadIndex, setReloadIndex] = useState(0);
+
+  const loadStats = useCallback(async () => {
+    try {
+      const stats = await getAdminStats();
+      setAdminStats(stats);
+      setStatsError(null);
+    } catch {
+      setStatsError('Failed to load dashboard figures.');
+    }
+  }, []);
 
   useEffect(() => {
-    let mounted = true;
-    getAdminStats()
-      .then((s) => {
-        if (mounted) {
-          setAdminStats(s);
-          setStatsError(null);
-        }
-      })
-      .catch(() => {
-        if (mounted) setStatsError('Failed to load dashboard figures.');
-      });
-    return () => {
-      mounted = false;
-    };
-  }, [reloadIndex]);
+    // Loading state is owned by the loader.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    void loadStats();
+  }, [loadStats]);
 
   const handleRetry = () => {
     setStatsError(null);
     setAdminStats(null);
-    setReloadIndex((i) => i + 1);
+    void loadStats();
   };
 
   const totalShelters = adminStats?.shelters.total ?? 0;
@@ -87,20 +87,16 @@ export const AdminOverviewPage = () => {
       <SectionHeader
         title="Platform administration"
         subtitle="Developer oversight — all shelters, all users, and global metrics."
+        actions={<RefreshButton onRefresh={loadStats} />}
       />
 
       <div className="mt-6 space-y-4">
         {statsError ? (
-          <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-5 text-sm">
-            <p className="font-semibold text-destructive">Could not load dashboard figures.</p>
-            <p className="mt-1 text-muted-foreground">
-              {statsError} Check that the backend is running and you are signed in as a platform
-              admin.
-            </p>
-            <Button size="sm" variant="outline" className="mt-3" onClick={handleRetry}>
-              Retry
-            </Button>
-          </div>
+          <ErrorState
+            title="Could not load dashboard figures"
+            description={`${statsError} Check that the backend is running and you are signed in as a platform admin.`}
+            onRetry={handleRetry}
+          />
         ) : overviewLoading ? (
           <SummaryStatGrid>
             <SummaryStatCardSkeleton />

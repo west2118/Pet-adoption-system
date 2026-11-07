@@ -9,7 +9,7 @@ import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/Form';
 import { PasswordInput, ValidatedInput, focusFirstError } from '@/components/shared';
 import { useAuth } from '@/hooks/useAuth';
-import { ApiError, apiErrorMessage, tokenStore } from '@/lib/apiClient';
+import { ApiError, apiErrorMessage } from '@/lib/apiClient';
 import { loginSchema } from '@/lib/validators';
 import type { LoginValues } from '@/lib/validators';
 import type { UserRole } from '@/types';
@@ -41,10 +41,9 @@ export const LoginPage = () => {
     // Covers network/unexpected failures, not just API error responses.
     onError: (error) => {
       if (error instanceof ApiError && error.status === 403 && error.details) {
-        const { requiresOnboarding, onboardingToken } = error.details;
-        if (onboardingToken) {
-          tokenStore.setOnboarding(onboardingToken);
-        }
+        // The onboarding cookie was set by the backend; only the routing hint
+        // comes back in the error payload.
+        const { requiresOnboarding } = error.details;
         if (requiresOnboarding) {
           toast.info('Please complete your shelter registration to continue.');
           navigate('/onboarding/shelter', { replace: true });

@@ -8,6 +8,9 @@ import { findUserById } from '../repositories/userRepository.js';
 
 export const ACCESS_COOKIE = 'paws_at';
 export const REFRESH_COOKIE = 'paws_rt';
+// Limited-scope JWT for a pending shelter registrant (onboarding only).
+export const ONBOARDING_COOKIE = 'paws_onboarding';
+export const ONBOARDING_TOKEN_TTL_MS = 2 * 24 * 60 * 60 * 1000;
 
 /** Parses '15m', '1h', '7d', '30s', '500ms', '2w' into milliseconds. */
 export const parseDurationMs = (raw) => {
@@ -107,9 +110,19 @@ export const setAuthCookies = (res, { accessToken, refreshToken }) => {
   res.cookie(REFRESH_COOKIE, refreshToken, cookieFlags(refreshTokenTtlMs()));
 };
 
+/** Keeps the onboarding JWT out of JavaScript, exactly like the session JWTs. */
+export const setOnboardingCookie = (res, token) => {
+  res.cookie(ONBOARDING_COOKIE, token, cookieFlags(ONBOARDING_TOKEN_TTL_MS));
+};
+
+export const clearOnboardingCookie = (res) => {
+  res.clearCookie(ONBOARDING_COOKIE, { path: '/' });
+};
+
 export const clearAuthCookies = (res) => {
   res.clearCookie(ACCESS_COOKIE, { path: '/' });
   res.clearCookie(REFRESH_COOKIE, { path: '/' });
+  clearOnboardingCookie(res);
 };
 
 /** Minimal cookie reader — avoids a cookie-parser dependency. */

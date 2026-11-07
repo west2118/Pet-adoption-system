@@ -3,7 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import { AlertCircle } from 'lucide-react';
 import type { Pet } from '@/types';
 import { Container } from '@/components/layout/Container';
-import { Reveal, TablePagination } from '@/components/shared';
+import { ErrorState, Reveal, TablePagination } from '@/components/shared';
 import { FilterBar } from '@/components/features/FilterBar';
 import { NearbyFilter } from '@/components/features/NearbyFilter';
 import { PetsHero } from '@/components/features/PetsHero';
@@ -196,7 +196,7 @@ export const BrowsePetsPage = () => {
           {loading && pagePets.length === 0 ? (
             <LoadingGrid count={6} />
           ) : error ? (
-            <EmptyState title="Could not load pets" description={error} />
+            <ErrorState title="Could not load pets" description={error} />
           ) : total === 0 ? (
             <EmptyState
               title={nearby.active ? 'No pets within this radius' : 'No pets match your filters'}

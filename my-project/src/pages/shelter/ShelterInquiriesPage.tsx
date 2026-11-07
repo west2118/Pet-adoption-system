@@ -4,6 +4,7 @@ import { toast } from 'react-toastify';
 import {
   DebouncedSearchInput,
   DetailsModal,
+  RefreshButton,
   RecordCard,
   RecordCardSkeleton,
   SectionHeader,
@@ -23,8 +24,7 @@ import {
 import { Input, Label, Select, Textarea } from '@/components/ui/Form';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/Badge';
-import { useAuth } from '@/hooks/useAuth';
-import { usePets, useShelters } from '@/hooks/useData';
+import { usePets } from '@/hooks/useData';
 import { ApiError } from '@/lib/apiClient';
 import {
   emailShelterInquiry,
@@ -32,6 +32,7 @@ import {
   type Inquiry,
 } from '@/services/api';
 import { formatDate } from '@/utils/formatters';
+import { describeApiError } from '@/utils/errors';
 
 const STATUS_FILTER_OPTIONS = [
   { value: 'all', label: 'All' },
@@ -40,12 +41,11 @@ const STATUS_FILTER_OPTIONS = [
 ];
 
 export const ShelterInquiriesPage = () => {
-  const { user } = useAuth();
   const { pets } = usePets();
-  const { shelters } = useShelters();
   const [inquiries, setInquiries] = useState<Inquiry[]>([]);
   const [totalInquiries, setTotalInquiries] = useState<number>(0);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [query, setQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'open' | 'resolved'>('all');
   const [page, setPage] = useState(1);
@@ -58,7 +58,6 @@ export const ShelterInquiriesPage = () => {
   const [emailMessage, setEmailMessage] = useState('');
   const [sendingEmail, setSendingEmail] = useState(false);
 
-  const myShelterId = user?.shelterId ?? shelters[0]?.id ?? null;
 
   const fetchInquiries = useCallback(async () => {
     setLoading(true);
@@ -69,18 +68,20 @@ export const ShelterInquiriesPage = () => {
         limit: pageSize,
         resolved: isResolved,
         search: query.trim(),
-        shelterId: myShelterId,
       });
       setInquiries(res.items);
       setTotalInquiries(res.total);
-    } catch {
-      toast.error('Failed to load inquiries.');
+      setLoadError(null);
+    } catch (err) {
+      setLoadError(describeApiError(err, 'Failed to load inquiries. Please try again.'));
     } finally {
       setLoading(false);
     }
-  }, [page, pageSize, statusFilter, query, myShelterId]);
+  }, [page, pageSize, statusFilter, query]);
 
   useEffect(() => {
+    // Loading state is owned by the fetch callback.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchInquiries();
   }, [fetchInquiries]);
 
@@ -190,6 +191,7 @@ export const ShelterInquiriesPage = () => {
       <SectionHeader
         title="Inquiries inbox"
         subtitle="Messages from potential adopters about your pets."
+        actions={<RefreshButton onRefresh={fetchInquiries} />}
       />
 
       <div className="mt-6 space-y-4">
@@ -198,6 +200,9 @@ export const ShelterInquiriesPage = () => {
           description="Direct messages from adopters about your listings."
           icon={MessageCircleQuestion}
           toolbar={toolbar}
+          error={loadError}
+          errorTitle="Could not load inquiries"
+          onRetry={fetchInquiries}
           isEmpty={!loading && inquiries.length === 0}
           emptyTitle="No inquiries found"
           emptyDescription="Try a different search or filter."

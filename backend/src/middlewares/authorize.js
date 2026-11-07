@@ -2,6 +2,19 @@ import { AppError } from '../utils/AppError.js';
 
 // Allows a shelter registrant to use their limited onboarding token (or an already
 // approved shelter staff token) on onboarding-only endpoints.
+/**
+ * Portal endpoints (e.g. `/auth/me`) need a real session: the limited
+ * onboarding token only unlocks the shelter-registration flow.
+ */
+export const requirePortalSession = (req, _res, next) => {
+  if (req.user?.scope === 'onboarding') {
+    return next(
+      new AppError('Complete your shelter onboarding before accessing the portal.', 403),
+    );
+  }
+  return next();
+};
+
 export const authorizeOnboarding = (req, _res, next) => {
   if (!req.user) {
     return next(new AppError('Authentication required.', 401));

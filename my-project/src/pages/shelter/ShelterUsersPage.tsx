@@ -6,6 +6,7 @@ import {
   DebouncedSearchInput,
   DetailsModal,
   PasswordInput,
+  RefreshButton,
   RecordCard,
   RecordCardSkeleton,
   SectionHeader,
@@ -37,6 +38,7 @@ import {
 } from '@/services/api';
 import type { ShelterAccountType } from '@/services/api';
 import type { User } from '@/types';
+import { describeApiError } from '@/utils/errors';
 
 const accountTypeOf = (user: User): ShelterAccountType =>
   user.isOwner ? 'admin' : 'staff';
@@ -81,6 +83,7 @@ export const ShelterUsersPage = () => {
   const [usersList, setUsersList] = useState<User[]>([]);
   const [totalUsers, setTotalUsers] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [query, setQuery] = useState('');
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
@@ -104,16 +107,16 @@ export const ShelterUsersPage = () => {
         page,
         limit: pageSize,
         search: query.trim(),
-        shelterId: myShelterId,
       });
       setUsersList(res.items);
       setTotalUsers(res.total);
+      setLoadError(null);
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : 'Failed to load users.');
+      setLoadError(describeApiError(err, 'Failed to load staff accounts. Please try again.'));
     } finally {
       setLoading(false);
     }
-  }, [myShelterId, page, pageSize, query]);
+  }, [page, pageSize, query]);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -162,16 +165,12 @@ export const ShelterUsersPage = () => {
 
     try {
       if (editingUser) {
-        const updated = await updateShelterUser(
-          editingUser.id,
-          {
-            name,
-            email,
-            accountType: form.accountType,
-            ...(form.password ? { password: form.password } : {}),
-          },
-          myShelterId,
-        );
+        const updated = await updateShelterUser(editingUser.id, {
+          name,
+          email,
+          accountType: form.accountType,
+          ...(form.password ? { password: form.password } : {}),
+        });
         toast.success(`${updated.name} updated successfully!`);
       } else {
         const created = await createShelterUser({
@@ -179,7 +178,6 @@ export const ShelterUsersPage = () => {
           email,
           password: form.password,
           accountType: form.accountType,
-          shelterId: myShelterId,
         });
         toast.success(
           `${created.name} added. They can now sign in and access ${shelterName} only.`,
@@ -199,7 +197,7 @@ export const ShelterUsersPage = () => {
     if (!pendingDeleteUser) return;
     setIsDeleting(true);
     try {
-      await removeShelterUser(pendingDeleteUser.id, myShelterId);
+      await removeShelterUser(pendingDeleteUser.id);
       toast.success(`${pendingDeleteUser.name} removed.`);
       setPendingDeleteUser(null);
       await fetchUsers();
@@ -251,6 +249,7 @@ export const ShelterUsersPage = () => {
       <SectionHeader
         title="Users"
         subtitle={`Manage the admins and staff who can access ${shelterName}.`}
+        actions={<RefreshButton onRefresh={fetchUsers} />}
       />
 
       <div className="mt-6 space-y-4">
@@ -267,6 +266,9 @@ export const ShelterUsersPage = () => {
           icon={Users}
           action={addUserButton}
           toolbar={toolbar}
+          error={loadError}
+          errorTitle="Could not load staff accounts"
+          onRetry={fetchUsers}
           isEmpty={!loading && usersList.length === 0}
           emptyTitle="No staff accounts yet"
           emptyDescription={

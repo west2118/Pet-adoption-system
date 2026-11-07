@@ -1,10 +1,10 @@
 import { Eye, PawPrint } from 'lucide-react';
-import { useEffect, useState } from 'react';
-import { toast } from 'react-toastify';
+import { useCallback, useEffect, useState } from 'react';
 import {
   DebouncedSearchInput,
   DetailsModal,
   RecordCard,
+  RefreshButton,
   RecordCardSkeleton,
   SectionHeader,
   TableCard,
@@ -26,6 +26,7 @@ import { useShelters } from '@/hooks/useData';
 import { listAdminPetsPaginated } from '@/services/api';
 import type { Pet } from '@/types';
 import { formatDate } from '@/utils/formatters';
+import { describeApiError } from '@/utils/errors';
 
 export const AdminPetsPage = () => {
   const { shelters } = useShelters();
@@ -38,33 +39,34 @@ export const AdminPetsPage = () => {
   const [petShelterFilter, setPetShelterFilter] = useState('all');
   const [detailsPet, setDetailsPet] = useState<Pet | null>(null);
   const [loadingAdminPets, setLoadingAdminPets] = useState(true);
+  const [petsError, setPetsError] = useState<string | null>(null);
 
   const shelterName = (id: string) => shelters.find((s) => s.id === id)?.name ?? 'Unknown';
 
-  useEffect(() => {
-    let mounted = true;
-    (async () => {
-      try {
-        const res = await listAdminPetsPaginated({
-          page: petPage,
-          limit: petPageSize,
-          search: petQuery.trim(),
-          shelterId: petShelterFilter,
-        });
-        if (mounted) {
-          setAdminPetsList(res.items);
-          setTotalAdminPets(res.total);
-        }
-      } catch {
-        if (mounted) toast.error('Failed to load pets.');
-      } finally {
-        if (mounted) setLoadingAdminPets(false);
-      }
-    })();
-    return () => {
-      mounted = false;
-    };
+  const fetchAdminPets = useCallback(async () => {
+    setLoadingAdminPets(true);
+    try {
+      const res = await listAdminPetsPaginated({
+        page: petPage,
+        limit: petPageSize,
+        search: petQuery.trim(),
+        shelterId: petShelterFilter,
+      });
+      setAdminPetsList(res.items);
+      setTotalAdminPets(res.total);
+      setPetsError(null);
+    } catch (err) {
+      setPetsError(describeApiError(err, 'Failed to load pets. Please try again.'));
+    } finally {
+      setLoadingAdminPets(false);
+    }
   }, [petPage, petPageSize, petQuery, petShelterFilter]);
+
+  useEffect(() => {
+    // Loading state is owned by the fetch callback.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    fetchAdminPets();
+  }, [fetchAdminPets]);
 
   const petSearchFilter = (
     <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
@@ -120,6 +122,7 @@ export const AdminPetsPage = () => {
       <SectionHeader
         title="All pets inventory"
         subtitle="Developer and system oversight for animal listings across every partner rescue."
+        actions={<RefreshButton onRefresh={fetchAdminPets} />}
       />
 
       <div className="mt-6 space-y-4">
@@ -128,6 +131,9 @@ export const AdminPetsPage = () => {
           description={`${adminPetsList.length} of ${totalAdminPets} pets across every shelter`}
           icon={PawPrint}
           toolbar={petSearchFilter}
+          error={petsError}
+          errorTitle="Could not load pets"
+          onRetry={fetchAdminPets}
           isEmpty={!loadingAdminPets && adminPetsList.length === 0}
           emptyTitle="No pets found"
           emptyDescription="Try a different search or shelter filter."

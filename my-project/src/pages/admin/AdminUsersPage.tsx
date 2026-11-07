@@ -1,4 +1,4 @@
-import { Eye, Pencil, Plus, Trash2, Users } from 'lucide-react';
+import { Eye, Pencil, Users } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 import type { FormEvent } from 'react';
 import { toast } from 'react-toastify';
@@ -6,6 +6,7 @@ import {
   DebouncedSearchInput,
   DetailsModal,
   RecordCard,
+  RefreshButton,
   RecordCardSkeleton,
   SectionHeader,
   SlideOver,
@@ -13,10 +14,9 @@ import {
   TablePagination,
   TableSkeletonRows,
 } from '@/components/shared';
-import { ConfirmDeleteModal } from '@/components/shared/ConfirmDeleteModal';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/button';
-import { Input, Label, Select } from '@/components/ui/Form';
+import { Label, Select } from '@/components/ui/Form';
 import {
   Table,
   TableBody,
@@ -26,6 +26,7 @@ import {
   TableRow,
 } from '@/components/ui/Table';
 import { useShelters } from '@/hooks/useData';
+import { describeApiError } from '@/utils/errors';
 import { listUsersPaginated, userService } from '@/services/api';
 import type { User, UserRole } from '@/types';
 import { ApiError } from '@/lib/apiClient';
@@ -56,22 +57,19 @@ export const AdminUsersPage = () => {
   const [userSlideOpen, setUserSlideOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<User | null>(null);
   const [detailsUser, setDetailsUser] = useState<User | null>(null);
-  const [pendingDeleteUser, setPendingDeleteUser] = useState<User | null>(null);
-  const [isDeletingUser, setIsDeletingUser] = useState(false);
-  const [userForm, setUserForm] = useState({
-    name: '',
-    email: '',
+  const [userForm, setUserForm] = useState<{ role: UserRole; shelterId: string }>({
     role: 'adopter',
     shelterId: '',
-    avatarUrl: '',
   });
 
   const [loadingUsers, setLoadingUsers] = useState(true);
+  const [usersError, setUsersError] = useState<string | null>(null);
 
   const shelterName = (id: string) => shelters.find((s) => s.id === id)?.name ?? 'Unknown';
 
   const fetchUsers = useCallback(async () => {
     try {
+      setLoadingUsers(true);
       const res = await listUsersPaginated({
         page: userPage,
         limit: userPageSize,
@@ -79,8 +77,9 @@ export const AdminUsersPage = () => {
       });
       setUsersList(res.items);
       setTotalUsers(res.total);
-    } catch {
-      toast.error('Failed to load users.');
+      setUsersError(null);
+    } catch (err) {
+      setUsersError(describeApiError(err, 'Failed to load users. Please try again.'));
     } finally {
       setLoadingUsers(false);
     }
@@ -92,25 +91,10 @@ export const AdminUsersPage = () => {
     fetchUsers();
   }, [fetchUsers]);
 
-  const resetUserForm = () =>
-    setUserForm({ name: '', email: '', role: 'adopter', shelterId: '', avatarUrl: '' });
-
-  const openAddUser = () => {
-    setEditingUser(null);
-    resetUserForm();
-    setUserSlideOpen(true);
-  };
-
   const openEditUser = (user: User) => {
     setEditingUser(user);
     setDetailsUser(null);
-    setUserForm({
-      name: user.name,
-      email: user.email,
-      role: user.role,
-      shelterId: user.shelterId ?? '',
-      avatarUrl: user.avatarUrl ?? '',
-    });
+    setUserForm({ role: user.role, shelterId: user.shelterId ?? '' });
     setUserSlideOpen(true);
   };
 
@@ -121,59 +105,25 @@ export const AdminUsersPage = () => {
 
   const handleUserSubmit = async (e: FormEvent) => {
     e.preventDefault();
-    const input = {
-      name: userForm.name,
-      email: userForm.email,
-      role: userForm.role as UserRole,
-      shelterId:
+    if (!editingUser) return;
+    try {
+      const shelterId =
         userForm.role === 'shelter_staff' && userForm.shelterId
           ? userForm.shelterId
-          : undefined,
-      avatarUrl: userForm.avatarUrl || undefined,
-    };
-    try {
-      if (editingUser) {
-        const updated = await userService.update(editingUser.id, input);
-        toast.success(`${updated?.name ?? input.name} updated successfully!`);
-      } else {
-        const created = await userService.create(input);
-        toast.success(`${created.name} added successfully!`);
-        resetUserForm();
-      }
+          : undefined;
+      const updated = await userService.updateRole(editingUser.id, userForm.role, shelterId);
+      toast.success(`${updated.name}'s role updated successfully!`);
       closeUserSlide();
       await fetchUsers();
     } catch (err) {
       toast.error(
-        err instanceof ApiError ? err.message : 'Failed to save user. Please try again.',
+        err instanceof ApiError ? err.message : 'Failed to update role. Please try again.',
       );
-    }
-  };
-
-  const removeUser = async (id: string) => {
-    const target = usersList.find((u) => u.id === id);
-    setIsDeletingUser(true);
-    try {
-      await userService.remove(id);
-      toast.success(target ? `${target.name} removed.` : 'User removed.');
-      setPendingDeleteUser(null);
-      await fetchUsers();
-    } catch (err) {
-      toast.error(
-        err instanceof ApiError ? err.message : 'Failed to remove user. Please try again.',
-      );
-    } finally {
-      setIsDeletingUser(false);
     }
   };
 
   const setUserField = (key: keyof typeof userForm, value: string) =>
     setUserForm((prev) => ({ ...prev, [key]: value }));
-
-  const addUserButton = (
-    <Button size="sm" onClick={openAddUser}>
-      <Plus className="size-4" /> Add user
-    </Button>
-  );
 
   const userSearchFilter = (
     <DebouncedSearchInput
@@ -213,6 +163,7 @@ export const AdminUsersPage = () => {
       <SectionHeader
         title="User accounts"
         subtitle="Manage adopters, shelter staff, and platform administrative accounts."
+        actions={<RefreshButton onRefresh={fetchUsers} />}
       />
 
       <div className="mt-6 space-y-4">
@@ -220,11 +171,13 @@ export const AdminUsersPage = () => {
           title="Users"
           description={`${usersList.length} of ${totalUsers} registered users`}
           icon={Users}
-          action={addUserButton}
           toolbar={userSearchFilter}
+          error={usersError}
+          errorTitle="Could not load users"
+          onRetry={fetchUsers}
           isEmpty={!loadingUsers && usersList.length === 0}
           emptyTitle="No users found"
-          emptyDescription="Try a different search, or add a new user."
+          emptyDescription="Try a different search."
           footer={userPagination}
           contentClassName="px-0"
         >
@@ -289,19 +242,10 @@ export const AdminUsersPage = () => {
                             variant="ghost"
                             size="icon-sm"
                             className="text-muted-foreground"
-                            aria-label={`Edit ${user.name}`}
+                            aria-label={`Change ${user.name}'s role`}
                             onClick={() => openEditUser(user)}
                           >
                             <Pencil className="size-4" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon-sm"
-                            className="text-muted-foreground"
-                            aria-label={`Remove ${user.name}`}
-                            onClick={() => setPendingDeleteUser(user)}
-                          >
-                            <Trash2 className="size-4" />
                           </Button>
                         </div>
                       </TableCell>
@@ -349,19 +293,10 @@ export const AdminUsersPage = () => {
                         variant="ghost"
                         size="icon-sm"
                         className="text-muted-foreground"
-                        aria-label={`Edit ${user.name}`}
+                        aria-label={`Change ${user.name}'s role`}
                         onClick={() => openEditUser(user)}
                       >
                         <Pencil className="size-4" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon-sm"
-                        className="text-muted-foreground"
-                        aria-label={`Remove ${user.name}`}
-                        onClick={() => setPendingDeleteUser(user)}
-                      >
-                        <Trash2 className="size-4" />
                       </Button>
                     </>
                   }
@@ -376,42 +311,27 @@ export const AdminUsersPage = () => {
         open={userSlideOpen}
         onClose={closeUserSlide}
         size="lg"
-        title={editingUser ? `Edit ${editingUser.name}` : 'Add new user'}
-        description={
-          editingUser
-            ? 'Update the account record below.'
-            : 'Create an account and assign its role on the platform.'
-        }
-        icon={editingUser ? Pencil : Plus}
+        title={editingUser ? `Change role: ${editingUser.name}` : 'Change role'}
+        description="Accounts can only have their role changed from the platform portal."
+        icon={Pencil}
         footer={
           <div className="grid grid-cols-2 gap-3">
             <Button type="button" variant="outline" size="lg" className="w-full" onClick={closeUserSlide}>
               Cancel
             </Button>
             <Button type="submit" form="user-form" size="lg" className="w-full">
-              {editingUser ? 'Save changes' : 'Create user'}
+              Save role
             </Button>
           </div>
         }
       >
         <form id="user-form" onSubmit={handleUserSubmit} className="grid gap-3">
-          <div>
-            <Label>Full name</Label>
-            <Input
-              value={userForm.name}
-              onChange={(e) => setUserField('name', e.target.value)}
-              required
-            />
-          </div>
-          <div>
-            <Label>Email</Label>
-            <Input
-              type="email"
-              value={userForm.email}
-              onChange={(e) => setUserField('email', e.target.value)}
-              required
-            />
-          </div>
+          {editingUser ? (
+            <div className="rounded-lg border p-3 text-sm">
+              <p className="font-medium">{editingUser.name}</p>
+              <p className="break-all text-muted-foreground">{editingUser.email}</p>
+            </div>
+          ) : null}
           <div>
             <Label>Role</Label>
             <Select
@@ -437,14 +357,6 @@ export const AdminUsersPage = () => {
               />
             </div>
           )}
-          <div>
-            <Label>Avatar URL</Label>
-            <Input
-              value={userForm.avatarUrl}
-              onChange={(e) => setUserField('avatarUrl', e.target.value)}
-              placeholder="https://…"
-            />
-          </div>
         </form>
       </SlideOver>
 
@@ -466,7 +378,7 @@ export const AdminUsersPage = () => {
                 className="w-full"
                 onClick={() => detailsUser && openEditUser(detailsUser)}
               >
-                <Pencil className="size-4" /> Edit in slider
+                <Pencil className="size-4" /> Change role
               </Button>
             </div>
           ) : undefined
@@ -523,18 +435,6 @@ export const AdminUsersPage = () => {
         )}
       </DetailsModal>
 
-      <ConfirmDeleteModal
-        open={pendingDeleteUser !== null}
-        onClose={() => (isDeletingUser ? undefined : setPendingDeleteUser(null))}
-        onConfirm={() => {
-          if (pendingDeleteUser) void removeUser(pendingDeleteUser.id);
-        }}
-        title="Delete user?"
-        description="This permanently removes the user account."
-        itemName={pendingDeleteUser?.name}
-        confirmLabel="Delete user"
-        isDeleting={isDeletingUser}
-      />
     </div>
   );
 };

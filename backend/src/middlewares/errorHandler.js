@@ -1,5 +1,6 @@
 import { AppError } from '../utils/AppError.js';
 import { env } from '../config/env.js';
+import { setOnboardingCookie } from '../services/sessionService.js';
 import { logger } from '../utils/logger.js';
 
 const codeForStatus = (statusCode) => {
@@ -14,6 +15,11 @@ const codeForStatus = (statusCode) => {
 
 // Express 5 error middleware: (err, req, res, next)
 export const errorHandler = (err, _req, res, _next) => {
+  // A pending shelter sign-in issues an httpOnly onboarding cookie; the token
+  // itself never reaches the response body.
+  if (err?.onboardingToken) {
+    setOnboardingCookie(res, err.onboardingToken);
+  }
   if (err instanceof AppError) {
     return res.status(err.statusCode).json({
       success: false,

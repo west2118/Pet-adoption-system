@@ -4,6 +4,7 @@ import { toast } from 'react-toastify';
 import {
   DetailsModal,
   RecordCard,
+  RefreshButton,
   RecordCardSkeleton,
   SectionHeader,
   SlideOver,
@@ -26,6 +27,7 @@ import { ApiError } from '@/lib/apiClient';
 import { visitService } from '@/services/visitService';
 import type { VisitStatus, VisitThread } from '@/types';
 import { formatDate } from '@/utils/formatters';
+import { describeApiError } from '@/utils/errors';
 
 const STATUS_FILTER_OPTIONS = [
   { value: 'all', label: 'All' },
@@ -52,6 +54,7 @@ export const ShelterVisitsPage = () => {
 
   // Compose dialog: visit date + message emailed to the adopter. Kept separate
   // from `selectedId` so emailing never opens the read-only details modal.
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [composeId, setComposeId] = useState<string | null>(null);
   const [composeOpen, setComposeOpen] = useState(false);
   const [composeSlot, setComposeSlot] = useState('');
@@ -70,14 +73,17 @@ export const ShelterVisitsPage = () => {
       const res = await visitService.listForShelter({ page, limit: pageSize, status: statusFilter });
       setThreads(res.items);
       setTotal(res.total);
+      setLoadError(null);
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : 'Failed to load visits.');
+      setLoadError(describeApiError(err, 'Failed to load visits. Please try again.'));
     } finally {
       setLoading(false);
     }
   }, [page, pageSize, statusFilter]);
 
   useEffect(() => {
+    // Loading state is owned by the fetch callback.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchThreads();
   }, [fetchThreads]);
 
@@ -248,6 +254,7 @@ export const ShelterVisitsPage = () => {
       <SectionHeader
         title="Visit requests"
         subtitle="Approve or decline meet-and-greet requests — the adopter is emailed automatically."
+        actions={<RefreshButton onRefresh={fetchThreads} />}
       />
 
       <div className="mt-6">
@@ -256,6 +263,9 @@ export const ShelterVisitsPage = () => {
           description="One request per pet. Email the adopter to approve, reschedule, or decline."
           icon={CalendarClock}
           toolbar={toolbar}
+          error={loadError}
+          errorTitle="Could not load visits"
+          onRetry={fetchThreads}
           isEmpty={!loading && threads.length === 0}
           emptyTitle="No visit requests"
           emptyDescription="Adopter meet-and-greet requests will appear here."

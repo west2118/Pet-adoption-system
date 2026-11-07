@@ -2,7 +2,14 @@ import { ArrowRight, Check, Heart, HeartHandshake, Pencil, X } from 'lucide-reac
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { toast } from 'react-toastify';
-import { BlurText, GridOverlay, Reveal, focusFirstError, isBlank } from '@/components/shared';
+import {
+  BlurText,
+  ErrorState,
+  GridOverlay,
+  Reveal,
+  focusFirstError,
+  isBlank,
+} from '@/components/shared';
 import { ValidatedInput } from '@/components/shared';
 import { ApplicationCard } from '@/components/features/ApplicationCard';
 import { PetCard } from '@/components/features/PetCard';
@@ -13,7 +20,7 @@ import { Label } from '@/components/ui/Form';
 import { useAuth } from '@/hooks/useAuth';
 import { useFavorites } from '@/hooks/useFavorites';
 import { useApplications, usePets, useShelters } from '@/hooks/useData';
-import { publicPets } from '@/data/mockData';
+import { publicPets } from '@/utils/pets';
 import { ApiError } from '@/lib/apiClient';
 
 const frame = 'mx-auto w-full max-w-[1400px] px-6 lg:px-12';
@@ -28,13 +35,15 @@ const userInitials = (name: string): string =>
 
 export const ProfilePage = () => {
   const { user, updateProfile } = useAuth();
-  const { applications, loading: appsLoading, refresh: refreshApplications } = useApplications(
-    user?.id,
-    'mine',
-  );
+  const {
+    applications,
+    loading: appsLoading,
+    error: appsError,
+    refresh: refreshApplications,
+  } = useApplications('mine');
   const { pets } = usePets();
   const { shelters } = useShelters();
-  const { favorites, loading: favLoading } = useFavorites();
+  const { favorites, loading: favLoading, error: favoritesError } = useFavorites();
 
   const [form, setForm] = useState({ name: user?.name ?? '' });
   const [editing, setEditing] = useState(false);
@@ -68,6 +77,7 @@ export const ProfilePage = () => {
   const recentApplications = applications.slice(0, 3);
   const favoritePreview = savedPets.slice(0, 3);
   const dataLoading = appsLoading || favLoading;
+  const savedError = appsError ?? favoritesError;
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -329,6 +339,12 @@ export const ProfilePage = () => {
           <div className="mt-14">
             {appsLoading ? (
               <LoadingGrid count={2} />
+            ) : appsError ? (
+              <ErrorState
+                title="Could not load your applications"
+                description={appsError}
+                onRetry={refreshApplications}
+              />
             ) : recentApplications.length === 0 ? (
               <EmptyState
                 title="No applications yet"
@@ -384,6 +400,8 @@ export const ProfilePage = () => {
           <div className="mt-14">
             {dataLoading ? (
               <LoadingGrid count={3} />
+            ) : savedError ? (
+              <ErrorState title="Could not load your favorites" description={savedError} />
             ) : favoritePreview.length === 0 ? (
               <EmptyState
                 title="No favorites saved"

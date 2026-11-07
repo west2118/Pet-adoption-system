@@ -1,30 +1,12 @@
 const BASE_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:3000/api/v1';
 
-const ONBOARDING_TOKEN_KEY = 'paws.onboarding.token';
-const SESSION_KEY = 'paws.auth.session';
-
 /**
- * The access/refresh JWT pair lives in httpOnly cookies (set by the backend
- * on login) so page JavaScript can never read them. What remains here:
- *
- * - the short-lived onboarding token (unchanged flow), and
- * - a boolean-style session flag: "this browser has logged in and not logged
- *   out". It carries no credentials — it only tells the app to attempt
- *   backend-first reads (cookies do the actual authenticating) instead of
- *   dropping straight to demo mocks after a reload.
+ * Sessions are owned entirely by the backend: the access/refresh JWTs live in
+ * httpOnly cookies set on login, so no credential is ever readable by page
+ * JavaScript. Whether a visitor is signed in is answered by the API itself
+ * (`GET /auth/me` behind the `authenticate` middleware) — never by a local
+ * flag — and a 401 is what tells the app there is no session.
  */
-export const tokenStore = {
-  getOnboarding: () => localStorage.getItem(ONBOARDING_TOKEN_KEY),
-  setOnboarding: (token: string) => localStorage.setItem(ONBOARDING_TOKEN_KEY, token),
-  clearOnboarding: () => localStorage.removeItem(ONBOARDING_TOKEN_KEY),
-};
-
-export const sessionStore = {
-  has: () => localStorage.getItem(SESSION_KEY) === '1',
-  mark: () => localStorage.setItem(SESSION_KEY, '1'),
-  clear: () => localStorage.removeItem(SESSION_KEY),
-};
-
 export interface ApiFieldError {
   field: string;
   message: string;
@@ -78,16 +60,35 @@ interface RequestOptions {
 
 /** Single-flight session refresh so parallel 401s trigger only one rotation. */
 let refreshInFlight: Promise<boolean> | null = null;
+/**
+ * After a rejected rotation there is no session, so further probe refreshes
+ * are pointless for a short while (e.g. a guest browsing demo screens that
+ * fire several protected reads at once).
+ */
+let refreshBlockedUntil = 0;
+const REFRESH_COOLDOWN_MS = 15_000;
 
 const tryRefreshSession = (): Promise<boolean> => {
+  if (Date.now() < refreshBlockedUntil) return Promise.resolve(false);
   if (!refreshInFlight) {
     refreshInFlight = (async () => {
-      const res = await fetch(`${BASE_URL}/auth/refresh`, {
-        method: 'POST',
-        credentials: 'include',
-      });
-      if (!res.ok) throw new Error('refresh failed');
-      return true;
+      try {
+        const res = await fetch(`${BASE_URL}/auth/refresh`, {
+          method: 'POST',
+          credentials: 'include',
+        });
+        if (!res.ok) {
+          refreshBlockedUntil = Date.now() + REFRESH_COOLDOWN_MS;
+          return false;
+        }
+        refreshBlockedUntil = 0;
+        return true;
+      } catch {
+        // Network failure while rotating: treat it as "no session" for now
+        // and let the original 401 reach the caller.
+        refreshBlockedUntil = Date.now() + REFRESH_COOLDOWN_MS;
+        return false;
+      }
     })().finally(() => {
       refreshInFlight = null;
     });
@@ -109,15 +110,9 @@ export const apiRequestWithMeta = async <T>(
 ): Promise<{ data: T; meta?: ApiMeta }> => {
   const headers: Record<string, string> = { 'Content-Type': 'application/json' };
 
-  // Only the onboarding flow still uses a Bearer token; full sessions travel
-  // in httpOnly cookies, which `credentials: 'include'` attaches for us.
-  if (auth === 'onboarding') {
-    const token = tokenStore.getOnboarding();
-    if (token) headers.Authorization = `Bearer ${token}`;
-  }
-
   let res: Response;
   try {
+    // `credentials: 'include'` attaches the httpOnly session cookies.
     res = await fetch(`${BASE_URL}${path}`, {
       method,
       headers,
@@ -133,17 +128,12 @@ export const apiRequestWithMeta = async <T>(
   }
 
   // An expired access token is not a logout: rotate the session once via the
-  // refresh cookie and replay the request before surfacing a 401.
-  if (res.status === 401 && auth === 'full' && !noRefreshRetry && sessionStore.has()) {
-    try {
-      const refreshed = await tryRefreshSession();
-      if (refreshed) {
-        return apiRequestWithMeta<T>(path, { method, body, auth, noRefreshRetry: true });
-      }
-    } catch {
-      // Refresh rejected — the session is genuinely dead.
+  // refresh cookie and replay the request before surfacing a 401. With no
+  // session the rotation is rejected and the 401 reaches the caller.
+  if (res.status === 401 && auth === 'full' && !noRefreshRetry) {
+    if (await tryRefreshSession()) {
+      return apiRequestWithMeta<T>(path, { method, body, auth, noRefreshRetry: true });
     }
-    sessionStore.clear();
   }
 
   const json = (await res.json().catch(() => null)) as ApiEnvelope<T> | null;

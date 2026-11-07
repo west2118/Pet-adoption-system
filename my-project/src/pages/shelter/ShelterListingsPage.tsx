@@ -1,12 +1,12 @@
 import { useState } from 'react';
 import { Eye, PawPrint, Pencil, Plus, Trash2 } from 'lucide-react';
 import { toast } from 'react-toastify';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 
 import {
   DebouncedSearchInput,
-  RecordCard,
   RecordCardSkeleton,
+  RefreshButton,
   SectionHeader,
   TableCard,
   TablePagination,
@@ -24,12 +24,18 @@ import {
 import { Select } from '@/components/ui/Form';
 import { Button } from '@/components/ui/button';
 
-import { PetDeleteModal, PetDetailsModal, PetFormModal } from '@/components/listings';
+import {
+  PetDeleteModal,
+  PetDetailsModal,
+  PetFormModal,
+  PetListingMobileCard,
+} from '@/components/listings';
 
 import { useAuth } from '@/hooks/useAuth';
 import { useShelters } from '@/hooks/useData';
-import { listMyListingsPaginated, petService } from '@/services/api';
-import { ApiError } from '@/lib/apiClient';
+import { useShelterListingMutations } from '@/hooks/useShelterListingMutations';
+import type { PetListingInput } from '@/hooks/useShelterListingMutations';
+import { listMyListingsPaginated } from '@/services/api';
 import type { Pet, PetStatus, PetVisibility } from '@/types';
 import { formatDate } from '@/utils/formatters';
 
@@ -40,7 +46,6 @@ import {
 } from '@/data/petListingPresets';
 
 export const ShelterListingsPage = () => {
-  const queryClient = useQueryClient();
   const { user } = useAuth();
   const { shelters } = useShelters();
 
@@ -66,6 +71,8 @@ export const ShelterListingsPage = () => {
   const {
     data: listingsData,
     isLoading: loadingListings,
+    isError: listingsError,
+    refetch: refetchListings,
   } = useQuery({
     queryKey: [
       'shelterListings',
@@ -76,7 +83,6 @@ export const ShelterListingsPage = () => {
         visibilityFilter,
         speciesFilter,
         statusFilter,
-        myShelterId,
       },
     ],
     queryFn: () =>
@@ -87,7 +93,6 @@ export const ShelterListingsPage = () => {
         visibility: visibilityFilter,
         species: speciesFilter,
         status: statusFilter,
-        shelterId: myShelterId,
       }),
   });
 
@@ -95,44 +100,20 @@ export const ShelterListingsPage = () => {
   const totalPets = listingsData?.total ?? 0;
 
   // Mutations
-  const createMutation = useMutation({
-    mutationFn: (newPet: Parameters<typeof petService.create>[0]) => petService.create(newPet),
-    onSuccess: (createdPet) => {
-      toast.success(`${createdPet.name} created successfully!`);
-      setSlideOpen(false);
-      setEditingPet(null);
-      queryClient.invalidateQueries({ queryKey: ['shelterListings'] });
-    },
-    onError: (err) => {
-      toast.error(err instanceof ApiError ? err.message : 'Failed to create listing. Please try again.');
-    },
-  });
+  const handleFormSaved = () => {
+    setSlideOpen(false);
+    setEditingPet(null);
+  };
 
-  const updateMutation = useMutation({
-    mutationFn: ({ id, updates }: { id: string; updates: Parameters<typeof petService.update>[1] }) =>
-      petService.update(id, updates),
-    onSuccess: (updatedPet) => {
-      toast.success(`${updatedPet.name || 'Pet'} updated successfully!`);
-      setSlideOpen(false);
-      setEditingPet(null);
-      queryClient.invalidateQueries({ queryKey: ['shelterListings'] });
-    },
-    onError: (err) => {
-      toast.error(err instanceof ApiError ? err.message : 'Failed to update listing. Please try again.');
-    },
-  });
-
-  const deleteMutation = useMutation({
-    mutationFn: (id: string) => petService.remove(id),
-    onSuccess: (_, deletedId) => {
-      const target = pets.find((p) => p.id === deletedId);
-      toast.success(target ? `${target.name} removed.` : 'Listing removed.');
-      setPendingDeletePet(null);
-      queryClient.invalidateQueries({ queryKey: ['shelterListings'] });
-    },
-    onError: (err) => {
-      toast.error(err instanceof ApiError ? err.message : 'Failed to remove listing. Please try again.');
-    },
+  const {
+    createMutation,
+    updateMutation,
+    deleteMutation,
+    isSaving,
+  } = useShelterListingMutations({
+    onCreated: handleFormSaved,
+    onUpdated: handleFormSaved,
+    onDeleted: () => setPendingDeletePet(null),
   });
 
   const handleOpenAdd = () => {
@@ -163,7 +144,7 @@ export const ShelterListingsPage = () => {
     payload,
   }: {
     petId?: string;
-    payload: Parameters<typeof petService.create>[0];
+    payload: PetListingInput;
   }) => {
     if (petId) {
       updateMutation.mutate({ id: petId, updates: payload });
@@ -171,74 +152,6 @@ export const ShelterListingsPage = () => {
       createMutation.mutate(payload);
     }
   };
-
-  const searchFilter = (
-    <div className="flex flex-wrap items-center justify-between gap-2">
-      <DebouncedSearchInput
-        aria-label="Search listings"
-        value={query}
-        onDebouncedChange={(val) => {
-          setQuery(val);
-          setPage(1);
-        }}
-        placeholder="Search name or breed"
-        className="sm:w-[240px]"
-      />
-      <div className="flex flex-wrap items-center gap-2">
-        <Select
-          aria-label="Filter by species"
-          className="h-9 w-[150px]"
-          value={speciesFilter}
-          onChange={(e) => {
-            setSpeciesFilter(e.target.value);
-            setPage(1);
-          }}
-          options={SPECIES_FILTER_OPTIONS}
-        />
-        <Select
-          aria-label="Filter by status"
-          className="h-9 w-[150px]"
-          value={statusFilter}
-          onChange={(e) => {
-            setStatusFilter(e.target.value as 'all' | PetStatus);
-            setPage(1);
-          }}
-          options={STATUS_FILTER_OPTIONS}
-        />
-        <Select
-          aria-label="Filter by visibility"
-          className="h-9 w-[150px]"
-          value={visibilityFilter}
-          onChange={(e) => {
-            setVisibilityFilter(e.target.value as 'all' | PetVisibility);
-            setPage(1);
-          }}
-          options={VISIBILITY_FILTER_OPTIONS}
-        />
-      </div>
-    </div>
-  );
-
-  const addPetButton = (
-    <Button size="lg" onClick={handleOpenAdd}>
-      <Plus className="size-4" /> Add pet
-    </Button>
-  );
-
-  const pagination =
-    totalPets > 0 ? (
-      <TablePagination
-        currentPage={page}
-        totalItems={totalPets}
-        pageSize={pageSize}
-        onPageChange={setPage}
-        onPageSizeChange={(newSize) => {
-          setPageSize(newSize);
-          setPage(1);
-        }}
-        label="listings"
-      />
-    ) : undefined;
 
   return (
     <div className="w-full px-4 py-6 sm:px-6">
@@ -249,6 +162,13 @@ export const ShelterListingsPage = () => {
             ? `Showing inventory for ${myShelter.name} only.`
             : 'Manage your public listings and private inventory.'
         }
+        actions={
+          <RefreshButton
+            onRefresh={async () => {
+              await refetchListings();
+            }}
+          />
+        }
       />
 
       <div className="mt-6 space-y-4">
@@ -256,16 +176,86 @@ export const ShelterListingsPage = () => {
           title="Inventory"
           description="Public and private pets in your shelter's inventory."
           icon={PawPrint}
-          action={addPetButton}
-          toolbar={searchFilter}
-          isEmpty={!loadingListings && pets.length === 0}
+          action={
+            <Button size="lg" onClick={handleOpenAdd}>
+              <Plus className="size-4" /> Add pet
+            </Button>
+          }
+          toolbar={
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <DebouncedSearchInput
+                aria-label="Search listings"
+                value={query}
+                onDebouncedChange={(val) => {
+                  setQuery(val);
+                  setPage(1);
+                }}
+                placeholder="Search name or breed"
+                className="sm:w-[240px]"
+              />
+              <div className="flex flex-wrap items-center gap-2">
+                <Select
+                  aria-label="Filter by species"
+                  className="h-9 w-[150px]"
+                  value={speciesFilter}
+                  onChange={(e) => {
+                    setSpeciesFilter(e.target.value);
+                    setPage(1);
+                  }}
+                  options={SPECIES_FILTER_OPTIONS}
+                />
+                <Select
+                  aria-label="Filter by status"
+                  className="h-9 w-[150px]"
+                  value={statusFilter}
+                  onChange={(e) => {
+                    setStatusFilter(e.target.value as 'all' | PetStatus);
+                    setPage(1);
+                  }}
+                  options={STATUS_FILTER_OPTIONS}
+                />
+                <Select
+                  aria-label="Filter by visibility"
+                  className="h-9 w-[150px]"
+                  value={visibilityFilter}
+                  onChange={(e) => {
+                    setVisibilityFilter(e.target.value as 'all' | PetVisibility);
+                    setPage(1);
+                  }}
+                  options={VISIBILITY_FILTER_OPTIONS}
+                />
+              </div>
+            </div>
+          }
+          error={
+            listingsError
+              ? 'We could not load your inventory. Make sure the backend is running and try again.'
+              : null
+          }
+          errorTitle="Could not load listings"
+          onRetry={() => void refetchListings()}
+          isEmpty={!loadingListings && !listingsError && pets.length === 0}
           emptyTitle="No listings found"
           emptyDescription={
             myShelter
               ? `No pets recorded under ${myShelter.name} yet. Add your first listing.`
               : 'Try a different search or visibility filter, or add a new pet.'
           }
-          footer={pagination}
+          footer={
+            totalPets > 0 ? (
+              <TablePagination
+                currentPage={page}
+                totalItems={totalPets}
+                pageSize={pageSize}
+                onPageChange={setPage}
+                onPageSizeChange={(newSize) => {
+                  setPageSize(newSize);
+                  setPage(1);
+                }}
+                label="listings"
+              />
+            ) : undefined
+          }
           contentClassName="px-0"
         >
           {/* Desktop: data table */}
@@ -356,50 +346,12 @@ export const ShelterListingsPage = () => {
               <RecordCardSkeleton count={3} />
             ) : (
               pets.map((pet) => (
-                <RecordCard
+                <PetListingMobileCard
                   key={pet.id}
-                  imageUrl={pet.imageUrl}
-                  imageAlt={pet.name}
-                  title={pet.name}
-                  subtitle={pet.breed}
-                  badges={
-                    <>
-                      <SpeciesBadge species={pet.species} />
-                      <PetStatusBadge status={pet.status} />
-                      <VisibilityBadge visibility={pet.visibility} />
-                    </>
-                  }
-                  actions={
-                    <>
-                      <Button
-                        variant="ghost"
-                        size="icon-sm"
-                        className="text-muted-foreground"
-                        aria-label={`View ${pet.name} details`}
-                        onClick={() => setDetailsPet(pet)}
-                      >
-                        <Eye className="size-4" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon-sm"
-                        className="text-blue-600 hover:bg-blue-50 hover:text-blue-700 dark:text-blue-400 dark:hover:bg-blue-950/40"
-                        aria-label={`Edit ${pet.name}`}
-                        onClick={() => handleOpenEdit(pet)}
-                      >
-                        <Pencil className="size-4" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon-sm"
-                        className="text-red-600 hover:bg-red-50 hover:text-red-700 dark:text-red-400 dark:hover:bg-red-950/40"
-                        aria-label={`Delete ${pet.name}`}
-                        onClick={() => handleAskRemove(pet)}
-                      >
-                        <Trash2 className="size-4" />
-                      </Button>
-                    </>
-                  }
+                  pet={pet}
+                  onView={setDetailsPet}
+                  onEdit={handleOpenEdit}
+                  onDelete={handleAskRemove}
                 />
               ))
             )}
@@ -413,11 +365,8 @@ export const ShelterListingsPage = () => {
         editingPet={editingPet}
         myShelterId={myShelterId}
         isLockedToShelter={isLockedToShelter}
-        isSaving={createMutation.isPending || updateMutation.isPending}
-        onClose={() => {
-          setSlideOpen(false);
-          setEditingPet(null);
-        }}
+        isSaving={isSaving}
+        onClose={handleFormSaved}
         onSubmit={handleFormSubmit}
       />
 
@@ -435,7 +384,9 @@ export const ShelterListingsPage = () => {
         isOpen={pendingDeletePet !== null}
         isDeleting={deleteMutation.isPending}
         onClose={() => setPendingDeletePet(null)}
-        onConfirm={(petId) => deleteMutation.mutate(petId)}
+        onConfirm={(petId) =>
+          deleteMutation.mutate({ id: petId, name: pendingDeletePet?.name })
+        }
       />
     </div>
   );

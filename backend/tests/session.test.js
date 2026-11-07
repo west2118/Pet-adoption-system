@@ -9,6 +9,7 @@ process.env.ALLOWED_ORIGINS = 'http://localhost:5173';
 
 const {
   ACCESS_COOKIE,
+  ONBOARDING_COOKIE,
   REFRESH_COOKIE,
   clearAuthCookies,
   getCookie,
@@ -61,13 +62,13 @@ describe('sessionService (httpOnly cookie sessions, no database required)', () =
     assert.equal(refreshOpts.maxAge, 30 * 24 * 60 * 60 * 1000);
   });
 
-  it('clears both session cookies on logout', () => {
+  it('clears the session and onboarding cookies on logout', () => {
     const calls = [];
     const res = { clearCookie: (name, opts) => calls.push([name, opts]) };
     clearAuthCookies(res);
     assert.deepEqual(
       calls.map(([name]) => name).sort(),
-      [ACCESS_COOKIE, REFRESH_COOKIE].sort(),
+      [ACCESS_COOKIE, REFRESH_COOKIE, ONBOARDING_COOKIE].sort(),
     );
     for (const [, opts] of calls) assert.equal(opts.path, '/');
   });

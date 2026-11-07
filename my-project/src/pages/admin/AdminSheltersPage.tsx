@@ -13,6 +13,7 @@ import {
   DetailsModal,
   RecordCard,
   RecordCardSkeleton,
+  RefreshButton,
   SectionHeader,
   SlideOver,
   TableCard,
@@ -40,6 +41,7 @@ import {
 import type { AdminShelterDetails, ShelterSummaryRow } from '@/services/api';
 import type { Shelter } from '@/types';
 import { ApiError } from '@/lib/apiClient';
+import { describeApiError } from '@/utils/errors';
 
 export const AdminSheltersPage = () => {
   const { setShelters } = useShelters();
@@ -93,8 +95,8 @@ export const AdminSheltersPage = () => {
       });
       setShelterRows(res.items);
       setTotalShelterRows(res.total);
-    } catch {
-      setSheltersError('Failed to load shelters.');
+    } catch (err) {
+      setSheltersError(describeApiError(err, 'Failed to load shelters. Please try again.'));
     } finally {
       setLoadingShelters(false);
     }
@@ -247,6 +249,7 @@ export const AdminSheltersPage = () => {
       <SectionHeader
         title="Partner shelters"
         subtitle="Manage verified shelter facilities and rescue organizations."
+        actions={<RefreshButton onRefresh={fetchShelters} />}
       />
 
       <div className="mt-6 space-y-4">
@@ -260,6 +263,9 @@ export const AdminSheltersPage = () => {
           icon={Building2}
           action={addShelterButton}
           toolbar={shelterSearchFilter}
+          error={sheltersError}
+          errorTitle="Could not load shelters"
+          onRetry={fetchShelters}
           isEmpty={!loadingShelters && !sheltersError && shelterRows.length === 0}
           emptyTitle="No shelters found"
           emptyDescription="Try a different search, or register a new shelter."

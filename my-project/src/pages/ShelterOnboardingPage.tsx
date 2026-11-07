@@ -25,7 +25,7 @@ import {
   isEmail,
   isUrl,
 } from '@/components/shared';
-import { ApiError, tokenStore } from '@/lib/apiClient';
+import { ApiError } from '@/lib/apiClient';
 import { locateAddress, toGeolocationFailure } from '@/lib/geocode';
 import { authService } from '@/services/authService';
 
@@ -61,11 +61,18 @@ export const ShelterOnboardingPage = () => {
   const [coords, setCoords] = useState<{ latitude: number; longitude: number } | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Partial<Record<keyof typeof EMPTY_FORM, string>>>({});
 
-  // Only reachable with a valid onboarding token (issued at shelter signup).
+  // Only reachable with a valid onboarding cookie (issued at shelter signup).
+  // The backend session check decides — there is no client-side token flag.
   useEffect(() => {
-    if (!tokenStore.getOnboarding()) {
-      navigate('/signup', { replace: true });
-    }
+    let cancelled = false;
+    authService.getMyShelterApplication().catch((err) => {
+      if (!cancelled && err instanceof ApiError && [401, 403].includes(err.status)) {
+        navigate('/signup', { replace: true });
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
   }, [navigate]);
 
   const set = (key: keyof typeof form, value: string) => {

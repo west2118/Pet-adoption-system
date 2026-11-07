@@ -7,6 +7,7 @@ import {
   DetailsModal,
   RecordCard,
   RecordCardSkeleton,
+  RefreshButton,
   SectionHeader,
   TableCard,
   TablePagination,
@@ -24,9 +25,8 @@ import {
   TableRow,
 } from '@/components/ui/Table';
 import { Badge } from '@/components/ui/Badge';
-import { Input, Label, Select } from '@/components/ui/Form';
+import { Label, Select } from '@/components/ui/Form';
 import { Button } from '@/components/ui/button';
-import { EmptyState } from '@/components/ui/Feedback';
 import { ConfirmDeleteModal } from '@/components/shared/ConfirmDeleteModal';
 import { CustomWaiverTemplateDocument } from '@/components/features/CustomWaiverTemplateDocument';
 import { WaiverPrintDocument } from '@/components/features/WaiverPrintDocument';
@@ -323,6 +323,7 @@ export const ShelterEWaiversPage = () => {
       <SectionHeader
         title="E-Waivers"
         subtitle="Waiver templates bundled into the printable e-waiver adopters sign at handover. The 5 platform defaults are locked; templates your shelter creates are private to your shelter and can use formatted headings, lists, notices, and tables."
+        actions={<RefreshButton onRefresh={fetchTemplates} />}
       />
 
       <div className="mt-6 space-y-4">
@@ -335,29 +336,16 @@ export const ShelterEWaiversPage = () => {
           }
           icon={FileSignature}
           toolbar={toolbar}
+          error={loadError}
+          errorTitle="Could not load templates"
+          onRetry={fetchTemplates}
           footer={pagination}
           isEmpty={!loading && templates.length === 0}
-          emptyTitle={loadError ?? 'No waivers found'}
-          emptyDescription={
-            loadError ?? 'Try a different search, or add a new template.'
-          }
+          emptyTitle="No waivers found"
+          emptyDescription="Try a different search, or add a new template."
           contentClassName="px-0"
         >
-          {loadError ? (
-            <div className="p-6">
-              <EmptyState
-                title="Could not load templates"
-                description={loadError}
-                action={
-                  <Button variant="outline" size="sm" onClick={() => window.location.reload()}>
-                    Retry
-                  </Button>
-                }
-              />
-            </div>
-          ) : (
-            <>
-              {/* Desktop: data table */}
+          {/* Desktop: data table */}
               <div className="hidden md:block">
                 <Table>
                   <TableHeader>
@@ -493,8 +481,6 @@ export const ShelterEWaiversPage = () => {
                   </RecordCard>
                 ))}
               </div>
-            </>
-          )}
         </TableCard>
       </div>
 

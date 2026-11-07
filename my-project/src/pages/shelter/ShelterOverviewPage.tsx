@@ -12,9 +12,11 @@ import {
   TrendingUp,
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
   ChartCard,
+  ErrorState,
+  RefreshButton,
   SectionHeader,
   ShelterOverviewSkeleton,
   SummaryStatCard,
@@ -37,22 +39,21 @@ export const ShelterOverviewPage = () => {
   const [overview, setOverview] = useState<ShelterOverviewData | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    let mounted = true;
-    getShelterOverview()
-      .then((data) => {
-        if (mounted) {
-          setOverview(data);
-          setError(null);
-        }
-      })
-      .catch(() => {
-        if (mounted) setError('Failed to load shelter overview.');
-      });
-    return () => {
-      mounted = false;
-    };
+  const loadOverview = useCallback(async () => {
+    try {
+      const data = await getShelterOverview();
+      setOverview(data);
+      setError(null);
+    } catch {
+      setError('Failed to load shelter overview.');
+    }
   }, []);
+
+  useEffect(() => {
+    // Loading state is owned by the loader.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    void loadOverview();
+  }, [loadOverview]);
 
   if (!overview && !error) {
     return <ShelterOverviewSkeleton />;
@@ -65,26 +66,12 @@ export const ShelterOverviewPage = () => {
           title="Shelter overview"
           subtitle="A snapshot of your listings, applications, and adoption performance."
         />
-        <div className="mt-6 rounded-lg border border-destructive/30 bg-destructive/5 p-5 text-sm">
-          <p className="font-semibold text-destructive">Could not load the overview.</p>
-          <p className="mt-1 text-muted-foreground">
-            {error} Check that the backend is running and your staff account has a
-            shelter assigned.
-          </p>
-          <Button
-            size="sm"
-            variant="outline"
-            className="mt-3"
-            onClick={() => {
-              setError(null);
-              setOverview(null);
-              getShelterOverview()
-                .then((data) => setOverview(data))
-                .catch(() => setError('Failed to load shelter overview.'));
-            }}
-          >
-            Retry
-          </Button>
+        <div className="mt-6">
+          <ErrorState
+            title="Could not load the overview"
+            description={`${error} Check that the backend is running and your staff account has a shelter assigned.`}
+            onRetry={() => void loadOverview()}
+          />
         </div>
       </div>
     );
@@ -97,6 +84,7 @@ export const ShelterOverviewPage = () => {
       <SectionHeader
         title="Shelter overview"
         subtitle="A snapshot of your listings, applications, and adoption performance."
+        actions={<RefreshButton onRefresh={loadOverview} />}
       />
 
       {/* Summary stats */}

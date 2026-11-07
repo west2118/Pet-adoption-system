@@ -45,6 +45,25 @@ export const createPetSchema = z.object({
 export const updatePetSchema = createPetSchema.partial();
 
 /**
+ * Shelter inventory query (`GET /shelter/listings`).
+ *
+ * Every facet is applied in SQL by `listPetsByShelter`; validating here keeps
+ * arbitrary values out of the enum columns and lets `all` mean "no filter".
+ * `parsePagination` still owns the page size and clamps it to 1..100.
+ */
+export const shelterListingQuerySchema = z.object({
+  page: z.string().optional().default('1'),
+  limit: z.string().optional().default('10'),
+  search: z.string().optional().default(''),
+  visibility: z.enum(['all', 'public', 'private']).optional().default('all'),
+  species: z.enum(['all', 'dog', 'cat', 'rabbit', 'bird', 'other']).optional().default('all'),
+  status: z
+    .enum(['all', 'Available', 'In Process', 'Adopted', 'Fostered'])
+    .optional()
+    .default('all'),
+});
+
+/**
  * Public catalogue query.
  *
  * `limit` defaults to 12 — the page size the browse page relies on (four full

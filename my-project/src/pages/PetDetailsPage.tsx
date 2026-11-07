@@ -3,7 +3,7 @@ import { ArrowRight, HeartHandshake } from 'lucide-react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import type { Pet, Shelter } from '@/types';
-import { Reveal } from '@/components/shared';
+import { ErrorState, Reveal } from '@/components/shared';
 import { Container } from '@/components/layout/Container';
 import { InquiryForm } from '@/components/features/InquiryForm';
 import { VisitRequestCard } from '@/components/features/VisitRequestCard';
@@ -15,8 +15,9 @@ import { EmptyState } from '@/components/ui/Feedback';
 import { Button } from '@/components/ui/button';
 import { useFavorites } from '@/hooks/useFavorites';
 import { petService, shelterService } from '@/services/api';
-import { publicPets } from '@/data/mockData';
 import { formatDate } from '@/utils/formatters';
+import { describeApiError } from '@/utils/errors';
+import { publicPets } from '@/utils/pets';
 
 const frame = 'mx-auto w-full max-w-[1400px] px-6 lg:px-12';
 
@@ -27,35 +28,48 @@ export const PetDetailsPage = () => {
   const [shelter, setShelter] = useState<Shelter | null>(null);
   const [siblings, setSiblings] = useState<Pet[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [reload, setReload] = useState(0);
   const { isFavorite, toggleFavorite } = useFavorites();
 
   useEffect(() => {
     let mounted = true;
     (async () => {
-      if (!id) return;
+      if (!id) {
+        setLoading(false);
+        return;
+      }
       setLoading(true);
-      const found = await petService.getById(id);
-      const shelters = await shelterService.list();
-      // Siblings = other PUBLIC pets of the same shelter (backend already
-      // filters visibility='public' via ?shelterId=).
-      const shelterPets = found ? await petService.listByShelter(found.shelterId) : [];
-      if (!mounted) return;
-      setPet(found ?? null);
-      setShelter(shelters.find((s) => s.id === found?.shelterId) ?? null);
-      // Adopters only ever see other public listings from the same shelter.
-      setSiblings(
-        found
-          ? publicPets(shelterPets)
-              .filter((p) => p.id !== found.id)
-              .slice(0, 3)
-          : [],
-      );
-      setLoading(false);
+      setLoadError(null);
+      try {
+        const found = await petService.getById(id);
+        const shelters = await shelterService.list();
+        // Siblings = other PUBLIC pets of the same shelter (backend already
+        // filters visibility='public' via ?shelterId=).
+        const shelterPets = found ? await petService.listByShelter(found.shelterId) : [];
+        if (!mounted) return;
+        setPet(found ?? null);
+        setShelter(shelters.find((s) => s.id === found?.shelterId) ?? null);
+        // Adopters only ever see other public listings from the same shelter.
+        setSiblings(
+          found
+            ? publicPets(shelterPets)
+                .filter((p) => p.id !== found.id)
+                .slice(0, 3)
+            : [],
+        );
+      } catch (err) {
+        if (mounted) {
+          setLoadError(describeApiError(err, 'Could not load this listing. Please try again.'));
+        }
+      } finally {
+        if (mounted) setLoading(false);
+      }
     })();
     return () => {
       mounted = false;
     };
-  }, [id]);
+  }, [id, reload]);
 
   const favorite = pet ? isFavorite(pet.id) : false;
 
@@ -99,6 +113,18 @@ export const PetDetailsPage = () => {
     );
   }
 
+  if (loadError) {
+    return (
+      <Container className="py-16">
+        <ErrorState
+          title="Could not load this pet"
+          description={loadError}
+          onRetry={() => setReload((value) => value + 1)}
+        />
+      </Container>
+    );
+  }
+
   if (!pet) {
     return (
       <Container className="py-16">
@@ -132,8 +158,7 @@ export const PetDetailsPage = () => {
   }
 
   // In-process pets (accepted application, adoption underway) are hidden from
-  // every public surface — adopters browse adoptable pets only. This also
-  // covers demo mode, where the mock store still holds the record.
+  // every public surface — adopters browse adoptable pets only.
   if (pet.status === 'In Process') {
     return (
       <Container className="py-16">

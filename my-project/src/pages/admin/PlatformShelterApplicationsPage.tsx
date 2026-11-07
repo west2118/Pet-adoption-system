@@ -3,6 +3,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { toast } from 'react-toastify';
 import {
   DetailsModal,
+  RefreshButton,
   SectionHeader,
   TableCard,
   TablePagination,
@@ -199,11 +200,7 @@ export const PlatformShelterApplicationsPage = () => {
       <SectionHeader
         title="Shelter applications"
         subtitle="Review onboarding submissions. Approving creates the shelter and makes the registrant its owner."
-        actions={
-          <Button size="sm" variant="outline" onClick={load} disabled={loading}>
-            Refresh
-          </Button>
-        }
+        actions={<RefreshButton onRefresh={load} />}
       />
 
       <div className="mt-6">
@@ -212,14 +209,15 @@ export const PlatformShelterApplicationsPage = () => {
           description="Newest submissions first."
           icon={Inbox}
           footer={pagination}
+          error={error}
+          errorTitle="Could not load applications"
+          onRetry={load}
           isEmpty={!loading && applications.length === 0}
           emptyTitle="No shelter applications"
           emptyDescription="New shelter sign-ups will appear here for review."
           contentClassName="px-0"
         >
-          {error ? (
-            <p className="p-5 text-sm text-destructive">{error}</p>
-          ) : (
+          {(
             <Table>
               <TableHeader>
                 <TableRow>

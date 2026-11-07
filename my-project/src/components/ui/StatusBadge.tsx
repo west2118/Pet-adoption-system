@@ -21,7 +21,7 @@ export const PetStatusBadge = ({ status }: { status: PetStatus }) => {
               ? 'info'
               : 'muted'
       }
-      className={cn('uppercase tracking-wide')}
+      className={cn('capitalize tracking-wide')}
     >
       {status}
     </Badge>

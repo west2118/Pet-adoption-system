@@ -1,7 +1,7 @@
 import { ArrowRight, RefreshCw } from 'lucide-react';
 import { useCallback, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Reveal, TablePagination } from '@/components/shared';
+import { ErrorState, Reveal, TablePagination } from '@/components/shared';
 import { ApplicationCard } from '@/components/features/ApplicationCard';
 import { EmptyState } from '@/components/ui/Feedback';
 import { Button } from '@/components/ui/button';
@@ -12,21 +12,18 @@ import {
   FRAME_CLASS,
 } from '@/components/applications';
 import { useMyApplicationSummary, useMyApplicationsPage, usePets } from '@/hooks/useData';
-import { useAuth } from '@/hooks/useAuth';
 import type { ApplicationStatus } from '@/types';
 
 /** Counters mirror the tracking stages shown on each card. */
 const SUMMARY_ORDER: ApplicationStatus[] = ['Under Review', 'Approved', 'Adopted'];
 
 export const ApplicationsPage = () => {
-  const { user } = useAuth();
-
   // The list is paged by the backend (5 per request); the summary bar reads
   // its own endpoint so the counters stay right across every page.
   const { applications, total, pageSize, page, setPage, loading, error, refresh } =
-    useMyApplicationsPage(user?.id);
+    useMyApplicationsPage();
   const [summaryReload, setSummaryReload] = useState(0);
-  const summary = useMyApplicationSummary(user?.id, summaryReload);
+  const summary = useMyApplicationSummary(summaryReload);
   const { pets } = usePets();
 
   // O(1) pet lookup map to avoid O(N*M) scans during rendering
@@ -102,9 +99,10 @@ export const ApplicationsPage = () => {
             {loading && applications.length === 0 ? (
               <p className="text-sm text-muted-foreground">Loading applications…</p>
             ) : error ? (
-              <EmptyState
+              <ErrorState
                 title="Could not load your applications"
                 description={error}
+                onRetry={refresh}
               />
             ) : applications.length === 0 ? (
               <EmptyState

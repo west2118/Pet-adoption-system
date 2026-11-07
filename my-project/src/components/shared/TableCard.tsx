@@ -2,6 +2,7 @@ import type { LucideIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/Card';
 import { EmptyState } from '@/components/ui/Feedback';
+import { ErrorState } from './ErrorState';
 import { cn } from '@/lib/utils';
 
 interface TableCardProps {
@@ -13,6 +14,11 @@ interface TableCardProps {
   /** Full-width control row rendered below the title/description, above the table. */
   toolbar?: ReactNode;
   children?: ReactNode;
+  /** Failure message shown instead of the table when the request failed. */
+  error?: string | null;
+  errorTitle?: string;
+  /** Shows a "Try again" button alongside `error` when provided. */
+  onRetry?: () => void;
   isEmpty?: boolean;
   emptyTitle?: string;
   emptyDescription?: string;
@@ -28,6 +34,9 @@ export const TableCard = ({
   action,
   toolbar,
   children,
+  error,
+  errorTitle,
+  onRetry,
   isEmpty = false,
   emptyTitle = 'Nothing here yet',
   emptyDescription,
@@ -52,8 +61,12 @@ export const TableCard = ({
         </div>
       </CardHeader>
       {toolbar ? <div className="border-b px-5 py-3">{toolbar}</div> : null}
-      <CardContent className={cn(isEmpty ? 'p-5 sm:p-6' : 'p-0', contentClassName)}>
-        {isEmpty ? (
+      <CardContent
+        className={cn(error || isEmpty ? 'p-5 sm:p-6' : 'p-0', contentClassName)}
+      >
+        {error ? (
+          <ErrorState title={errorTitle} description={error} onRetry={onRetry} />
+        ) : isEmpty ? (
           <EmptyState title={emptyTitle} description={emptyDescription} />
         ) : (
           children

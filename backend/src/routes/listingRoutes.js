@@ -5,13 +5,13 @@ import { authorize } from '../middlewares/authorize.js';
 import { requireShelter } from '../middlewares/requireShelter.js';
 import { validate } from '../middlewares/validate.js';
 import { uuidParam } from '../validators/commonValidator.js';
-import { createPetSchema, updatePetSchema } from '../validators/petValidator.js';
+import { createPetSchema, shelterListingQuerySchema, updatePetSchema } from '../validators/petValidator.js';
 
 export const listingRoutes = Router();
 
 listingRoutes.use(authenticate, authorize('shelter_staff', 'platform_admin'), requireShelter);
 
-listingRoutes.get('/', getMyListings);
+listingRoutes.get('/', validate(shelterListingQuerySchema, 'query'), getMyListings);
 listingRoutes.post('/', validate(createPetSchema), addListing);
 listingRoutes.patch(
   '/:id',

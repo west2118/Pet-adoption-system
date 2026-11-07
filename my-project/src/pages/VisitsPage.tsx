@@ -1,7 +1,7 @@
 import { ArrowRight, RefreshCw } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Reveal, TablePagination } from '@/components/shared';
+import { ErrorState, Reveal, TablePagination } from '@/components/shared';
 import { VisitCard } from '@/components/features/VisitCard';
 import { EmptyState } from '@/components/ui/Feedback';
 import { Button } from '@/components/ui/button';
@@ -54,6 +54,8 @@ export const VisitsPage = () => {
   }, [page, pageSize]);
 
   useEffect(() => {
+    // Loading state is owned by the fetch callback.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchThreads();
   }, [fetchThreads]);
 
@@ -114,7 +116,7 @@ export const VisitsPage = () => {
             {loading && threads.length === 0 ? (
               <p className="text-sm text-muted-foreground">Loading visits…</p>
             ) : error ? (
-              <EmptyState title="Could not load your visits" description={error} />
+              <ErrorState title="Could not load your visits" description={error} />
             ) : threads.length === 0 ? (
               <EmptyState
                 title="No visits yet"
