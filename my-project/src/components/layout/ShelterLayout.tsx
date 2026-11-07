@@ -1,7 +1,7 @@
 import { Menu, PawPrint } from 'lucide-react';
 import { useState } from 'react';
-import { Link, Outlet } from 'react-router-dom';
-import { Breadcrumbs } from '@/components/shared';
+import { Link } from 'react-router-dom';
+import { Breadcrumbs, PageTransition } from '@/components/shared';
 import { ShelterSidebar } from './ShelterSidebar';
 
 export const ShelterLayout = () => {
@@ -33,8 +33,8 @@ export const ShelterLayout = () => {
           </div>
         </header>
 
-        <main className="min-h-0 min-w-0 flex-1 overflow-y-auto">
-          <Outlet />
+        <main data-scroll-container className="min-h-0 min-w-0 flex-1 overflow-y-auto">
+          <PageTransition />
         </main>
       </div>
     </div>

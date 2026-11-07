@@ -710,6 +710,169 @@ export const removeUser = async (id: string): Promise<void> => {
   usersStore = usersStore.filter((u) => u.id !== id);
 };
 
+export type ShelterAccountType = 'admin' | 'staff';
+
+export interface CreateShelterUserInput {
+  name: string;
+  email: string;
+  password: string;
+  accountType: ShelterAccountType;
+}
+
+export interface UpdateShelterUserInput {
+  name?: string;
+  email?: string;
+  password?: string;
+  accountType?: ShelterAccountType;
+}
+
+/**
+ * One page of the signed-in shelter's staff/admin accounts. The backend scopes
+ * rows to the staff member's shelter via the JWT, so `shelterId` is only used
+ * by the mock fallback in demo mode.
+ */
+export const listShelterUsersPaginated = async (options: {
+  page?: number;
+  limit?: number;
+  search?: string;
+  shelterId?: string | null;
+} = {}): Promise<PaginatedResult<User>> => {
+  const page = options.page ?? 1;
+  const limit = options.limit ?? 10;
+  if (sessionStore.has()) {
+    try {
+      const queryParams = new URLSearchParams();
+      queryParams.set('page', String(page));
+      queryParams.set('limit', String(limit));
+      if (options.search) queryParams.set('search', options.search);
+
+      const { data, meta } = await apiRequestWithMeta<{ users: User[] }>(
+        `/shelter/users?${queryParams.toString()}`,
+        { auth: 'full' },
+      );
+      return {
+        items: data.users,
+        total: meta?.total ?? data.users.length,
+        page: meta?.page ?? page,
+        limit: meta?.limit ?? limit,
+      };
+    } catch (err) {
+      if (!shouldFallbackToMock(err)) throw err;
+    }
+  }
+
+  let filtered = usersStore.filter((u) => u.role === 'shelter_staff');
+  if (options.shelterId) {
+    filtered = filtered.filter((u) => u.shelterId === options.shelterId);
+  }
+  if (options.search) {
+    const s = options.search.toLowerCase();
+    filtered = filtered.filter(
+      (u) => u.name.toLowerCase().includes(s) || u.email.toLowerCase().includes(s),
+    );
+  }
+  const total = filtered.length;
+  const start = (page - 1) * limit;
+  return { items: filtered.slice(start, start + limit), total, page, limit };
+};
+
+export const createShelterUser = async (
+  input: CreateShelterUserInput & { shelterId?: string | null },
+): Promise<User> => {
+  if (sessionStore.has()) {
+    const result = await apiRequest<{ user: User }>('/shelter/users', {
+      method: 'POST',
+      auth: 'full',
+      body: {
+        name: input.name,
+        email: input.email,
+        password: input.password,
+        accountType: input.accountType,
+      },
+    });
+    return result.user;
+  }
+
+  await delay();
+  if (usersStore.some((u) => u.email.toLowerCase() === input.email.toLowerCase())) {
+    throw new ApiError('Email is already registered.', 409);
+  }
+  const user: User = {
+    id: `u${Date.now()}`,
+    name: input.name,
+    email: input.email,
+    role: 'shelter_staff',
+    shelterId: input.shelterId ?? undefined,
+    accountStatus: 'approved',
+    isOwner: input.accountType === 'admin',
+  };
+  usersStore = [user, ...usersStore];
+  return user;
+};
+
+export const updateShelterUser = async (
+  id: string,
+  input: UpdateShelterUserInput,
+  shelterId?: string | null,
+): Promise<User> => {
+  const body: UpdateShelterUserInput = {
+    name: input.name,
+    email: input.email,
+    accountType: input.accountType,
+    ...(input.password ? { password: input.password } : {}),
+  };
+  if (sessionStore.has()) {
+    const result = await apiRequest<{ user: User }>(
+      `/shelter/users/${encodeURIComponent(id)}`,
+      { method: 'PATCH', auth: 'full', body },
+    );
+    return result.user;
+  }
+
+  await delay();
+  const existing = usersStore.find((u) => u.id === id);
+  if (!existing || (shelterId && existing.shelterId !== shelterId)) {
+    throw new ApiError('User not found in this shelter.', 404);
+  }
+  const updated: User = {
+    ...existing,
+    ...(input.name !== undefined ? { name: input.name } : {}),
+    ...(input.email !== undefined ? { email: input.email } : {}),
+    ...(input.accountType !== undefined
+      ? { isOwner: input.accountType === 'admin' }
+      : {}),
+  };
+  usersStore = usersStore.map((u) => (u.id === id ? updated : u));
+  return updated;
+};
+
+export const removeShelterUser = async (
+  id: string,
+  shelterId?: string | null,
+): Promise<void> => {
+  if (sessionStore.has()) {
+    await apiRequest(`/shelter/users/${encodeURIComponent(id)}`, {
+      method: 'DELETE',
+      auth: 'full',
+    });
+    return;
+  }
+
+  await delay();
+  const existing = usersStore.find((u) => u.id === id);
+  if (!existing || (shelterId && existing.shelterId !== shelterId)) {
+    throw new ApiError('User not found in this shelter.', 404);
+  }
+  usersStore = usersStore.filter((u) => u.id !== id);
+};
+
+export const shelterUserService = {
+  list: listShelterUsersPaginated,
+  create: createShelterUser,
+  update: updateShelterUser,
+  remove: removeShelterUser,
+};
+
 export const userService = {
   list: listUsers,
   create: createUser,

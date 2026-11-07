@@ -73,6 +73,74 @@ export const listUsers = async ({ limit = 10, offset = 0, role, search } = {}) =
   return { rows, total: count.rows[0].total };
 };
 
+/** One page of a single shelter's staff/admin accounts. */
+export const listUsersByShelter = async (shelterId, { limit = 10, offset = 0, search } = {}) => {
+  const values = [shelterId];
+  let searchClause = '';
+  if (search) {
+    values.push(`%${search}%`);
+    searchClause = ` AND (name ILIKE $${values.length} OR email ILIKE $${values.length})`;
+  }
+
+  const where = `WHERE shelter_id = $1 AND role = 'shelter_staff'${searchClause}`;
+  const { rows } = await pool.query(
+    `SELECT * FROM users ${where}
+      ORDER BY is_owner DESC, name ASC
+      LIMIT $${values.length + 1} OFFSET $${values.length + 2}`,
+    [...values, limit, offset],
+  );
+  const count = await pool.query(
+    `SELECT COUNT(*)::int AS total FROM users ${where}`,
+    values,
+  );
+  return { rows, total: count.rows[0].total };
+};
+
+export const updateShelterUser = async (
+  id,
+  shelterId,
+  { name, email, passwordHash, isOwner } = {},
+) => {
+  const sets = ['updated_at = CURRENT_TIMESTAMP'];
+  const values = [];
+  if (name !== undefined) {
+    values.push(name);
+    sets.push(`name = $${values.length}`);
+  }
+  if (email !== undefined) {
+    values.push(email);
+    sets.push(`email = $${values.length}`);
+  }
+  if (passwordHash !== undefined) {
+    values.push(passwordHash);
+    sets.push(`password_hash = $${values.length}`);
+  }
+  if (isOwner !== undefined) {
+    values.push(isOwner);
+    sets.push(`is_owner = $${values.length}`);
+  }
+  values.push(id, shelterId);
+  const { rows } = await pool.query(
+    `UPDATE users SET ${sets.join(', ')}
+      WHERE id = $${values.length - 1}
+        AND shelter_id = $${values.length}
+        AND role = 'shelter_staff'
+      RETURNING *`,
+    values,
+  );
+  return rows[0] ?? null;
+};
+
+export const deleteShelterUser = async (id, shelterId) => {
+  const { rows } = await pool.query(
+    `DELETE FROM users
+      WHERE id = $1 AND shelter_id = $2 AND role = 'shelter_staff'
+      RETURNING id`,
+    [id, shelterId],
+  );
+  return rows[0] ?? null;
+};
+
 export const updateUserRole = async (id, role, shelterId = null) => {
   const { rows } = await pool.query(
     `UPDATE users SET role = $1, shelter_id = $2, updated_at = CURRENT_TIMESTAMP

@@ -1,4 +1,5 @@
 import { Check, PawPrint, Pencil } from 'lucide-react';
+import { useState } from 'react';
 import { DetailsModal } from '@/components/shared';
 import { Button } from '@/components/ui/button';
 import { PetStatusBadge, VisibilityBadge } from '@/components/ui/StatusBadge';
@@ -19,14 +20,20 @@ export const PetDetailsModal = ({
   onClose,
   onEdit,
 }: PetDetailsModalProps) => {
-  if (!pet) return null;
+  // Keep the last pet around while the modal animates out, otherwise closing
+  // would unmount the dialog before its exit transition could play.
+  const [lastPet, setLastPet] = useState<Pet | null>(pet);
+  if (pet && pet !== lastPet) setLastPet(pet);
+  const detailPet = pet ?? lastPet;
+
+  if (!detailPet) return null;
 
   return (
     <DetailsModal
       open={Boolean(pet)}
       onClose={onClose}
-      title={pet.name}
-      description={`${pet.breed} · ${formatAge(pet.ageYears)}`}
+      title={detailPet.name}
+      description={`${detailPet.breed} · ${formatAge(detailPet.ageYears)}`}
       icon={PawPrint}
       footer={
         <div className="grid grid-cols-2 gap-3">
@@ -39,7 +46,7 @@ export const PetDetailsModal = ({
             className="w-full"
             onClick={() => {
               onClose();
-              onEdit(pet);
+              onEdit(detailPet);
             }}
           >
             <Pencil className="size-4" /> Edit in slider
@@ -50,17 +57,17 @@ export const PetDetailsModal = ({
       <div className="space-y-4">
         <div>
           <img
-            src={pet.imageUrl}
-            alt={pet.name}
+            src={detailPet.imageUrl}
+            alt={detailPet.name}
             className="h-56 w-full rounded-lg border object-cover"
           />
-          {pet.gallery.length > 1 && (
+          {detailPet.gallery.length > 1 && (
             <div className="mt-2 grid grid-cols-4 gap-2">
-              {pet.gallery.map((src, i) => (
+              {detailPet.gallery.map((src, i) => (
                 <img
                   key={`${src}-${i}`}
                   src={src}
-                  alt={`${pet.name} photo ${i + 1}`}
+                  alt={`${detailPet.name} photo ${i + 1}`}
                   className="h-16 w-full rounded-lg border object-cover"
                 />
               ))}
@@ -69,48 +76,48 @@ export const PetDetailsModal = ({
         </div>
 
         <div className="flex flex-wrap gap-1.5">
-          <PetStatusBadge status={pet.status} />
-          <VisibilityBadge visibility={pet.visibility} />
+          <PetStatusBadge status={detailPet.status} />
+          <VisibilityBadge visibility={detailPet.visibility} />
         </div>
 
-        <p className="text-sm leading-relaxed text-muted-foreground">{pet.description}</p>
+        <p className="text-sm leading-relaxed text-muted-foreground">{detailPet.description}</p>
 
         <dl className="grid grid-cols-2 gap-2 text-sm">
           <div className="rounded-lg border p-2.5">
             <dt className="text-xs text-muted-foreground">Species</dt>
-            <dd className="font-medium capitalize">{pet.species}</dd>
+            <dd className="font-medium capitalize">{detailPet.species}</dd>
           </div>
           <div className="rounded-lg border p-2.5">
             <dt className="text-xs text-muted-foreground">Gender · Size</dt>
             <dd className="font-medium capitalize">
-              {pet.gender} · {pet.size}
+              {detailPet.gender} · {detailPet.size}
             </dd>
           </div>
           <div className="rounded-lg border p-2.5">
             <dt className="text-xs text-muted-foreground">Age group</dt>
-            <dd className="font-medium capitalize">{pet.ageGroup.replace('-', ' / ')}</dd>
+            <dd className="font-medium capitalize">{detailPet.ageGroup.replace('-', ' / ')}</dd>
           </div>
           <div className="rounded-lg border p-2.5">
             <dt className="text-xs text-muted-foreground">Shelter</dt>
             <dd className="font-medium">
-              {shelters.find((s) => s.id === pet.shelterId)?.name ?? '—'}
+              {shelters.find((s) => s.id === detailPet.shelterId)?.name ?? '—'}
             </dd>
           </div>
           <div className="rounded-lg border p-2.5">
             <dt className="text-xs text-muted-foreground">Added</dt>
-            <dd className="font-medium">{formatDate(pet.dateAdded)}</dd>
+            <dd className="font-medium">{formatDate(detailPet.dateAdded)}</dd>
           </div>
           <div className="rounded-lg border p-2.5">
             <dt className="text-xs text-muted-foreground">Temperament</dt>
-            <dd className="font-medium">{pet.temperament.join(', ')}</dd>
+            <dd className="font-medium">{detailPet.temperament.join(', ')}</dd>
           </div>
         </dl>
 
         <div>
           <h3 className="text-sm font-semibold">Care flags</h3>
-          {getDetailsCareFlags(pet).length > 0 ? (
+          {getDetailsCareFlags(detailPet).length > 0 ? (
             <div className="mt-1.5 grid grid-cols-2 gap-2 text-sm">
-              {getDetailsCareFlags(pet).map((label) => (
+              {getDetailsCareFlags(detailPet).map((label) => (
                 <p key={label} className="flex items-center gap-1.5 text-muted-foreground">
                   <Check className="size-4 shrink-0 text-green-600" />
                   {label}
@@ -125,7 +132,7 @@ export const PetDetailsModal = ({
         <div>
           <h3 className="text-sm font-semibold">Medical history</h3>
           <ul className="mt-1 list-disc space-y-0.5 pl-5 text-sm text-muted-foreground">
-            {pet.medicalHistory.map((m) => (
+            {detailPet.medicalHistory.map((m) => (
               <li key={m}>{m}</li>
             ))}
           </ul>
@@ -133,7 +140,7 @@ export const PetDetailsModal = ({
 
         <div>
           <h3 className="text-sm font-semibold">Behavioral notes</h3>
-          <p className="mt-1 text-sm text-muted-foreground">{pet.behavioralNotes}</p>
+          <p className="mt-1 text-sm text-muted-foreground">{detailPet.behavioralNotes}</p>
         </div>
       </div>
     </DetailsModal>

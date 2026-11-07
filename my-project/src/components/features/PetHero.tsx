@@ -47,7 +47,7 @@ export const PetHero = ({ pet, shelter, favorite, onToggleFavorite }: PetHeroPro
 
         <div className="grid items-start gap-12 lg:grid-cols-12 lg:gap-16">
           <Reveal className="lg:col-span-7">
-            <PetGallery images={pet.gallery} name={pet.name} />
+            <PetGallery images={pet.gallery} name={pet.name} fallbackSrc={pet.imageUrl} />
           </Reveal>
 
           <div className="lg:col-span-5">

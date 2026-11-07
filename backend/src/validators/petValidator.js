@@ -4,6 +4,9 @@ export const createPetSchema = z.object({
   name: z.string().min(1, 'Pet name is required').max(100),
   species: z.enum(['dog', 'cat', 'rabbit', 'bird', 'other']),
   breed: z.string().min(1, 'Breed is required'),
+  // Must survive validation: stripped, the repository rebuilds it from the
+  // rounded age, which loses the exact birthdate (e.g. newborns became 6 months).
+  birthdate: z.string().date('Birthdate must be a valid date (YYYY-MM-DD)').optional(),
   ageYears: z.number().min(0, 'Age must be non-negative'),
   ageGroup: z.enum(['puppy-kitten', 'young', 'adult', 'senior']),
   size: z.enum(['small', 'medium', 'large']),

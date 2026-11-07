@@ -1,5 +1,7 @@
-import { useEffect, useRef, useState } from 'react';
+import { useMemo } from 'react';
 import type { ElementType } from 'react';
+import { motion, useReducedMotion } from 'framer-motion';
+import type { Variants } from 'framer-motion';
 import { cn } from '@/lib/utils';
 
 interface BlurTextProps {
@@ -10,8 +12,14 @@ interface BlurTextProps {
   as?: ElementType;
 }
 
-const prefersReducedMotion = () =>
-  typeof matchMedia !== 'undefined' && matchMedia('(prefers-reduced-motion: reduce)').matches;
+const wordVariants: Variants = {
+  hidden: { opacity: 0, filter: 'blur(40px)' },
+  show: {
+    opacity: 1,
+    filter: 'blur(0px)',
+    transition: { duration: 0.7, ease: 'easeOut' },
+  },
+};
 
 /**
  * Reveals a sentence one word at a time, each word fading out of a blur as it
@@ -19,49 +27,56 @@ const prefersReducedMotion = () =>
  * `prefers-reduced-motion` is set and the text is rendered plainly.
  */
 export const BlurText = ({ children, className, delay: delayMs = 0, as: Tag = 'p' }: BlurTextProps) => {
-  const ref = useRef<HTMLElement>(null);
+  const shouldReduceMotion = useReducedMotion();
   const words = children.split(' ');
 
-  const [shown, setShown] = useState(
-    () => typeof IntersectionObserver === 'undefined' || prefersReducedMotion(),
-  );
+  const MotionTag = useMemo(() => {
+    if (typeof Tag === 'string') {
+      return motion[Tag as keyof typeof motion] as unknown as typeof motion.p;
+    }
+    return motion.create(Tag) as typeof motion.p;
+  }, [Tag]);
 
-  useEffect(() => {
-    const node = ref.current;
-    if (!node || typeof IntersectionObserver === 'undefined') return;
-
-    const observer = new IntersectionObserver(
-      (entries) => {
-        for (const entry of entries) {
-          if (entry.isIntersecting) {
-            setShown(true);
-            observer.disconnect();
-          }
-        }
-      },
-      { threshold: 0.01, rootMargin: '0px 0px -10% 0px' },
+  if (shouldReduceMotion) {
+    return (
+      <Tag className={cn('flex flex-wrap justify-center', className)}>
+        {words.map((word, index) => (
+          <span key={`${word}-${index}`} style={{ marginRight: '0.3em' }}>
+            {word}
+          </span>
+        ))}
+      </Tag>
     );
+  }
 
-    observer.observe(node);
-    return () => observer.disconnect();
-  }, []);
+  const containerVariants: Variants = {
+    hidden: {},
+    show: {
+      transition: {
+        delayChildren: delayMs / 1000,
+        staggerChildren: 0.06,
+      },
+    },
+  };
 
   return (
-    <Tag ref={ref} className={cn('flex flex-wrap justify-center', className)}>
+    <MotionTag
+      className={cn('flex flex-wrap justify-center', className)}
+      variants={containerVariants}
+      initial="hidden"
+      whileInView="show"
+      viewport={{ once: true, margin: '0px 0px -10% 0px' }}
+    >
       {words.map((word, index) => (
-        <span
+        <motion.span
           key={`${word}-${index}`}
-          className="inline-block transition-all duration-700 ease-out motion-reduce:transition-none"
-          style={{
-            marginRight: '0.3em',
-            opacity: shown ? 1 : 0,
-            filter: shown ? 'blur(0px)' : 'blur(40px)',
-            transitionDelay: shown ? `${delayMs + index * 60}ms` : undefined,
-          }}
+          variants={wordVariants}
+          className="inline-block"
+          style={{ marginRight: '0.3em' }}
         >
           {word}
-        </span>
+        </motion.span>
       ))}
-    </Tag>
+    </MotionTag>
   );
 };

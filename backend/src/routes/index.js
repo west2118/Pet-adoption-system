@@ -12,6 +12,7 @@ import { shelterVisitRoutes } from './shelterVisitRoutes.js';
 import { favoriteRoutes } from './favoriteRoutes.js';
 import { shelterOnboardingRoutes } from './shelterOnboardingRoutes.js';
 import { shelterOverviewRoutes } from './shelterOverviewRoutes.js';
+import { shelterUserRoutes } from './shelterUserRoutes.js';
 import { waiverRoutes } from './waiverRoutes.js';
 import { adminRoutes } from './adminRoutes.js';
 
@@ -33,7 +34,8 @@ apiRouter.use('/visits', visitRoutes);
 apiRouter.use('/shelter/visits', shelterVisitRoutes);
 apiRouter.use('/favorites', favoriteRoutes);
 apiRouter.use('/shelter-onboarding', shelterOnboardingRoutes);
-// Mounted before the broader `/shelter` router so `/overview` resolves here.
+// Mounted before the broader `/shelter` router so these paths resolve here.
 apiRouter.use('/shelter/overview', shelterOverviewRoutes);
+apiRouter.use('/shelter/users', shelterUserRoutes);
 apiRouter.use('/shelter', waiverRoutes);
 apiRouter.use('/admin', adminRoutes);

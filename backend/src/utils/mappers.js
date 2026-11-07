@@ -1,11 +1,23 @@
 // snake_case DB rows -> camelCase API objects (mirrors frontend types/index.ts)
 
+/**
+ * DATE columns arrive as Date objects at local midnight, so read the calendar
+ * parts instead of slicing the UTC ISO string (which shifts the day for
+ * timezones ahead of UTC).
+ */
+export const toDateOnly = (value) => {
+  if (!value) return '';
+  if (value instanceof Date) {
+    return `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, '0')}-${String(
+      value.getDate(),
+    ).padStart(2, '0')}`;
+  }
+  return String(value).slice(0, 10);
+};
+
 export const ageYearsFromBirthdate = (birthdateStr) => {
   if (!birthdateStr) return 0;
-  const str =
-    birthdateStr instanceof Date
-      ? birthdateStr.toISOString().slice(0, 10)
-      : String(birthdateStr).slice(0, 10);
+  const str = toDateOnly(birthdateStr);
   const birth = new Date(`${str}T00:00:00`);
   const now = new Date();
   if (Number.isNaN(birth.getTime()) || birth > now) return 0;
@@ -15,12 +27,7 @@ export const ageYearsFromBirthdate = (birthdateStr) => {
 
 export const mapPet = (row) => {
   if (!row) return null;
-  const birthdate =
-    row.birthdate instanceof Date
-      ? row.birthdate.toISOString().slice(0, 10)
-      : row.birthdate
-        ? String(row.birthdate).slice(0, 10)
-        : '';
+  const birthdate = toDateOnly(row.birthdate);
   const ageYears = ageYearsFromBirthdate(birthdate);
 
   const pet = {
@@ -46,10 +53,7 @@ export const mapPet = (row) => {
     spayedNeutered: row.spayed_neutered,
     goodWithKids: row.good_with_kids,
     goodWithPets: row.good_with_pets,
-    dateAdded:
-      row.date_added instanceof Date
-        ? row.date_added.toISOString().slice(0, 10)
-        : row.date_added,
+    dateAdded: toDateOnly(row.date_added),
   };
   // Only present on distance-aware catalogue queries (`?lat=&lng=`).
   if (row.distance_km != null) {

@@ -1,4 +1,5 @@
 import { pool } from '../config/database.js';
+import { toDateOnly } from '../utils/mappers.js';
 
 const selectPets = 'SELECT * FROM pets';
 
@@ -228,17 +229,24 @@ const resolveBirthdate = (input) => {
   if (input?.birthdate && String(input.birthdate).trim().length > 0) {
     return String(input.birthdate).slice(0, 10);
   }
-  if (typeof input?.ageYears === 'number' || (input?.ageYears && !isNaN(input.ageYears))) {
-    const years = Number(input.ageYears);
-    const now = new Date();
+  const years = Number(input?.ageYears);
+  if (Number.isFinite(years) && years > 0) {
+    const born = new Date();
     if (years < 1) {
-      now.setMonth(now.getMonth() - Math.round(years * 12 || 6));
+      // Derive the real number of months (or days for newborns) instead of
+      // assuming every under-1-year pet is exactly six months old.
+      const months = Math.round(years * 12);
+      if (months >= 1) {
+        born.setMonth(born.getMonth() - months);
+      } else {
+        born.setDate(born.getDate() - Math.max(1, Math.round(years * 365.25)));
+      }
     } else {
-      now.setFullYear(now.getFullYear() - Math.round(years));
+      born.setFullYear(born.getFullYear() - Math.round(years));
     }
-    return now.toISOString().slice(0, 10);
+    return toDateOnly(born);
   }
-  return new Date().toISOString().slice(0, 10);
+  return toDateOnly(new Date());
 };
 
 export const createPet = async (input, shelterId) => {
@@ -267,7 +275,7 @@ export const updatePet = async (id, patch) => {
   const birthdate =
     patch.birthdate ||
     (patch.ageYears != null ? resolveBirthdate(patch) : current.birthdate) ||
-    new Date().toISOString().slice(0, 10);
+    toDateOnly(new Date());
   const merged = {
     name: patch.name ?? current.name,
     species: patch.species ?? current.species,

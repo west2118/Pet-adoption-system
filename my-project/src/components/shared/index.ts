@@ -23,6 +23,7 @@ export { ConfirmDeleteModal } from './ConfirmDeleteModal';
 export { PasswordInput } from './PasswordInput';
 export { Reveal } from './Reveal';
 export { BlurText } from './BlurText';
+export { PageTransition } from './PageTransition';
 export { GridOverlay } from './GridOverlay';
 export { RouteLoader } from './RouteLoader';
 export { ScrollToTop } from './ScrollToTop';

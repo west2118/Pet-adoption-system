@@ -2,6 +2,7 @@ import type { LucideIcon } from 'lucide-react';
 import { X } from 'lucide-react';
 import { useEffect, useRef } from 'react';
 import type { ReactNode } from 'react';
+import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 import { useScrollLock } from '@/hooks/useScrollLock';
 import { cn } from '@/lib/utils';
 
@@ -39,6 +40,7 @@ export const SlideOver = ({
   size = 'md',
 }: SlideOverProps) => {
   const overlayRef = useRef<HTMLDivElement>(null);
+  const shouldReduceMotion = useReducedMotion();
 
   useScrollLock(open, overlayRef);
 
@@ -53,57 +55,67 @@ export const SlideOver = ({
     };
   }, [open, onClose]);
 
-  if (!open) return null;
-
   return (
-    <div
-      ref={overlayRef}
-      className="fixed inset-0 z-50"
-      role="dialog"
-      aria-modal="true"
-      aria-label={title}
-    >
-      <div
-        className="absolute inset-0 animate-in bg-black/40 fade-in duration-200"
-        onClick={onClose}
-        aria-hidden="true"
-      />
-      <aside
-        className={cn(
-          'absolute inset-y-0 right-0 flex h-full w-full animate-in flex-col border-l bg-card shadow-xl slide-in-from-right duration-200',
-          sizeClasses[size],
-        )}
-      >
-        <div className="sticky top-0 z-10 flex shrink-0 items-center gap-3 border-b bg-card p-5 pb-4">
-          {Icon ? (
-            <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-orange-100 text-orange-600 dark:bg-orange-950 dark:text-orange-400">
-              <Icon className="size-4.5" />
-            </span>
-          ) : null}
-          <div className="min-w-0 flex-1">
-            <h2 className="text-base font-semibold">{title}</h2>
-            {description ? (
-              <p className="mt-0.5 text-sm text-muted-foreground">{description}</p>
-            ) : null}
-          </div>
-          <button
-            type="button"
+    <AnimatePresence>
+      {open ? (
+        <motion.div
+          ref={overlayRef}
+          className="fixed inset-0 z-50"
+          role="dialog"
+          aria-modal="true"
+          aria-label={title}
+        >
+          <motion.div
+            className="absolute inset-0 bg-black/40"
             onClick={onClose}
-            aria-label="Close panel"
-            className="flex size-9 shrink-0 items-center justify-center rounded-lg border hover:bg-muted"
+            aria-hidden="true"
+            initial={shouldReduceMotion ? false : { opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={shouldReduceMotion ? undefined : { opacity: 0 }}
+            transition={{ duration: 0.2 }}
+          />
+          <motion.aside
+            className={cn(
+              'absolute inset-y-0 right-0 flex h-full w-full flex-col border-l bg-card shadow-xl',
+              sizeClasses[size],
+            )}
+            initial={shouldReduceMotion ? false : { x: '100%' }}
+            animate={{ x: 0 }}
+            exit={shouldReduceMotion ? undefined : { x: '100%' }}
+            transition={{ duration: 0.25, ease: 'easeOut' }}
           >
-            <X className="size-4" />
-          </button>
-        </div>
+            <div className="sticky top-0 z-10 flex shrink-0 items-center gap-3 border-b bg-card p-5 pb-4">
+              {Icon ? (
+                <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-orange-100 text-orange-600 dark:bg-orange-950 dark:text-orange-400">
+                  <Icon className="size-4.5" />
+                </span>
+              ) : null}
+              <div className="min-w-0 flex-1">
+                <h2 className="text-base font-semibold">{title}</h2>
+                {description ? (
+                  <p className="mt-0.5 text-sm text-muted-foreground">{description}</p>
+                ) : null}
+              </div>
+              <button
+                type="button"
+                onClick={onClose}
+                aria-label="Close panel"
+                className="flex size-9 shrink-0 items-center justify-center rounded-lg border hover:bg-muted"
+              >
+                <X className="size-4" />
+              </button>
+            </div>
 
-        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-5">{children}</div>
+            <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-5">{children}</div>
 
-        {footer ? (
-          <div className="sticky bottom-0 z-10 shrink-0 border-t bg-card p-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
-            {footer}
-          </div>
-        ) : null}
-      </aside>
-    </div>
+            {footer ? (
+              <div className="sticky bottom-0 z-10 shrink-0 border-t bg-card p-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
+                {footer}
+              </div>
+            ) : null}
+          </motion.aside>
+        </motion.div>
+      ) : null}
+    </AnimatePresence>
   );
 };

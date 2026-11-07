@@ -9,6 +9,7 @@ import { ShelterVisitsPage } from '@/pages/shelter/ShelterVisitsPage';
 import { ShelterListingsPage } from '@/pages/shelter/ShelterListingsPage';
 import { ShelterOverviewPage } from '@/pages/shelter/ShelterOverviewPage';
 import { ShelterProfilePage } from '@/pages/shelter/ShelterProfilePage';
+import { ShelterUsersPage } from '@/pages/shelter/ShelterUsersPage';
 
 /** Shelter portal: listings, applications, e-waiver templates, profile. */
 export const shelterRoutes: RouteObject = {
@@ -24,6 +25,7 @@ export const shelterRoutes: RouteObject = {
         { path: 'shelter/inquiries', element: <ShelterInquiriesPage /> },
         { path: 'shelter/visits', element: <ShelterVisitsPage /> },
         { path: 'shelter/templates/e-waivers', element: <ShelterEWaiversPage /> },
+        { path: 'shelter/users', element: <ShelterUsersPage /> },
         { path: 'shelter/profile', element: <ShelterProfilePage /> },
       ],
     },

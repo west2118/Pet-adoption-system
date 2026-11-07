@@ -1,4 +1,5 @@
-import { Outlet, useLocation } from 'react-router-dom';
+import { useLocation } from 'react-router-dom';
+import { PageTransition } from '@/components/shared';
 import { cn } from '@/lib/utils';
 import { Footer } from './Footer';
 import { Navbar } from './Navbar';
@@ -15,7 +16,7 @@ export const PublicLayout = () => {
         clearance instead.
       */}
       <main className={cn('flex-1', pathname !== '/' && 'pt-20')}>
-        <Outlet />
+        <PageTransition />
       </main>
       <Footer />
     </div>

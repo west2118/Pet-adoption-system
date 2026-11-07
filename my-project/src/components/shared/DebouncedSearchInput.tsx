@@ -1,4 +1,4 @@
-import { useEffect, useState, type InputHTMLAttributes } from 'react';
+import { useEffect, useRef, useState, type InputHTMLAttributes } from 'react';
 import { Search, X } from 'lucide-react';
 import { useDebounce } from '@/hooks/useDebounce';
 import { Input } from '@/components/ui/Form';
@@ -46,8 +46,14 @@ export const DebouncedSearchInput = ({
     setInternalValue(externalValue);
   }
 
-  // Notify parent once debounced value changes
+  // Notify the parent only when the debounced text actually changes. Callers
+  // pass a new callback on every render, so keying off its identity re-fired
+  // this on each render — Admin Pets/Users then set their loading state again
+  // after the data had loaded, leaving the tables stuck on skeleton rows.
+  const lastNotifiedValue = useRef(debouncedValue);
   useEffect(() => {
+    if (debouncedValue === lastNotifiedValue.current) return;
+    lastNotifiedValue.current = debouncedValue;
     onDebouncedChange(debouncedValue);
   }, [debouncedValue, onDebouncedChange]);
 

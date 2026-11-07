@@ -37,6 +37,14 @@
           radial-gradient(28rem 28rem at 18% 82%, rgba(233, 122, 44, 0.1), transparent 60%);
         font-family: 'Instrument Sans', ui-sans-serif, system-ui, sans-serif;
         animation: boot-failsafe 0s linear 4s forwards;
+        transition:
+          opacity 400ms ease,
+          visibility 400ms ease;
+      }
+
+      #app-boot.boot-done {
+        opacity: 0;
+        visibility: hidden;
       }
 
       @keyframes boot-failsafe {
@@ -92,6 +100,7 @@
       #app-boot .boot-word span:nth-child(7) { animation-delay: 0.41s; }
       #app-boot .boot-word span:nth-child(8) { animation-delay: 0.47s; }
       #app-boot .boot-word span:nth-child(9) { animation-delay: 0.53s; }
+      #app-boot .boot-word span:nth-child(10) { animation-delay: 0.59s; }
 
       @keyframes boot-rise {
         to {

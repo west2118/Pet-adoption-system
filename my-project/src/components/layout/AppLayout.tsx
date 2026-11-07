@@ -37,3 +37,21 @@ export const ProtectedRoute = ({
 
   return <Outlet />;
 };
+
+const landingRouteFor = (role: UserRole) =>
+  role === 'adopter' ? '/pets' : role === 'shelter_staff' ? '/shelter' : '/admin';
+
+/**
+ * The inverse of `ProtectedRoute`: an already signed-in visitor has no reason to
+ * see the sign-in or sign-up screens, so send them to their role's home page.
+ */
+export const GuestOnlyRoute = () => {
+  const { user, initializing } = useAuth();
+
+  // Wait for the session check so a refresh doesn't briefly show the auth form.
+  if (initializing) return null;
+
+  if (user) return <Navigate to={landingRouteFor(user.role)} replace />;
+
+  return <Outlet />;
+};

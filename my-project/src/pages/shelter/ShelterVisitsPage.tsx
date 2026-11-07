@@ -461,6 +461,15 @@ export const ShelterVisitsPage = () => {
               </div>
             </dl>
 
+            <div className="rounded-lg border p-3">
+              <p className="text-xs uppercase tracking-wide text-muted-foreground">
+                Reason for visit
+              </p>
+              <p className="mt-1 whitespace-pre-line text-sm leading-relaxed">
+                {selected.reason?.trim() || 'No reason provided.'}
+              </p>
+            </div>
+
             {selected.shelterMessage ? (
               <div className="rounded-lg border p-3">
                 <p className="text-xs uppercase tracking-wide text-muted-foreground">

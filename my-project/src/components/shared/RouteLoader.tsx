@@ -92,8 +92,8 @@ export const RouteLoader = () => {
           {WORDMARK.map((char, i) => (
             <span
               key={`${char}-${i}`}
-              className="inline-block motion-safe:animate-boot-rise motion-reduce:opacity-100"
-              style={{ opacity: 0, animationDelay: `${i * 55}ms` }}
+              className="inline-block motion-safe:animate-boot-rise motion-safe:opacity-0 motion-reduce:opacity-100"
+              style={{ animationDelay: `${i * 55}ms` }}
             >
               {char}
             </span>

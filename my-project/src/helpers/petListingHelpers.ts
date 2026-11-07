@@ -56,15 +56,23 @@ export const formatExactAge = (parts: { years: number; months: number; days: num
 export const toIsoDate = (d: Date): string =>
   `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 
-/** Approximate birthdate prefill when editing a pet that only stores ageYears. */
+/**
+ * Approximate birthdate prefill when editing a pet that only stores ageYears.
+ * Under a year, use the real month/day count — never assume six months old,
+ * which turned newborns into six-month-olds.
+ */
 export const birthdateFromAgeYears = (ageYears: number): string => {
-  const now = new Date();
+  if (!Number.isFinite(ageYears) || ageYears <= 0) return '';
+  const d = new Date();
   if (ageYears < 1) {
-    const d = new Date(now);
-    d.setMonth(d.getMonth() - 6);
+    const months = Math.round(ageYears * 12);
+    if (months >= 1) {
+      d.setMonth(d.getMonth() - months);
+    } else {
+      d.setDate(d.getDate() - Math.max(1, Math.round(ageYears * 365.25)));
+    }
     return toIsoDate(d);
   }
-  const d = new Date(now);
   d.setFullYear(d.getFullYear() - Math.round(ageYears));
   return toIsoDate(d);
 };

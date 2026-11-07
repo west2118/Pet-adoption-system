@@ -1,5 +1,5 @@
 import type { RouteObject } from 'react-router-dom';
-import { ProtectedRoute } from '@/components/layout/AppLayout';
+import { GuestOnlyRoute, ProtectedRoute } from '@/components/layout/AppLayout';
 import { PublicLayout } from '@/components/layout/PublicLayout';
 import { AdopterWaiverPage } from '@/pages/AdopterWaiverPage';
 import { AdoptionFormPage } from '@/pages/AdoptionFormPage';
@@ -31,8 +31,14 @@ export const publicRoutes: RouteObject = {
     { path: 'shelters', element: <SheltersPage /> },
     { path: 'shelters/:id', element: <ShelterPublicProfilePage /> },
     { path: 'favorites', element: <FavoritesPage /> },
-    { path: 'login', element: <LoginPage /> },
-    { path: 'signup', element: <SignupPage /> },
+    // Signed-in visitors are redirected away from the auth screens.
+    {
+      element: <GuestOnlyRoute />,
+      children: [
+        { path: 'login', element: <LoginPage /> },
+        { path: 'signup', element: <SignupPage /> },
+      ],
+    },
     { path: 'onboarding/shelter', element: <ShelterOnboardingPage /> },
     { path: 'onboarding/shelter/pending', element: <ShelterPendingPage /> },
 

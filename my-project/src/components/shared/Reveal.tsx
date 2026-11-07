@@ -1,6 +1,6 @@
-import { useEffect, useRef, useState } from 'react';
+import { useMemo } from 'react';
 import type { CSSProperties, ElementType, ReactNode } from 'react';
-import { cn } from '@/lib/utils';
+import { motion, useReducedMotion } from 'framer-motion';
 
 interface RevealProps {
   children: ReactNode;
@@ -14,8 +14,9 @@ interface RevealProps {
 /**
  * Fades + lifts its children into view once, the first time they enter the viewport.
  *
- * Purely presentational and SSR-safe: before the observer attaches the content is
- * visible, so a failed observer can never hide the page permanently.
+ * Backed by framer-motion's `whileInView`: the `once` viewport keeps it a single
+ * reveal, and `useReducedMotion` skips the movement entirely when the user has
+ * asked the OS for less motion.
  */
 export const Reveal = ({
   children,
@@ -24,43 +25,31 @@ export const Reveal = ({
   as: Tag = 'div',
   style,
 }: RevealProps) => {
-  const ref = useRef<HTMLElement>(null);
-  const [shown, setShown] = useState(() => typeof IntersectionObserver === 'undefined');
+  const shouldReduceMotion = useReducedMotion();
 
-  useEffect(() => {
-    const node = ref.current;
-    if (!node || typeof IntersectionObserver === 'undefined') return;
-
-    // The start state sits 32px low (`translate-y-8`), so a bottom-of-viewport element
-    // can dip below a higher ratio threshold and never trigger. A near-zero threshold
-    // plus a small bottom margin keeps the reveal reliable without firing off-screen.
-    const observer = new IntersectionObserver(
-      (entries) => {
-        for (const entry of entries) {
-          if (entry.isIntersecting) {
-            setShown(true);
-            observer.disconnect();
-          }
-        }
-      },
-      { threshold: 0.01, rootMargin: '0px 0px -24px 0px' },
-    );
-
-    observer.observe(node);
-    return () => observer.disconnect();
-  }, []);
+  // `motion.create` is memoised so a custom `as` never recreates the component
+  // on every render (which would remount its subtree).
+  const MotionTag = useMemo(() => {
+    if (typeof Tag === 'string') {
+      return motion[Tag as keyof typeof motion] as unknown as typeof motion.div;
+    }
+    return motion.create(Tag) as typeof motion.div;
+  }, [Tag]);
 
   return (
-    <Tag
-      ref={ref}
-      style={{ ...style, transitionDelay: shown && delay ? `${delay}ms` : undefined }}
-      className={cn(
-        'transition-all duration-1000 ease-out motion-reduce:transition-none',
-        shown ? 'translate-y-0 opacity-100' : 'translate-y-8 opacity-0',
-        className,
-      )}
+    <MotionTag
+      initial={shouldReduceMotion ? false : { opacity: 0, y: 32 }}
+      whileInView={{ opacity: 1, y: 0 }}
+      viewport={{ once: true, margin: '0px 0px -24px 0px' }}
+      transition={{
+        duration: 1,
+        delay: delay / 1000,
+        ease: [0.16, 1, 0.3, 1],
+      }}
+      className={className}
+      style={style}
     >
       {children}
-    </Tag>
+    </MotionTag>
   );
 };

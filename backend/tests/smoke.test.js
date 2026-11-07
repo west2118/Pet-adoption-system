@@ -114,4 +114,28 @@ describe('smoke (no database required)', () => {
     const res = await request.get('/api/v1/shelter/visits');
     assert.equal(res.status, 401);
   });
+
+  it('GET /shelter/users without token returns 401', async () => {
+    const res = await request.get('/api/v1/shelter/users');
+    assert.equal(res.status, 401);
+  });
+
+  it('POST /shelter/users without token returns 401', async () => {
+    const res = await request.post('/api/v1/shelter/users').send({});
+    assert.equal(res.status, 401);
+  });
+
+  it('PATCH /shelter/users/:id without token returns 401', async () => {
+    const res = await request
+      .patch('/api/v1/shelter/users/00000000-0000-0000-0000-000000000000')
+      .send({});
+    assert.equal(res.status, 401);
+  });
+
+  it('DELETE /shelter/users/:id without token returns 401', async () => {
+    const res = await request.delete(
+      '/api/v1/shelter/users/00000000-0000-0000-0000-000000000000',
+    );
+    assert.equal(res.status, 401);
+  });
 });

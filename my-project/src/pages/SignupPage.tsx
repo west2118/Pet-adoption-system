@@ -53,9 +53,10 @@ export const SignupPage = () => {
         return;
       }
 
-      // Adopters are active immediately — send them to sign in.
-      toast.success('Account created successfully! Please sign in.');
-      navigate('/login', { replace: true });
+      // Adopters are signed in immediately by signup(), so drop them straight
+      // into browsing instead of asking them to sign in again.
+      toast.success('Account created successfully! Start browsing adoptable pets.');
+      navigate('/pets', { replace: true });
     },
     // Covers network/unexpected failures, not just API error responses.
     onError: (error) => {
