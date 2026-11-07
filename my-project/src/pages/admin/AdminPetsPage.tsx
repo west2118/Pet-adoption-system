@@ -1,7 +1,8 @@
-import { Eye, PawPrint, Search } from 'lucide-react';
-import { useCallback, useEffect, useState } from 'react';
+import { Eye, PawPrint } from 'lucide-react';
+import { useEffect, useState } from 'react';
 import { toast } from 'react-toastify';
 import {
+  DebouncedSearchInput,
   DetailsModal,
   RecordCard,
   RecordCardSkeleton,
@@ -11,7 +12,7 @@ import {
   TableSkeletonRows,
 } from '@/components/shared';
 import { Button } from '@/components/ui/button';
-import { Input, Select } from '@/components/ui/Form';
+import { Select } from '@/components/ui/Form';
 import { PetStatusBadge, VisibilityBadge } from '@/components/ui/StatusBadge';
 import {
   Table,
@@ -40,42 +41,44 @@ export const AdminPetsPage = () => {
 
   const shelterName = (id: string) => shelters.find((s) => s.id === id)?.name ?? 'Unknown';
 
-  const fetchPets = useCallback(async () => {
-    try {
-      const res = await listAdminPetsPaginated({
-        page: petPage,
-        limit: petPageSize,
-        search: petQuery.trim(),
-        shelterId: petShelterFilter,
-      });
-      setAdminPetsList(res.items);
-      setTotalAdminPets(res.total);
-    } catch {
-      toast.error('Failed to load pets.');
-    } finally {
-      setLoadingAdminPets(false);
-    }
-  }, [petPage, petPageSize, petQuery, petShelterFilter]);
-
   useEffect(() => {
-    fetchPets();
-  }, [fetchPets]);
+    let mounted = true;
+    (async () => {
+      try {
+        const res = await listAdminPetsPaginated({
+          page: petPage,
+          limit: petPageSize,
+          search: petQuery.trim(),
+          shelterId: petShelterFilter,
+        });
+        if (mounted) {
+          setAdminPetsList(res.items);
+          setTotalAdminPets(res.total);
+        }
+      } catch {
+        if (mounted) toast.error('Failed to load pets.');
+      } finally {
+        if (mounted) setLoadingAdminPets(false);
+      }
+    })();
+    return () => {
+      mounted = false;
+    };
+  }, [petPage, petPageSize, petQuery, petShelterFilter]);
 
   const petSearchFilter = (
     <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-      <div className="relative w-full sm:w-[240px]">
-        <Search className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-        <Input
-          value={petQuery}
-          onChange={(e) => {
-            setLoadingAdminPets(true);
-            setPetQuery(e.target.value);
-            setPetPage(1);
-          }}
-          placeholder="Search name, breed, or species"
-          className="h-9 w-full pl-8 sm:w-[240px]"
-        />
-      </div>
+      <DebouncedSearchInput
+        value={petQuery}
+        onDebouncedChange={(val) => {
+          setLoadingAdminPets(true);
+          setPetQuery(val);
+          setPetPage(1);
+        }}
+        placeholder="Search name, breed, or species"
+        className="w-full sm:w-[240px]"
+        wrapperClassName="sm:w-[240px]"
+      />
       <Select
         aria-label="Filter by shelter"
         className="h-9 w-[180px]"

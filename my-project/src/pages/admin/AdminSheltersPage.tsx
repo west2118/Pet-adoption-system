@@ -3,13 +3,13 @@ import {
   Eye,
   Pencil,
   Plus,
-  Search,
   Trash2,
 } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 import type { FormEvent } from 'react';
 import { toast } from 'react-toastify';
 import {
+  DebouncedSearchInput,
   DetailsModal,
   RecordCard,
   RecordCardSkeleton,
@@ -48,7 +48,6 @@ export const AdminSheltersPage = () => {
   const [totalShelterRows, setTotalShelterRows] = useState(0);
   const [shelterPageSize, setShelterPageSize] = useState(10);
   const [shelterQuery, setShelterQuery] = useState('');
-  const [debouncedShelterQuery, setDebouncedShelterQuery] = useState('');
   const [shelterPage, setShelterPage] = useState(1);
   const [shelterSlideOpen, setShelterSlideOpen] = useState(false);
   const [editingShelter, setEditingShelter] = useState<Shelter | null>(null);
@@ -83,14 +82,6 @@ export const AdminSheltersPage = () => {
       imageUrl: '',
     });
 
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      setDebouncedShelterQuery(shelterQuery.trim());
-      setShelterPage(1);
-    }, 300);
-    return () => clearTimeout(timer);
-  }, [shelterQuery]);
-
   const fetchShelters = useCallback(async () => {
     setLoadingShelters(true);
     setSheltersError(null);
@@ -98,7 +89,7 @@ export const AdminSheltersPage = () => {
       const res = await listAdminSheltersPaginated({
         page: shelterPage,
         limit: shelterPageSize,
-        search: debouncedShelterQuery,
+        search: shelterQuery.trim(),
       });
       setShelterRows(res.items);
       setTotalShelterRows(res.total);
@@ -107,9 +98,11 @@ export const AdminSheltersPage = () => {
     } finally {
       setLoadingShelters(false);
     }
-  }, [shelterPage, shelterPageSize, debouncedShelterQuery]);
+  }, [shelterPage, shelterPageSize, shelterQuery]);
 
   useEffect(() => {
+    // Initial fetch and dependency-driven updates
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchShelters();
   }, [fetchShelters]);
 
@@ -218,18 +211,16 @@ export const AdminSheltersPage = () => {
   );
 
   const shelterSearchFilter = (
-    <div className="relative w-full sm:w-[260px]">
-      <Search className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-      <Input
-        value={shelterQuery}
-        onChange={(e) => {
-          setLoadingShelters(true);
-          setShelterQuery(e.target.value);
-        }}
-        placeholder="Search shelters by name, location..."
-        className="h-9 w-full pl-8"
-      />
-    </div>
+    <DebouncedSearchInput
+      value={shelterQuery}
+      onDebouncedChange={(val) => {
+        setShelterQuery(val);
+        setShelterPage(1);
+      }}
+      placeholder="Search shelters by name, location..."
+      className="w-full sm:w-[260px]"
+      wrapperClassName="sm:w-[260px]"
+    />
   );
 
   const shelterPagination =
@@ -640,8 +631,8 @@ export const AdminSheltersPage = () => {
             ? `${pendingDeleteShelter.shelter.name} currently has ${pendingDeleteShelter.petCount} pets registered (${pendingDeleteShelter.publicPets} public) and ${pendingDeleteShelter.pendingApplications} pending applications. Removing it will delete all associated records.`
             : ''
         }
-        confirmText="Remove shelter"
-        loading={isDeletingShelter}
+        confirmLabel="Remove shelter"
+        isDeleting={isDeletingShelter}
       />
     </div>
   );

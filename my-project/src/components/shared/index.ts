@@ -26,6 +26,8 @@ export { BlurText } from './BlurText';
 export { GridOverlay } from './GridOverlay';
 export { RouteLoader } from './RouteLoader';
 export { ScrollToTop } from './ScrollToTop';
+export { DebouncedSearchInput } from './DebouncedSearchInput';
+export type { DebouncedSearchInputProps } from './DebouncedSearchInput';
 export {
   Field,
   FieldError,

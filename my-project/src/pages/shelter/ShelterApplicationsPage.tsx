@@ -6,13 +6,13 @@ import {
   Eye,
   HeartHandshake,
   Printer,
-  Search,
   Undo2,
   X,
 } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { toast } from 'react-toastify';
 import {
+  DebouncedSearchInput,
   DetailsModal,
   RecordCard,
   RecordCardSkeleton,
@@ -395,19 +395,16 @@ export const ShelterApplicationsPage = () => {
 
   const toolbar = (
     <div className="flex flex-wrap items-center justify-between gap-2">
-      <div className="relative">
-        <Search className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-        <Input
-          aria-label="Search applications"
-          value={query}
-          onChange={(e) => {
-            setQuery(e.target.value);
-            setPage(1);
-          }}
-          placeholder="Search applicant or pet"
-          className="h-9 w-full pl-8 sm:w-[240px]"
-        />
-      </div>
+      <DebouncedSearchInput
+        aria-label="Search applications"
+        value={query}
+        onDebouncedChange={(val) => {
+          setQuery(val);
+          setPage(1);
+        }}
+        placeholder="Search applicant or pet"
+        className="sm:w-[240px]"
+      />
       <Select
         aria-label="Filter by status"
         className="h-9 w-[180px]"

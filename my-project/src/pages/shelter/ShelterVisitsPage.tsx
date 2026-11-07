@@ -61,6 +61,9 @@ export const ShelterVisitsPage = () => {
   const [declineOpen, setDeclineOpen] = useState(false);
   const [reason, setReason] = useState('');
 
+  // Complete visit confirmation dialog.
+  const [completeTarget, setCompleteTarget] = useState<VisitThread | null>(null);
+
   const fetchThreads = useCallback(async () => {
     setLoading(true);
     try {
@@ -162,13 +165,14 @@ export const ShelterVisitsPage = () => {
     }
   };
 
-  /** Mark a confirmed visit completed straight from the row. */
+  /** Mark a confirmed visit completed after confirmation in modal. */
   const completeVisit = async (thread: VisitThread) => {
     setWorking(true);
     try {
       const updated = await visitService.updateStatus(thread.id, { status: 'completed' });
       setThreads((prev) => prev.map((t) => (t.id === thread.id ? updated : t)));
       toast.success('Visit marked completed.');
+      setCompleteTarget(null);
       await fetchThreads();
     } catch (err) {
       toast.error(err instanceof ApiError ? err.message : 'Failed to update visit.');
@@ -327,7 +331,7 @@ export const ShelterVisitsPage = () => {
                             className="text-green-600 hover:bg-green-50 hover:text-green-700 dark:text-green-400 dark:hover:bg-green-950/40"
                             aria-label={`Mark visit for ${thread.pet?.name ?? 'pet'} completed`}
                             title="Mark completed"
-                            onClick={() => void completeVisit(thread)}
+                            onClick={() => setCompleteTarget(thread)}
                             disabled={working}
                           >
                             <Flag className="size-4" />
@@ -373,6 +377,19 @@ export const ShelterVisitsPage = () => {
                           onClick={() => openCompose(thread)}
                         >
                           <Mail className="size-4" />
+                        </Button>
+                      ) : null}
+                      {thread.status === 'confirmed' ? (
+                        <Button
+                          variant="ghost"
+                          size="icon-sm"
+                          className="text-green-600 hover:bg-green-50 hover:text-green-700 dark:text-green-400 dark:hover:bg-green-950/40"
+                          aria-label={`Mark visit for ${thread.pet?.name ?? 'pet'} completed`}
+                          title="Mark completed"
+                          onClick={() => setCompleteTarget(thread)}
+                          disabled={working}
+                        >
+                          <Flag className="size-4" />
                         </Button>
                       ) : null}
                     </>
@@ -614,6 +631,63 @@ export const ShelterVisitsPage = () => {
           </div>
         </div>
       </SlideOver>
+
+      {/* Confirmation modal for marking a visit completed */}
+      <DetailsModal
+        open={completeTarget !== null}
+        onClose={() => {
+          if (!working) setCompleteTarget(null);
+        }}
+        title="Mark visit as completed?"
+        description="Verify this meet-and-greet session has taken place."
+        icon={Flag}
+        size="md"
+        footer={
+          <div className="flex w-full items-center justify-end gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setCompleteTarget(null)}
+              disabled={working}
+            >
+              Cancel
+            </Button>
+            <Button
+              size="sm"
+              className="bg-green-600 hover:bg-green-700 text-white"
+              onClick={() => {
+                if (completeTarget) void completeVisit(completeTarget);
+              }}
+              disabled={working}
+            >
+              {working ? 'Updating…' : 'Yes, mark completed'}
+            </Button>
+          </div>
+        }
+      >
+        {completeTarget && (
+          <div className="space-y-3 text-sm">
+            <p className="text-muted-foreground">
+              Are you sure you want to mark the visit for{' '}
+              <strong className="text-foreground font-medium">{completeTarget.pet?.name ?? 'this pet'}</strong> with{' '}
+              <strong className="text-foreground font-medium">{completeTarget.adopter?.name ?? 'the adopter'}</strong> as completed?
+            </p>
+            <div className="rounded-lg bg-muted/60 p-3 text-xs space-y-1">
+              <div>
+                <span className="text-muted-foreground">Confirmed slot:</span>{' '}
+                <span className="font-medium text-foreground">{completeTarget.confirmedSlot || completeTarget.preferredSlot}</span>
+              </div>
+              <div>
+                <span className="text-muted-foreground">Adopter:</span>{' '}
+                <span className="font-medium text-foreground">{completeTarget.adopter?.name ?? '—'} ({completeTarget.adopter?.email ?? '—'})</span>
+              </div>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              This will update the visit status to completed and conclude this scheduled visit.
+            </p>
+          </div>
+        )}
+      </DetailsModal>
     </div>
   );
 };

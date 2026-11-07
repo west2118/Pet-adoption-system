@@ -1,0 +1,19 @@
+{
+  "name": "pet-adoption-system",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Pet Adoption & Rescue Management System root orchestrator",
+  "type": "module",
+  "scripts": {
+    "dev": "node dev.js",
+    "dev:backend": "npm --prefix backend run dev",
+    "dev:frontend": "npm --prefix my-project run dev",
+    "build": "npm --prefix my-project run build",
+    "migrate": "npm --prefix backend run migrate",
+    "seed": "npm --prefix backend run seed",
+    "seed:admin": "npm --prefix backend run seed:admin",
+    "seed:two-shelters": "npm --prefix backend run seed:two-shelters",
+    "test": "npm --prefix backend test"
+  }
+}
+

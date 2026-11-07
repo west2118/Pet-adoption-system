@@ -27,7 +27,8 @@ export const changeRole = async (req, res) => {
 export const getAllPets = async (req, res) => {
   const { page, limit, offset } = parsePagination(req.query);
   const search = req.query.search || undefined;
-  const { pets, total } = await listAllPets({ limit, offset, search });
+  const shelterId = req.query.shelterId || undefined;
+  const { pets, total } = await listAllPets({ limit, offset, search, shelterId });
   return sendSuccess(res, { pets }, undefined, buildMeta(page, limit, total));
 };
 

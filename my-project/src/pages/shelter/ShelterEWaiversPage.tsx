@@ -1,8 +1,9 @@
-import { Eye, FileSignature, Lock, Pencil, Plus, Search, Trash2 } from 'lucide-react';
+import { Eye, FileSignature, Lock, Pencil, Plus, Trash2 } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 import type { FormEvent } from 'react';
 import { toast } from 'react-toastify';
 import {
+  DebouncedSearchInput,
   DetailsModal,
   RecordCard,
   RecordCardSkeleton,
@@ -286,19 +287,16 @@ export const ShelterEWaiversPage = () => {
 
   const toolbar = (
     <div className="flex flex-wrap items-center justify-between gap-2">
-      <div className="relative">
-        <Search className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-        <Input
-          aria-label="Search waiver templates"
-          value={query}
-          onChange={(e) => {
-            setQuery(e.target.value);
-            setPage(1);
-          }}
-          placeholder="Search name or category"
-          className="h-9 w-full pl-8 sm:w-[280px]"
-        />
-      </div>
+      <DebouncedSearchInput
+        aria-label="Search waiver templates"
+        value={query}
+        onDebouncedChange={(val) => {
+          setQuery(val);
+          setPage(1);
+        }}
+        placeholder="Search name or category"
+        className="sm:w-[280px]"
+      />
       <Button size="sm" onClick={openAdd}>
         <Plus className="size-4" /> Add template
       </Button>

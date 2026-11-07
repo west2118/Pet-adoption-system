@@ -1,8 +1,9 @@
-import { Eye, Pencil, Plus, Search, Trash2, Users } from 'lucide-react';
+import { Eye, Pencil, Plus, Trash2, Users } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 import type { FormEvent } from 'react';
 import { toast } from 'react-toastify';
 import {
+  DebouncedSearchInput,
   DetailsModal,
   RecordCard,
   RecordCardSkeleton,
@@ -86,6 +87,8 @@ export const AdminUsersPage = () => {
   }, [userPage, userPageSize, userQuery]);
 
   useEffect(() => {
+    // Initial fetch and dependency-driven updates
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchUsers();
   }, [fetchUsers]);
 
@@ -173,19 +176,17 @@ export const AdminUsersPage = () => {
   );
 
   const userSearchFilter = (
-    <div className="relative w-full sm:w-[260px]">
-      <Search className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-      <Input
-        value={userQuery}
-        onChange={(e) => {
-          setLoadingUsers(true);
-          setUserQuery(e.target.value);
-          setUserPage(1);
-        }}
-        placeholder="Search users by name or email"
-        className="h-9 w-full pl-8"
-      />
-    </div>
+    <DebouncedSearchInput
+      value={userQuery}
+      onDebouncedChange={(val) => {
+        setLoadingUsers(true);
+        setUserQuery(val);
+        setUserPage(1);
+      }}
+      placeholder="Search users by name or email"
+      className="w-full sm:w-[260px]"
+      wrapperClassName="sm:w-[260px]"
+    />
   );
 
   const userPagination =

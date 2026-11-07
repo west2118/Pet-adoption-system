@@ -201,13 +201,18 @@ export const listPetsByShelter = async (
   return { rows, total: count.rows[0].total };
 };
 
-export const listAllPets = async ({ limit = 10, offset = 0, search } = {}) => {
+export const listAllPets = async ({ limit = 10, offset = 0, search, shelterId } = {}) => {
   const conditions = [];
   const values = [];
 
   if (search) {
     values.push(`%${search}%`);
     conditions.push(`(name ILIKE $${values.length} OR breed ILIKE $${values.length})`);
+  }
+
+  if (shelterId && shelterId !== 'all') {
+    values.push(shelterId);
+    conditions.push(`shelter_id = $${values.length}`);
   }
 
   const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';

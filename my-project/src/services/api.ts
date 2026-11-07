@@ -644,6 +644,7 @@ export const listAdminPetsPaginated = async (options: {
   page?: number;
   limit?: number;
   search?: string;
+  shelterId?: string;
 } = {}): Promise<PaginatedResult<Pet>> => {
   const page = options.page ?? 1;
   const limit = options.limit ?? 10;
@@ -653,6 +654,9 @@ export const listAdminPetsPaginated = async (options: {
       queryParams.set('page', String(page));
       queryParams.set('limit', String(limit));
       if (options.search) queryParams.set('search', options.search);
+      if (options.shelterId && options.shelterId !== 'all') {
+        queryParams.set('shelterId', options.shelterId);
+      }
 
       const { data, meta } = await apiRequestWithMeta<PetsListResponse>(
         `/admin/pets?${queryParams.toString()}`,

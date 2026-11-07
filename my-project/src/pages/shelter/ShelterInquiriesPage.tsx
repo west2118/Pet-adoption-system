@@ -1,7 +1,8 @@
-import { Eye, Mail, MessageCircleQuestion, Search } from 'lucide-react';
+import { Eye, Mail, MessageCircleQuestion } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 import { toast } from 'react-toastify';
 import {
+  DebouncedSearchInput,
   DetailsModal,
   RecordCard,
   RecordCardSkeleton,
@@ -144,19 +145,16 @@ export const ShelterInquiriesPage = () => {
 
   const toolbar = (
     <div className="flex flex-wrap items-center justify-between gap-2">
-      <div className="relative">
-        <Search className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-        <Input
-          aria-label="Search inquiries"
-          value={query}
-          onChange={(e) => {
-            setQuery(e.target.value);
-            setPage(1);
-          }}
-          placeholder="Search sender or pet"
-          className="h-9 w-full pl-8 sm:w-[240px]"
-        />
-      </div>
+      <DebouncedSearchInput
+        aria-label="Search inquiries"
+        value={query}
+        onDebouncedChange={(val) => {
+          setQuery(val);
+          setPage(1);
+        }}
+        placeholder="Search sender or pet"
+        className="sm:w-[240px]"
+      />
       <div className="flex flex-wrap items-center gap-2">
         <Select
           aria-label="Filter by status"

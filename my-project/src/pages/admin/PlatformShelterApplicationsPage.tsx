@@ -56,6 +56,8 @@ export const PlatformShelterApplicationsPage = () => {
   }, [page, pageSize]);
 
   useEffect(() => {
+    // Initial fetch and dependency-driven updates
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     load();
   }, [load]);
 
