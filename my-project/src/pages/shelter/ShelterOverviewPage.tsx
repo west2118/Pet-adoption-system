@@ -1,3 +1,4 @@
+import { useQuery } from '@tanstack/react-query';
 import {
   Archive,
   ArrowRight,
@@ -12,7 +13,6 @@ import {
   TrendingUp,
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
-import { useCallback, useEffect, useState } from 'react';
 import {
   ChartCard,
   ErrorState,
@@ -30,32 +30,30 @@ import { PetsBySpeciesChart } from '@/components/features/charts/PetsBySpeciesCh
 import { ApplicationsByStatusChart } from '@/components/features/charts/ApplicationsByStatusChart';
 import { ListingsByStatusChart } from '@/components/features/charts/ListingsByStatusChart';
 import { Button } from '@/components/ui/button';
+import { useRefresh } from '@/hooks/useRefresh';
 import { getShelterOverview } from '@/services/api';
-import type { ShelterOverviewData } from '@/services/api';
+import { describeApiError } from '@/utils/errors';
 
 export const ShelterOverviewPage = () => {
   // Every figure below is counted in SQL (GET /shelter/overview, JWT-scoped).
-  // Dynamic only — failures render an explicit error, never local mock math.
-  const [overview, setOverview] = useState<ShelterOverviewData | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  // React Query owns the request, so the header refresh and the error retry
+  // refetch the same query instead of keeping a second copy of the loader state.
+  const {
+    data: overview,
+    isLoading,
+    isFetching,
+    error,
+    refetch,
+  } = useQuery({
+    queryKey: ['shelterOverview'],
+    queryFn: getShelterOverview,
+  });
 
-  const loadOverview = useCallback(async () => {
-    try {
-      const data = await getShelterOverview();
-      setOverview(data);
-      setError(null);
-    } catch {
-      setError('Failed to load shelter overview.');
-    }
-  }, []);
+  const { isRefreshing, refresh } = useRefresh(refetch);
+  const showLoading = isLoading || isFetching || isRefreshing;
 
-  useEffect(() => {
-    // Loading state is owned by the loader.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    void loadOverview();
-  }, [loadOverview]);
-
-  if (!overview && !error) {
+  // Skeleton on first load and during a refetch, matching the shelter tables.
+  if (showLoading) {
     return <ShelterOverviewSkeleton />;
   }
 
@@ -69,8 +67,11 @@ export const ShelterOverviewPage = () => {
         <div className="mt-6">
           <ErrorState
             title="Could not load the overview"
-            description={`${error} Check that the backend is running and your staff account has a shelter assigned.`}
-            onRetry={() => void loadOverview()}
+            description={`${describeApiError(
+              error,
+              'Failed to load the shelter overview.',
+            )} Check that the backend is running and your staff account has a shelter assigned.`}
+            onRetry={() => void refetch()}
           />
         </div>
       </div>
@@ -84,7 +85,7 @@ export const ShelterOverviewPage = () => {
       <SectionHeader
         title="Shelter overview"
         subtitle="A snapshot of your listings, applications, and adoption performance."
-        actions={<RefreshButton onRefresh={loadOverview} />}
+        actions={<RefreshButton onRefresh={refresh} />}
       />
 
       {/* Summary stats */}

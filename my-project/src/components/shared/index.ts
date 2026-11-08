@@ -16,6 +16,8 @@ export {
 export { ErrorState } from './ErrorState';
 export { RefreshButton } from './RefreshButton';
 export { RecordCard } from './RecordCard';
+export { MobileRecordCard } from './MobileRecordCard';
+export type { MobileRecordCardProps } from './MobileRecordCard';
 export { LocationMapPreview } from './LocationMapPreview';
 export { SectionHeader } from './SectionHeader';
 export { Breadcrumbs } from './Breadcrumbs';

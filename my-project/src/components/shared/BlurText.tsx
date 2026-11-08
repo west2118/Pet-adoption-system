@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import type { ElementType } from 'react';
-import { motion, useReducedMotion } from 'framer-motion';
+import { motion } from 'framer-motion';
 import type { Variants } from 'framer-motion';
 import { cn } from '@/lib/utils';
 
@@ -23,11 +23,9 @@ const wordVariants: Variants = {
 
 /**
  * Reveals a sentence one word at a time, each word fading out of a blur as it
- * enters the viewport. Purely decorative motion, so it is skipped entirely when
- * `prefers-reduced-motion` is set and the text is rendered plainly.
+ * enters the viewport. Always animated so the effect is identical on every device.
  */
 export const BlurText = ({ children, className, delay: delayMs = 0, as: Tag = 'p' }: BlurTextProps) => {
-  const shouldReduceMotion = useReducedMotion();
   const words = children.split(' ');
 
   const MotionTag = useMemo(() => {
@@ -36,18 +34,6 @@ export const BlurText = ({ children, className, delay: delayMs = 0, as: Tag = 'p
     }
     return motion.create(Tag) as typeof motion.p;
   }, [Tag]);
-
-  if (shouldReduceMotion) {
-    return (
-      <Tag className={cn('flex flex-wrap justify-center', className)}>
-        {words.map((word, index) => (
-          <span key={`${word}-${index}`} style={{ marginRight: '0.3em' }}>
-            {word}
-          </span>
-        ))}
-      </Tag>
-    );
-  }
 
   const containerVariants: Variants = {
     hidden: {},

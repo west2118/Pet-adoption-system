@@ -254,7 +254,7 @@ export const BrowsePetsPage = () => {
         </div>
 
         {/* Backend-owned paging: 12 pets per request, `total` from its meta. */}
-        {total > 0 && (
+        {total > 12 && (
           <div className="mt-8">
             <TablePagination
               currentPage={page}

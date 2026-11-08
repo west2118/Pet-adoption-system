@@ -1,6 +1,7 @@
 import { Ban, Check, Eye, HeartHandshake, Printer, Undo2, X } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
+import { cn } from '@/lib/utils';
 import type { AdoptionApplication } from '@/types';
 
 import type { DecisionAction } from './types';
@@ -10,6 +11,8 @@ interface ApplicationActionsProps {
   app: AdoptionApplication;
   /** Pet name used in the "return to shelter" label. */
   petName?: string;
+  /** Mobile cards use larger, round action buttons. */
+  round?: boolean;
   onView: (app: AdoptionApplication) => void;
   onDecision: (app: AdoptionApplication, action: DecisionAction) => void;
   onOpenWaiver: (id: string) => void;
@@ -21,12 +24,16 @@ const isTerminal = (app: AdoptionApplication) =>
   app.status === 'Cancelled' ||
   app.status === 'Returned';
 
-const waiverButton = (app: AdoptionApplication, onOpenWaiver: (id: string) => void) =>
+const waiverButton = (
+  app: AdoptionApplication,
+  onOpenWaiver: (id: string) => void,
+  round: boolean,
+) =>
   canPrintWaiver(app) ? (
     <Button
       variant="ghost"
-      size="icon-sm"
-      className="text-muted-foreground"
+      size={round ? 'icon' : 'icon-sm'}
+      className={cn(round && 'rounded-full', 'text-muted-foreground')}
       aria-label={`Print e-waiver for ${app.applicantName}`}
       title="Open e-waiver"
       onClick={() => onOpenWaiver(app.id)}
@@ -43,16 +50,20 @@ const waiverButton = (app: AdoptionApplication, onOpenWaiver: (id: string) => vo
 export const ApplicationActions = ({
   app,
   petName,
+  round = false,
   onView,
   onDecision,
   onOpenWaiver,
 }: ApplicationActionsProps) => {
+  const buttonClass = (color: string) => cn(round && 'rounded-full', color);
+  const buttonSize = round ? 'icon' : 'icon-sm';
+
   return (
     <>
       <Button
         variant="ghost"
-        size="icon-sm"
-        className="text-muted-foreground"
+        size={buttonSize}
+        className={buttonClass('text-muted-foreground')}
         aria-label={`View ${app.applicantName} application`}
         onClick={() => onView(app)}
       >
@@ -63,8 +74,10 @@ export const ApplicationActions = ({
         <>
           <Button
             variant="ghost"
-            size="icon-sm"
-            className="text-blue-600 hover:bg-blue-50 hover:text-blue-700 dark:text-blue-400 dark:hover:bg-blue-950/40"
+            size={buttonSize}
+            className={buttonClass(
+              'text-blue-600 hover:bg-blue-50 hover:text-blue-700 dark:text-blue-400 dark:hover:bg-blue-950/40',
+            )}
             aria-label={`Mark ${app.applicantName} as adopted`}
             title={
               waiverStatusOf(app) === 'None'
@@ -77,38 +90,42 @@ export const ApplicationActions = ({
           </Button>
           <Button
             variant="ghost"
-            size="icon-sm"
-            className="text-destructive hover:bg-destructive/10"
+            size={buttonSize}
+            className={buttonClass('text-destructive hover:bg-destructive/10')}
             aria-label={`Cancel adoption for ${app.applicantName}`}
             title="Cancel adoption"
             onClick={() => onDecision(app, 'Cancelled')}
           >
             <Ban className="size-4" />
           </Button>
-          {waiverButton(app, onOpenWaiver)}
+          {waiverButton(app, onOpenWaiver, round)}
         </>
       ) : app.status === 'Adopted' ? (
         <>
           <Button
             variant="ghost"
-            size="icon-sm"
-            className="text-amber-600 hover:bg-amber-50 hover:text-amber-700 dark:text-amber-400 dark:hover:bg-amber-950/40"
+            size={buttonSize}
+            className={buttonClass(
+              'text-amber-600 hover:bg-amber-50 hover:text-amber-700 dark:text-amber-400 dark:hover:bg-amber-950/40',
+            )}
             aria-label={`Return ${petName ?? 'pet'} to the shelter`}
             title="Return pet to the shelter"
             onClick={() => onDecision(app, 'Return')}
           >
             <Undo2 className="size-4" />
           </Button>
-          {waiverButton(app, onOpenWaiver)}
+          {waiverButton(app, onOpenWaiver, round)}
         </>
       ) : isTerminal(app) ? (
-        waiverButton(app, onOpenWaiver)
+        waiverButton(app, onOpenWaiver, round)
       ) : (
         <>
           <Button
             variant="ghost"
-            size="icon-sm"
-            className="text-green-600 hover:bg-green-50 hover:text-green-700 dark:text-green-400 dark:hover:bg-green-950/40"
+            size={buttonSize}
+            className={buttonClass(
+              'text-green-600 hover:bg-green-50 hover:text-green-700 dark:text-green-400 dark:hover:bg-green-950/40',
+            )}
             aria-label={`Approve ${app.applicantName}`}
             onClick={() => onDecision(app, 'Approved')}
           >
@@ -116,8 +133,10 @@ export const ApplicationActions = ({
           </Button>
           <Button
             variant="ghost"
-            size="icon-sm"
-            className="text-red-600 hover:bg-red-50 hover:text-red-700 dark:text-red-400 dark:hover:bg-red-950/40"
+            size={buttonSize}
+            className={buttonClass(
+              'text-red-600 hover:bg-red-50 hover:text-red-700 dark:text-red-400 dark:hover:bg-red-950/40',
+            )}
             aria-label={`Reject ${app.applicantName}`}
             onClick={() => onDecision(app, 'Rejected')}
           >

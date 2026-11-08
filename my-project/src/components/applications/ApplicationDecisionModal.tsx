@@ -7,8 +7,8 @@ import {
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 
-import { DetailsModal } from '@/components/shared';
-import { Input, Label, Textarea } from '@/components/ui/Form';
+import { DetailsModal, ValidatedInput, ValidatedTextarea } from '@/components/shared';
+import { Label } from '@/components/ui/Form';
 import { Button } from '@/components/ui/button';
 
 import type { DecisionAction, PendingDecision } from './types';
@@ -65,6 +65,7 @@ interface ApplicationDecisionModalProps {
   note: string;
   pickupAt: string;
   pickupEmail: string;
+  errors: Partial<Record<'pickupAt' | 'pickupEmail' | 'note', string>>;
   onNoteChange: (value: string) => void;
   onPickupAtChange: (value: string) => void;
   onPickupEmailChange: (value: string) => void;
@@ -81,6 +82,7 @@ export const ApplicationDecisionModal = ({
   note,
   pickupAt,
   pickupEmail,
+  errors,
   onNoteChange,
   onPickupAtChange,
   onPickupEmailChange,
@@ -161,26 +163,26 @@ export const ApplicationDecisionModal = ({
             <div className="space-y-3 rounded-lg border border-green-600/30 bg-green-50/60 p-3 dark:bg-green-950/20">
               <div>
                 <Label htmlFor="pickup-at">Clinic pickup date &amp; time</Label>
-                <Input
+                <ValidatedInput
                   id="pickup-at"
                   type="datetime-local"
                   min={nowForDateTimeInput()}
                   value={pickupAt}
                   onChange={(e) => onPickupAtChange(e.target.value)}
                   disabled={deciding}
-                  required
+                  error={errors.pickupAt}
                 />
               </div>
               <div>
                 <Label htmlFor="pickup-email">Pickup contact email</Label>
-                <Input
+                <ValidatedInput
                   id="pickup-email"
                   type="email"
                   value={pickupEmail}
                   onChange={(e) => onPickupEmailChange(e.target.value)}
                   placeholder="clinic@example.com"
                   disabled={deciding}
-                  required
+                  error={errors.pickupEmail}
                 />
                 <p className="mt-1 text-xs text-muted-foreground">
                   Shown to the adopter so they can ask about the appointment.
@@ -191,12 +193,14 @@ export const ApplicationDecisionModal = ({
 
           <div>
             <Label htmlFor="decision-note">Note (optional)</Label>
-            <Textarea
+            <ValidatedTextarea
               id="decision-note"
               value={note}
               onChange={(e) => onNoteChange(e.target.value)}
               placeholder="Included in the email to the applicant…"
+              maxLength={2000}
               disabled={deciding}
+              error={errors.note}
             />
           </div>
 

@@ -1,6 +1,8 @@
+import { MobileRecordCard } from '@/components/shared';
+import { Badge } from '@/components/ui/Badge';
 import { ApplicationStatusBadge } from '@/components/ui/StatusBadge';
-import { RecordCard } from '@/components/shared';
 import type { AdoptionApplication } from '@/types';
+import { formatDate } from '@/utils/formatters';
 
 import { ApplicationActions } from './ApplicationActions';
 import type { DecisionAction } from './types';
@@ -24,32 +26,42 @@ export const ApplicationMobileCard = ({
   onView,
   onDecision,
   onOpenWaiver,
-}: ApplicationMobileCardProps) => {
-  return (
-    <RecordCard
-      imageUrl={petImageUrl}
-      imageAlt={petName}
-      title={app.applicantName}
-      subtitle={app.email}
-      badges={
-        <>
-          <ApplicationStatusBadge status={app.status} />
-          <WaiverStatusIndicator app={app} />
-        </>
-      }
-      actions={
-        <ApplicationActions
-          app={app}
-          petName={petName}
-          onView={onView}
-          onDecision={onDecision}
-          onOpenWaiver={onOpenWaiver}
+}: ApplicationMobileCardProps) => (
+  <MobileRecordCard
+    media={
+      petImageUrl ? (
+        <img
+          src={petImageUrl}
+          alt={petName ?? ''}
+          className="size-16 shrink-0 rounded-xl object-cover ring-1 ring-border/60"
         />
-      }
-    >
-      <p className="text-sm text-muted-foreground">
-        Applying for <span className="font-medium text-foreground">{petName ?? '—'}</span>
-      </p>
-    </RecordCard>
-  );
-};
+      ) : undefined
+    }
+    title={app.applicantName}
+    subtitle={app.email}
+    status={<ApplicationStatusBadge status={app.status} />}
+    badges={
+      <>
+        <WaiverStatusIndicator app={app} />
+        <Badge variant="muted" className="capitalize">
+          {app.housingType}
+        </Badge>
+      </>
+    }
+    meta={`Submitted ${formatDate(app.submittedAt)}`}
+    actions={
+      <ApplicationActions
+        app={app}
+        petName={petName}
+        round
+        onView={onView}
+        onDecision={onDecision}
+        onOpenWaiver={onOpenWaiver}
+      />
+    }
+  >
+    <p className="text-sm text-muted-foreground">
+      Applying for <span className="font-medium text-foreground">{petName ?? '—'}</span>
+    </p>
+  </MobileRecordCard>
+);

@@ -1,5 +1,6 @@
+import { useQuery } from '@tanstack/react-query';
 import { ClipboardList } from 'lucide-react';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useRef, useState } from 'react';
 import { toast } from 'react-toastify';
 
 import {
@@ -20,6 +21,7 @@ import {
   TableCard,
   TablePagination,
   TableSkeletonRows,
+  focusFirstError,
 } from '@/components/shared';
 import {
   Table,
@@ -32,10 +34,15 @@ import {
 import { Select } from '@/components/ui/Form';
 import { ApplicationStatusBadge } from '@/components/ui/StatusBadge';
 import { APPLICATION_STATUS_FILTER_OPTIONS } from '@/data/applicationPresets';
+import {
+  SHELTER_APPLICATIONS_QUERY_KEY,
+  useShelterApplicationMutations,
+} from '@/hooks/useShelterApplicationMutations';
 import { useAuth } from '@/hooks/useAuth';
 import { usePets } from '@/hooks/useData';
+import { useRefresh } from '@/hooks/useRefresh';
+import { applicationDecisionSchema, toFieldErrors } from '@/lib/validators';
 import { adoptionApplicationService } from '@/services/adoptionApplicationService';
-import { ApiError } from '@/lib/apiClient';
 import type { AdoptionApplication, ApplicationStatus } from '@/types';
 import { describeApiError } from '@/utils/errors';
 import { formatDate } from '@/utils/formatters';
@@ -44,11 +51,7 @@ export const ShelterApplicationsPage = () => {
   const { pets } = usePets();
   const { user } = useAuth();
 
-  // List state
-  const [applications, setApplications] = useState<AdoptionApplication[]>([]);
-  const [totalApplications, setTotalApplications] = useState(0);
-  const [loading, setLoading] = useState(true);
-  const [loadError, setLoadError] = useState<string | null>(null);
+  // Filters and pagination state
   const [query, setQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | ApplicationStatus>('all');
   const [page, setPage] = useState(1);
@@ -61,7 +64,9 @@ export const ShelterApplicationsPage = () => {
   // Pickup appointment collected before an application is approved.
   const [pickupAt, setPickupAt] = useState('');
   const [pickupEmail, setPickupEmail] = useState('');
-  const [deciding, setDeciding] = useState(false);
+  const [decisionErrors, setDecisionErrors] = useState<
+    Partial<Record<'pickupAt' | 'pickupEmail' | 'note', string>>
+  >({});
   const [waiverAppId, setWaiverAppId] = useState<string | null>(null);
   // When adoption is requested before a waiver exists, the waiver modal opens
   // first and this pending record completes the status change after issue.
@@ -69,33 +74,30 @@ export const ShelterApplicationsPage = () => {
   // Opening details of a Submitted application moves it to Under Review once.
   const pendingReview = useRef<Set<string>>(new Set());
 
-  const refresh = useCallback(
-    async (options?: { silent?: boolean }) => {
-      if (!options?.silent) setLoading(true);
-      try {
-        const res = await adoptionApplicationService.listForShelterPaginated({
-          page,
-          limit: pageSize,
-          status: statusFilter,
-          search: query.trim(),
-        });
-        setApplications(res.items);
-        setTotalApplications(res.total);
-        setLoadError(null);
-      } catch (err) {
-        setLoadError(describeApiError(err, 'Failed to load applications. Please try again.'));
-      } finally {
-        if (!options?.silent) setLoading(false);
-      }
-    },
-    [page, pageSize, statusFilter, query],
-  );
+  const { data, isLoading, isFetching, error, refetch } = useQuery({
+    queryKey: [
+      ...SHELTER_APPLICATIONS_QUERY_KEY,
+      { page, pageSize, status: statusFilter, search: query.trim() },
+    ],
+    queryFn: () =>
+      adoptionApplicationService.listForShelterPaginated({
+        page,
+        limit: pageSize,
+        status: statusFilter,
+        search: query.trim(),
+      }),
+  });
 
-  useEffect(() => {
-    // Initial load and filter/search changes; refresh owns the loading flag.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    refresh();
-  }, [refresh]);
+  const { isRefreshing, refresh } = useRefresh(refetch);
+  const showLoading = isLoading || isFetching || isRefreshing;
+
+  const applications = data?.items ?? [];
+  const totalApplications = data?.total ?? 0;
+  const loadError = error
+    ? describeApiError(error, 'Failed to load applications. Please try again.')
+    : null;
+
+  const { updateStatusMutation, isUpdating } = useShelterApplicationMutations();
 
   const waiverApp = waiverAppId
     ? (applications.find((app) => app.id === waiverAppId) ?? null)
@@ -113,23 +115,16 @@ export const ShelterApplicationsPage = () => {
     try {
       // The backend owns the acceptance rule: it moves the pet and rejects the
       // competing applications in one transaction, then emails each applicant.
-      // Re-read the list instead of duplicating that logic here.
-      const updated = await adoptionApplicationService.updateStatus(
+      const updated = await updateStatusMutation.mutateAsync({
         id,
         status,
-        note ?? 'Updated by staff',
+        note,
         pickup,
-      );
+      });
       setDetailsApp((prev) => (prev && prev.id === updated.id ? updated : prev));
-      toast.success(`Application ${status.toLowerCase()}!`);
-      await refresh({ silent: true });
       return true;
-    } catch (err) {
-      toast.error(
-        err instanceof ApiError
-          ? err.message
-          : 'Failed to update application status. Please try again.',
-      );
+    } catch {
+      // The mutation hook has already surfaced the error toast.
       return false;
     }
   };
@@ -141,6 +136,7 @@ export const ShelterApplicationsPage = () => {
    */
   const requestDecision = (app: AdoptionApplication, action: DecisionAction) => {
     setDetailsApp(null);
+    setDecisionErrors({});
     setDecisionNote('');
     // Approving books the clinic pickup, so start from an empty appointment and
     // the signed-in staff address as the default contact.
@@ -151,6 +147,7 @@ export const ShelterApplicationsPage = () => {
 
   const resetDecision = () => {
     setDecision(null);
+    setDecisionErrors({});
     setDecisionNote('');
     setPickupAt('');
     setPickupEmail('');
@@ -159,38 +156,41 @@ export const ShelterApplicationsPage = () => {
   const confirmDecision = async () => {
     if (!decision) return;
 
+    const parsed = applicationDecisionSchema.safeParse({
+      action: decision.action,
+      note: decisionNote,
+      pickupAt,
+      pickupEmail,
+    });
+    if (!parsed.success) {
+      setDecisionErrors(
+        toFieldErrors<'pickupAt' | 'pickupEmail' | 'note'>(parsed.error.issues),
+      );
+      toast.warning('Please fix the highlighted fields.');
+      focusFirstError();
+      return;
+    }
+    setDecisionErrors({});
+
     // Handover documents are mandatory. If none exist yet, open the waiver
     // builder first; `handleWaiverGenerated` finishes the adoption afterwards.
     const currentApp = applications.find((app) => app.id === decision.app.id) ?? decision.app;
     if (decision.action === 'Adopted' && waiverStatusOf(currentApp) === 'None') {
       const { id } = decision.app;
-      const note = decisionNote.trim() || 'Adoption completed by shelter';
+      const note = parsed.data.note || 'Adoption completed by shelter';
       resetDecision();
       setPendingAdoption({ id, note });
       setWaiverAppId(id);
       return;
     }
 
-    let pickup: { pickupAt: string; pickupEmail: string } | undefined;
-    if (decision.action === 'Approved') {
-      const email = pickupEmail.trim();
-      if (!pickupAt) {
-        toast.error('Choose the date and time the adopter can pick up the pet.');
-        return;
-      }
-      if (!email) {
-        toast.error('Enter the email the adopter should contact about the pickup.');
-        return;
-      }
-      const when = new Date(pickupAt);
-      // Event-handler validation: compare against the current clock once.
-      // eslint-disable-next-line react-hooks/purity
-      if (Number.isNaN(when.getTime()) || when.getTime() <= Date.now()) {
-        toast.error('The pickup date and time must be in the future.');
-        return;
-      }
-      pickup = { pickupAt: when.toISOString(), pickupEmail: email };
-    }
+    const pickup =
+      decision.action === 'Approved'
+        ? {
+            pickupAt: new Date(parsed.data.pickupAt).toISOString(),
+            pickupEmail: parsed.data.pickupEmail,
+          }
+        : undefined;
 
     const nextStatus: ApplicationStatus =
       decision.action === 'Return' ? 'Returned' : decision.action;
@@ -205,14 +205,12 @@ export const ShelterApplicationsPage = () => {
               ? 'Adopted pet returned to the shelter'
               : 'Adoption cancelled by shelter';
 
-    setDeciding(true);
     const ok = await handleStatusChange(
       decision.app.id,
       nextStatus,
-      decisionNote.trim() || fallbackNote,
+      parsed.data.note || fallbackNote,
       pickup,
     );
-    setDeciding(false);
     if (!ok) return;
 
     const adoptedId = decision.action === 'Adopted' ? decision.app.id : null;
@@ -236,7 +234,7 @@ export const ShelterApplicationsPage = () => {
   /** Complete a pending adoption once the waiver has been issued. */
   const handleWaiverGenerated = async () => {
     if (!pendingAdoption) {
-      await refresh();
+      await refetch();
       return;
     }
     const ok = await handleStatusChange(
@@ -268,7 +266,7 @@ export const ShelterApplicationsPage = () => {
       <SectionHeader
         title="Adoption applications"
         subtitle="Review incoming requests, approve or reject, and keep staff notes."
-        actions={<RefreshButton onRefresh={() => refresh()} />}
+        actions={<RefreshButton onRefresh={refresh} />}
       />
 
       <div className="mt-6 space-y-4">
@@ -302,12 +300,12 @@ export const ShelterApplicationsPage = () => {
           }
           error={loadError}
           errorTitle="Could not load applications"
-          onRetry={() => void refresh()}
-          isEmpty={!loading && applications.length === 0}
+          onRetry={() => void refetch()}
+          isEmpty={!showLoading && !error && applications.length === 0}
           emptyTitle="No applications found"
           emptyDescription="Try a different search or status filter."
           footer={
-            totalApplications > 0 ? (
+            totalApplications > 10 ? (
               <TablePagination
                 currentPage={page}
                 totalItems={totalApplications}
@@ -337,7 +335,7 @@ export const ShelterApplicationsPage = () => {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {loading ? (
+                {showLoading ? (
                   <TableSkeletonRows columns={6} rows={5} avatar />
                 ) : (
                   applications.map((app) => {
@@ -397,7 +395,7 @@ export const ShelterApplicationsPage = () => {
 
           {/* Mobile: stacked cards */}
           <div className="grid gap-3 p-4 md:hidden">
-            {loading ? (
+            {showLoading ? (
               <RecordCardSkeleton count={3} />
             ) : (
               applications.map((app) => {
@@ -431,13 +429,23 @@ export const ShelterApplicationsPage = () => {
         decision={decision}
         petName={decisionPet?.name}
         waiverMissing={decisionApp !== null && waiverStatusOf(decisionApp) === 'None'}
-        deciding={deciding}
+        deciding={isUpdating}
         note={decisionNote}
         pickupAt={pickupAt}
         pickupEmail={pickupEmail}
-        onNoteChange={setDecisionNote}
-        onPickupAtChange={setPickupAt}
-        onPickupEmailChange={setPickupEmail}
+        errors={decisionErrors}
+        onNoteChange={(value) => {
+          setDecisionNote(value);
+          setDecisionErrors((errors) => ({ ...errors, note: undefined }));
+        }}
+        onPickupAtChange={(value) => {
+          setPickupAt(value);
+          setDecisionErrors((errors) => ({ ...errors, pickupAt: undefined }));
+        }}
+        onPickupEmailChange={(value) => {
+          setPickupEmail(value);
+          setDecisionErrors((errors) => ({ ...errors, pickupEmail: undefined }));
+        }}
         onClose={resetDecision}
         onConfirm={() => void confirmDecision()}
       />

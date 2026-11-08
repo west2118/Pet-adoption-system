@@ -131,7 +131,7 @@ export const SheltersPage = () => {
           </div>
 
           {/* Backend-owned paging: 10 rescues per request, `total` from its meta. */}
-          {total > 0 && (
+          {total > 12 && (
             <div className="mt-14">
               <TablePagination
                 currentPage={page}

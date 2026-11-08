@@ -33,6 +33,7 @@ import {
 
 import { useAuth } from '@/hooks/useAuth';
 import { useShelters } from '@/hooks/useData';
+import { useRefresh } from '@/hooks/useRefresh';
 import { useShelterListingMutations } from '@/hooks/useShelterListingMutations';
 import type { PetListingInput } from '@/hooks/useShelterListingMutations';
 import { listMyListingsPaginated } from '@/services/api';
@@ -71,6 +72,7 @@ export const ShelterListingsPage = () => {
   const {
     data: listingsData,
     isLoading: loadingListings,
+    isFetching: fetchingListings,
     isError: listingsError,
     refetch: refetchListings,
   } = useQuery({
@@ -95,6 +97,9 @@ export const ShelterListingsPage = () => {
         status: statusFilter,
       }),
   });
+
+  const { isRefreshing, refresh } = useRefresh(refetchListings);
+  const showLoading = loadingListings || fetchingListings || isRefreshing;
 
   const pets = listingsData?.items ?? [];
   const totalPets = listingsData?.total ?? 0;
@@ -162,13 +167,7 @@ export const ShelterListingsPage = () => {
             ? `Showing inventory for ${myShelter.name} only.`
             : 'Manage your public listings and private inventory.'
         }
-        actions={
-          <RefreshButton
-            onRefresh={async () => {
-              await refetchListings();
-            }}
-          />
-        }
+        actions={<RefreshButton onRefresh={refresh} />}
       />
 
       <div className="mt-6 space-y-4">
@@ -234,7 +233,7 @@ export const ShelterListingsPage = () => {
           }
           errorTitle="Could not load listings"
           onRetry={() => void refetchListings()}
-          isEmpty={!loadingListings && !listingsError && pets.length === 0}
+          isEmpty={!showLoading && !listingsError && pets.length === 0}
           emptyTitle="No listings found"
           emptyDescription={
             myShelter
@@ -242,7 +241,7 @@ export const ShelterListingsPage = () => {
               : 'Try a different search or visibility filter, or add a new pet.'
           }
           footer={
-            totalPets > 0 ? (
+            totalPets > 10 ? (
               <TablePagination
                 currentPage={page}
                 totalItems={totalPets}
@@ -272,7 +271,7 @@ export const ShelterListingsPage = () => {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {loadingListings ? (
+                {showLoading ? (
                   <TableSkeletonRows columns={6} rows={6} avatar />
                 ) : (
                   pets.map((pet) => (
@@ -342,7 +341,7 @@ export const ShelterListingsPage = () => {
 
           {/* Mobile: stacked cards */}
           <div className="grid gap-3 p-4 md:hidden">
-            {loadingListings ? (
+            {showLoading ? (
               <RecordCardSkeleton count={3} />
             ) : (
               pets.map((pet) => (

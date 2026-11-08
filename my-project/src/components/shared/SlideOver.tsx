@@ -2,7 +2,7 @@ import type { LucideIcon } from 'lucide-react';
 import { X } from 'lucide-react';
 import { useEffect, useRef } from 'react';
 import type { ReactNode } from 'react';
-import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
+import { AnimatePresence, motion } from 'framer-motion';
 import { useScrollLock } from '@/hooks/useScrollLock';
 import { cn } from '@/lib/utils';
 
@@ -40,7 +40,6 @@ export const SlideOver = ({
   size = 'md',
 }: SlideOverProps) => {
   const overlayRef = useRef<HTMLDivElement>(null);
-  const shouldReduceMotion = useReducedMotion();
 
   useScrollLock(open, overlayRef);
 
@@ -69,9 +68,9 @@ export const SlideOver = ({
             className="absolute inset-0 bg-black/40"
             onClick={onClose}
             aria-hidden="true"
-            initial={shouldReduceMotion ? false : { opacity: 0 }}
+            initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
-            exit={shouldReduceMotion ? undefined : { opacity: 0 }}
+            exit={{ opacity: 0 }}
             transition={{ duration: 0.2 }}
           />
           <motion.aside
@@ -79,9 +78,9 @@ export const SlideOver = ({
               'absolute inset-y-0 right-0 flex h-full w-full flex-col border-l bg-card shadow-xl',
               sizeClasses[size],
             )}
-            initial={shouldReduceMotion ? false : { x: '100%' }}
+            initial={{ x: '100%' }}
             animate={{ x: 0 }}
-            exit={shouldReduceMotion ? undefined : { x: '100%' }}
+            exit={{ x: '100%' }}
             transition={{ duration: 0.25, ease: 'easeOut' }}
           >
             <div className="sticky top-0 z-10 flex shrink-0 items-center gap-3 border-b bg-card p-5 pb-4">

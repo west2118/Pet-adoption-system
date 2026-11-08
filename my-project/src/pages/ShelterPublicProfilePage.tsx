@@ -284,17 +284,19 @@ export const ShelterPublicProfilePage = () => {
                 ))}
               </div>
 
-              {/* Backend-owned paging, same component as the browse grid. */}
-              <div className="mt-8">
-                <TablePagination
-                  currentPage={page}
-                  totalItems={totalPets}
-                  pageSize={pageSize}
-                  onPageChange={goToPage}
-                  showPageSize={false}
-                  label="pets"
-                />
-              </div>
+              {/* Backend-owned paging, hidden until the grid needs a second page. */}
+              {totalPets > 12 && (
+                <div className="mt-8">
+                  <TablePagination
+                    currentPage={page}
+                    totalItems={totalPets}
+                    pageSize={pageSize}
+                    onPageChange={goToPage}
+                    showPageSize={false}
+                    label="pets"
+                  />
+                </div>
+              )}
             </>
           )}
         </div>
