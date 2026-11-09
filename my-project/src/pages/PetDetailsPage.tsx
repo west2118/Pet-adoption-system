@@ -288,7 +288,7 @@ export const PetDetailsPage = () => {
                 </span>
                 <h2 className="font-display text-5xl leading-[0.92] tracking-tight md:text-6xl">
                   <span className="block text-primary">More from</span>
-                  <span className="block text-primary/45">{shelter.location}.</span>
+                  <span className="block text-primary/45">{shelter.name}.</span>
                 </h2>
               </Reveal>
 
@@ -299,10 +299,10 @@ export const PetDetailsPage = () => {
                   PawsConnect.
                 </p>
                 <Link
-                  to={`/pets?location=${encodeURIComponent(shelter.location)}`}
+                  to={`/shelters/${shelter.id}`}
                   className="group mt-8 inline-flex items-center gap-3 font-mono text-xs uppercase tracking-[0.2em] text-primary transition-colors hover:text-primary/75"
                 >
-                  Browse {shelter.location}
+                  Browse {shelter.name}
                   <span className="h-px w-8 bg-current transition-all duration-300 group-hover:w-12" />
                 </Link>
               </Reveal>

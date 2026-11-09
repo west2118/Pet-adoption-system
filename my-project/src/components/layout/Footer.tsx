@@ -1,20 +1,42 @@
 import { Clock, Mail, MapPin, PawPrint, Phone } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { GridOverlay } from '@/components/shared';
+import { useAuth } from '@/hooks/useAuth';
 
-const columns = [
+interface FooterLink {
+  to: string;
+  label: string;
+  adopterOnly?: boolean;
+}
+
+interface FooterColumn {
+  title: string;
+  links: FooterLink[];
+}
+
+const columns: FooterColumn[] = [
   {
     title: 'Explore',
     links: [
       { to: '/pets', label: 'Browse pets' },
       { to: '/shelters', label: 'Shelters' },
       { to: '/favorites', label: 'Favorites' },
-      { to: '/applications', label: 'Track application' },
+      { to: '/applications', label: 'Track application', adopterOnly: true },
     ],
   },
-  ];
+];
 
 export const Footer = () => {
+  const { user } = useAuth();
+
+  // "Track application" only makes sense for signed-in adopters.
+  const visibleColumns = columns.map((column) => ({
+    ...column,
+    links: column.links.filter(
+      (link) => !link.adopterOnly || user?.role === 'adopter',
+    ),
+  }));
+
   return (
     <footer className="landing-theme relative overflow-hidden border-t border-border">
       <GridOverlay className="opacity-[0.06]" />
@@ -37,7 +59,7 @@ export const Footer = () => {
             </p>
           </div>
 
-          {columns.map((column) => (
+          {visibleColumns.map((column) => (
             <nav key={column.title} className="md:col-span-3">
               <h4 className="font-mono text-[11px] uppercase tracking-[0.2em] text-muted-foreground">
                 {column.title}
