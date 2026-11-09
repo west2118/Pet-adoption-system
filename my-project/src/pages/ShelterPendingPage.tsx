@@ -5,7 +5,7 @@ import { Container } from '@/components/layout/Container';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
-import { tokenStore } from '@/lib/apiClient';
+import { ApiError } from '@/lib/apiClient';
 import { authService } from '@/services/authService';
 import type { ShelterApplication } from '@/types';
 
@@ -13,16 +13,28 @@ export const ShelterPendingPage = () => {
   const navigate = useNavigate();
   const [application, setApplication] = useState<ShelterApplication | null>(null);
 
+  // The backend decides whether this visitor still holds a pending shelter
+  // registration (httpOnly onboarding cookie), not a client-side flag.
   useEffect(() => {
-    if (!tokenStore.getOnboarding()) {
-      navigate('/signup', { replace: true });
-      return;
-    }
-    authService.getMyShelterApplication().then(setApplication).catch(() => {});
+    let cancelled = false;
+    authService
+      .getMyShelterApplication()
+      .then((result) => {
+        if (!cancelled) setApplication(result);
+      })
+      .catch((err) => {
+        if (!cancelled && err instanceof ApiError && [401, 403].includes(err.status)) {
+          navigate('/signup', { replace: true });
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [navigate]);
 
   const handleLeave = () => {
-    tokenStore.clearOnboarding();
+    // Clears the httpOnly session/onboarding cookies server-side.
+    void authService.logoutSession().catch(() => {});
     navigate('/login', { replace: true });
   };
 

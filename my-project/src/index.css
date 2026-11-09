@@ -323,21 +323,6 @@
   animation: pets-hero-drift-far 200s linear infinite;
 }
 
-
-
-@media (prefers-reduced-motion: reduce) {
-  .landing-theme *,
-  .landing-theme *::before,
-  .landing-theme *::after,
-  .pets-hero *,
-  .pets-hero *::before,
-  .pets-hero *::after {
-    animation-duration: 0.01ms !important;
-    animation-iteration-count: 1 !important;
-    transition-duration: 0.01ms !important;
-  }
-}
-
 /*
  * E-waiver printing: only #waiver-print reaches the paper. Everything else
  * (sidebars, navbars, buttons marked print:hidden) is hidden via visibility

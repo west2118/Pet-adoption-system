@@ -39,8 +39,9 @@ export const Navbar = () => {
     navigate('/login');
   };
 
+  const isAdopter = user?.role === 'adopter';
   const visibleLinks = links.filter(
-    (l) => (l.to !== '/applications' && l.to !== '/visits') || Boolean(user),
+    (l) => (l.to !== '/applications' && l.to !== '/visits') || isAdopter,
   );
 
   const userInitials = (name: string): string =>

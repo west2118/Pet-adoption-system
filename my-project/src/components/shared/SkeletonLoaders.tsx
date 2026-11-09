@@ -213,21 +213,18 @@ export const RecordCardSkeleton = ({ count = 3, className }: RecordCardSkeletonP
 
 export const ShelterOverviewSkeleton = () => {
   return (
-    <div className="w-full px-4 py-6 sm:px-6">
-      {/* Section Header Skeleton */}
-      <div className="space-y-2">
-        <Skeleton className="h-8 w-56" />
-        <Skeleton className="h-4 w-96" />
-      </div>
-
+    <>
       {/* Summary stats */}
-      <SummaryStatGridSkeleton columns={4} className="mt-6" />
+      <SummaryStatGridSkeleton columns={3} count={6} className="mt-6" />
 
       {/* Charts row 1 */}
       <div className="mt-6 grid gap-4 lg:grid-cols-3">
         <ChartCardSkeleton className="lg:col-span-2" />
         <ChartCardSkeleton />
       </div>
+
+      {/* Upcoming visits chart */}
+      <ChartCardSkeleton className="mt-4" />
 
       {/* Charts row 2 */}
       <div className="mt-4 grid gap-4 lg:grid-cols-2">
@@ -238,6 +235,6 @@ export const ShelterOverviewSkeleton = () => {
       {/* Tables */}
       <TableCardSkeleton rowsCount={4} className="mt-4" />
       <TableCardSkeleton rowsCount={4} className="mt-4" />
-    </div>
+    </>
   );
 };

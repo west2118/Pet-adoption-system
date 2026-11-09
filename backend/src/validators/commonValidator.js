@@ -4,6 +4,14 @@ export const uuidParam = z.object({
   id: z.string().uuid('Invalid ID format'),
 });
 
+/** IDs sent by the shelter tables' bulk-delete selections. */
+export const bulkDeleteSchema = z.object({
+  ids: z
+    .array(z.string().uuid('Invalid ID format'))
+    .min(1, 'Select at least one item')
+    .max(150, 'Too many items selected'),
+});
+
 export const paginationQuery = z.object({
   page: z.string().optional().default('1'),
   limit: z.string().optional().default('10'),

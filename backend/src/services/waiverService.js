@@ -12,6 +12,7 @@ import { findShelterById as findShelterRowById } from '../repositories/shelterRe
 import { findUserById } from '../repositories/userRepository.js';
 import {
   archiveWaiverVersion,
+  countCustomTemplates,
   createTemplate as createTemplateRow,
   deleteTemplate as deleteTemplateRow,
   findTemplateById,
@@ -58,6 +59,10 @@ const DEFAULT_TEMPLATES = [
   },
 ];
 
+// Each shelter gets the 5 platform defaults plus up to 10 custom templates.
+const PLATFORM_DEFAULT_TEMPLATE_COUNT = DEFAULT_TEMPLATES.length;
+export const MAX_CUSTOM_WAIVER_TEMPLATES = 10;
+
 const seedDefault = async (shelterId, template) => {
   await createTemplateRow(shelterId, { ...template, isDefault: true });
 };
@@ -72,10 +77,19 @@ export const listWaiverTemplates = async (shelterId, options = {}) => {
     rows = res.rows;
     total = res.total;
   }
-  return { templates: rows.map((r) => mapWaiverTemplate(r)), total };
+  const customTotal = await countCustomTemplates(shelterId);
+  return { templates: rows.map((r) => mapWaiverTemplate(r)), total, customTotal };
 };
 
 export const createWaiverTemplate = async (shelterId, input) => {
+  const customTotal = await countCustomTemplates(shelterId);
+  if (customTotal >= MAX_CUSTOM_WAIVER_TEMPLATES) {
+    throw new AppError(
+      `A shelter can have at most ${MAX_CUSTOM_WAIVER_TEMPLATES} custom waiver templates ` +
+        `(${PLATFORM_DEFAULT_TEMPLATE_COUNT} platform defaults plus ${MAX_CUSTOM_WAIVER_TEMPLATES} custom).`,
+      409,
+    );
+  }
   const row = await createTemplateRow(shelterId, input);
   return mapWaiverTemplate(row);
 };

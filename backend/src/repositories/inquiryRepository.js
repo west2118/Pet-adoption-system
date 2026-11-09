@@ -9,6 +9,32 @@ export const createInquiry = async (input) => {
   return rows[0];
 };
 
+/** Total inquiries received by one shelter (all statuses). */
+export const countInquiriesByShelter = async (shelterId) => {
+  const { rows } = await pool.query(
+    `SELECT COUNT(*)::int AS total
+       FROM inquiries i
+       JOIN pets p ON p.id = i.pet_id
+      WHERE p.shelter_id = $1`,
+    [shelterId],
+  );
+  return rows[0].total;
+};
+
+/** Deletes selected inquiries that belong to the shelter's pets. */
+export const deleteInquiriesByIds = async (ids, shelterId) => {
+  const { rows } = await pool.query(
+    `DELETE FROM inquiries i
+      USING pets p
+      WHERE i.pet_id = p.id
+        AND i.id = ANY($1::uuid[])
+        AND p.shelter_id = $2
+      RETURNING i.id`,
+    [ids, shelterId],
+  );
+  return rows.map((row) => row.id);
+};
+
 export const listInquiriesByShelter = async (shelterId, { limit = 10, offset = 0, resolved, search } = {}) => {
   const conditions = ['p.shelter_id = $1'];
   const values = [shelterId];

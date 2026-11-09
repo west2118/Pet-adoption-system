@@ -1,3 +1,4 @@
+import { useQuery } from '@tanstack/react-query';
 import {
   ArrowRight,
   Building2,
@@ -9,10 +10,11 @@ import {
   PieChart,
   Users,
 } from 'lucide-react';
-import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   ChartCard,
+  ErrorState,
+  RefreshButton,
   SectionHeader,
   SummaryStatCard,
   SummaryStatCardSkeleton,
@@ -24,36 +26,26 @@ import { SheltersSummaryTable } from '@/components/features/SheltersSummaryTable
 import { ListingsByShelterChart } from '@/components/features/charts/ListingsByShelterChart';
 import { UsersByRoleChart } from '@/components/features/charts/UsersByRoleChart';
 import { Button } from '@/components/ui/button';
+import { useRefresh } from '@/hooks/useRefresh';
 import { getAdminStats } from '@/services/api';
-import type { AdminStats } from '@/services/api';
+import { describeApiError } from '@/utils/errors';
+
+export const ADMIN_STATS_QUERY_KEY = ['adminStats'] as const;
 
 export const AdminOverviewPage = () => {
-  const [adminStats, setAdminStats] = useState<AdminStats | null>(null);
-  const [statsError, setStatsError] = useState<string | null>(null);
-  const [reloadIndex, setReloadIndex] = useState(0);
+  const {
+    data: adminStats,
+    isLoading,
+    isFetching,
+    error,
+    refetch,
+  } = useQuery({
+    queryKey: ADMIN_STATS_QUERY_KEY,
+    queryFn: getAdminStats,
+  });
 
-  useEffect(() => {
-    let mounted = true;
-    getAdminStats()
-      .then((s) => {
-        if (mounted) {
-          setAdminStats(s);
-          setStatsError(null);
-        }
-      })
-      .catch(() => {
-        if (mounted) setStatsError('Failed to load dashboard figures.');
-      });
-    return () => {
-      mounted = false;
-    };
-  }, [reloadIndex]);
-
-  const handleRetry = () => {
-    setStatsError(null);
-    setAdminStats(null);
-    setReloadIndex((i) => i + 1);
-  };
+  const { isRefreshing, refresh } = useRefresh(refetch);
+  const showLoading = isLoading || isFetching || isRefreshing;
 
   const totalShelters = adminStats?.shelters.total ?? 0;
   const locations = adminStats?.shelters.locations ?? 0;
@@ -69,8 +61,7 @@ export const AdminOverviewPage = () => {
   const pendingApplications =
     (adminStats?.applications.submitted ?? 0) + (adminStats?.applications.under_review ?? 0);
   const successfulAdoptions = adminStats?.applications.approved ?? 0;
-  const totalDecisions =
-    (adminStats?.applications.total ?? 0) - pendingApplications;
+  const totalDecisions = (adminStats?.applications.total ?? 0) - pendingApplications;
   const adoptionRate =
     totalDecisions > 0 ? Math.round((successfulAdoptions / totalDecisions) * 100) : 0;
 
@@ -80,28 +71,22 @@ export const AdminOverviewPage = () => {
     { name: 'Platform admins', value: platformAdmins },
   ];
 
-  const overviewLoading = !adminStats && !statsError;
-
   return (
     <div className="w-full px-4 py-6 sm:px-6">
       <SectionHeader
         title="Platform administration"
         subtitle="Developer oversight — all shelters, all users, and global metrics."
+        actions={<RefreshButton onRefresh={refresh} />}
       />
 
       <div className="mt-6 space-y-4">
-        {statsError ? (
-          <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-5 text-sm">
-            <p className="font-semibold text-destructive">Could not load dashboard figures.</p>
-            <p className="mt-1 text-muted-foreground">
-              {statsError} Check that the backend is running and you are signed in as a platform
-              admin.
-            </p>
-            <Button size="sm" variant="outline" className="mt-3" onClick={handleRetry}>
-              Retry
-            </Button>
-          </div>
-        ) : overviewLoading ? (
+        {error ? (
+          <ErrorState
+            title="Could not load dashboard figures"
+            description={`${describeApiError(error, 'Failed to load dashboard figures.')} Check that the backend is running and you are signed in as a platform admin.`}
+            onRetry={() => void refetch()}
+          />
+        ) : showLoading && !adminStats ? (
           <SummaryStatGrid>
             <SummaryStatCardSkeleton />
             <SummaryStatCardSkeleton />
@@ -209,4 +194,3 @@ export const AdminOverviewPage = () => {
     </div>
   );
 };
-

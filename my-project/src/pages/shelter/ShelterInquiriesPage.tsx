@@ -1,17 +1,29 @@
-import { Eye, Mail, MessageCircleQuestion } from 'lucide-react';
-import { useCallback, useEffect, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { Eye, Mail, MessageCircleQuestion, Trash2 } from 'lucide-react';
+import { useMemo, useState } from 'react';
 import { toast } from 'react-toastify';
+
+import {
+  InquiryDetailsModal,
+  InquiryEmailSlideOver,
+  InquiryMobileCard,
+  InquiryStatusBadge,
+  type EmailDraft,
+} from '@/components/inquiries';
 import {
   DebouncedSearchInput,
-  DetailsModal,
-  RecordCard,
   RecordCardSkeleton,
+  RefreshButton,
   SectionHeader,
-  SlideOver,
   TableCard,
   TablePagination,
   TableSkeletonRows,
+  focusFirstError,
 } from '@/components/shared';
+import { ConfirmDeleteModal } from '@/components/shared/ConfirmDeleteModal';
+import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/Checkbox';
+import { Select } from '@/components/ui/Form';
 import {
   Table,
   TableBody,
@@ -20,188 +32,243 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/Table';
-import { Input, Label, Select, Textarea } from '@/components/ui/Form';
-import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/Badge';
-import { useAuth } from '@/hooks/useAuth';
-import { usePets, useShelters } from '@/hooks/useData';
-import { ApiError } from '@/lib/apiClient';
 import {
-  emailShelterInquiry,
-  listShelterInquiriesPaginated,
-  type Inquiry,
-} from '@/services/api';
+  INQUIRY_STATUS_FILTER_OPTIONS,
+  MAX_INQUIRIES_PER_SHELTER,
+  type InquiryStatusFilter,
+} from '@/data/shelterInquiries';
+import { usePets } from '@/hooks/useData';
+import { useRefresh } from '@/hooks/useRefresh';
+import {
+  SHELTER_INQUIRIES_QUERY_KEY,
+  useShelterInquiryMutations,
+} from '@/hooks/useShelterInquiryMutations';
+import { inquiryReplySchema, toFieldErrors } from '@/lib/validators';
+import { listShelterInquiriesPaginated } from '@/services/api';
+import type { Inquiry } from '@/services/api';
+import { describeApiError } from '@/utils/errors';
 import { formatDate } from '@/utils/formatters';
 
-const STATUS_FILTER_OPTIONS = [
-  { value: 'all', label: 'All' },
-  { value: 'open', label: 'Open' },
-  { value: 'resolved', label: 'Resolved' },
-];
-
 export const ShelterInquiriesPage = () => {
-  const { user } = useAuth();
   const { pets } = usePets();
-  const { shelters } = useShelters();
-  const [inquiries, setInquiries] = useState<Inquiry[]>([]);
-  const [totalInquiries, setTotalInquiries] = useState<number>(0);
-  const [loading, setLoading] = useState(true);
-  const [query, setQuery] = useState('');
-  const [statusFilter, setStatusFilter] = useState<'all' | 'open' | 'resolved'>('all');
+
+  // Filters and pagination state
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
+  const [query, setQuery] = useState('');
+  const [statusFilter, setStatusFilter] = useState<InquiryStatusFilter>('all');
+
+  // Dialog state
   const [detailsId, setDetailsId] = useState<string | null>(null);
+  const [emailDraft, setEmailDraft] = useState<EmailDraft | null>(null);
+  const [emailErrors, setEmailErrors] = useState<
+    Partial<Record<'subject' | 'message', string>>
+  >({});
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [deleteTarget, setDeleteTarget] = useState<{ ids: string[]; label: string } | null>(
+    null,
+  );
 
-  // Reply compose dialog (kept separate so the details modal stays read-only).
-  const [emailingId, setEmailingId] = useState<string | null>(null);
-  const [emailSubject, setEmailSubject] = useState('');
-  const [emailMessage, setEmailMessage] = useState('');
-  const [sendingEmail, setSendingEmail] = useState(false);
+  const petById = useMemo(() => new Map(pets.map((pet) => [pet.id, pet])), [pets]);
 
-  const myShelterId = user?.shelterId ?? shelters[0]?.id ?? null;
-
-  const fetchInquiries = useCallback(async () => {
-    setLoading(true);
-    try {
-      const isResolved = statusFilter === 'all' ? undefined : statusFilter === 'resolved';
-      const res = await listShelterInquiriesPaginated({
+  const { data, isLoading, isFetching, error, refetch } = useQuery({
+    queryKey: [
+      ...SHELTER_INQUIRIES_QUERY_KEY,
+      { page, pageSize, search: query.trim(), statusFilter },
+    ],
+    queryFn: () =>
+      listShelterInquiriesPaginated({
         page,
         limit: pageSize,
-        resolved: isResolved,
+        resolved: statusFilter === 'all' ? undefined : statusFilter === 'resolved',
         search: query.trim(),
-        shelterId: myShelterId,
-      });
-      setInquiries(res.items);
-      setTotalInquiries(res.total);
-    } catch {
-      toast.error('Failed to load inquiries.');
-    } finally {
-      setLoading(false);
-    }
-  }, [page, pageSize, statusFilter, query, myShelterId]);
+      }),
+  });
 
-  useEffect(() => {
-    fetchInquiries();
-  }, [fetchInquiries]);
+  const { isRefreshing, refresh } = useRefresh(refetch);
+  const showLoading = isLoading || isFetching || isRefreshing;
 
-  const detailsInquiry = inquiries.find((i) => i.id === detailsId) ?? null;
-  const emailingInquiry = inquiries.find((i) => i.id === emailingId) ?? null;
+  const inquiries = data?.items ?? [];
+  const totalInquiries = data?.total ?? 0;
+  const shelterTotal = data?.shelterTotal ?? totalInquiries;
 
-  const petOf = (petId: string) => pets.find((p) => p.id === petId);
+  const pageIds = inquiries.map((inquiry) => inquiry.id);
+  const allSelected =
+    pageIds.length > 0 && pageIds.every((id) => selectedIds.has(id));
+
+  const toggleSelectAll = () => {
+    setSelectedIds((previous) => {
+      const next = new Set(previous);
+      if (allSelected) pageIds.forEach((id) => next.delete(id));
+      else pageIds.forEach((id) => next.add(id));
+      return next;
+    });
+  };
+
+  const toggleSelected = (id: string) => {
+    setSelectedIds((previous) => {
+      const next = new Set(previous);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const describeInquiry = (inquiry: Inquiry) => {
+    const pet = petById.get(inquiry.petId);
+    return `Inquiry from ${inquiry.fromName}${pet ? ` about ${pet.name}` : ''}`;
+  };
+
+  const describeSelectedInquiries = () => {
+    const selected = inquiries.filter((inquiry) => selectedIds.has(inquiry.id));
+    const [first] = selected;
+    if (selected.length === 1 && first) return describeInquiry(first);
+    const names = [...new Set(selected.map((inquiry) => inquiry.fromName))];
+    const shown = names.slice(0, 3).join(', ');
+    const extra = names.length > 3 ? ` and ${names.length - 3} more` : '';
+    return `${selected.length} inquiries from ${shown}${extra}`;
+  };
+
+  const { emailMutation, deleteMutation, isSending, isDeleting } =
+    useShelterInquiryMutations({
+      onEmailed: () => setEmailDraft(null),
+      onConflict: () => setEmailDraft(null),
+      onDeleted: () => {
+        setDeleteTarget(null);
+        setSelectedIds(new Set());
+      },
+    });
+
+  const detailsInquiry = inquiries.find((inquiry) => inquiry.id === detailsId) ?? null;
 
   const openEmailCompose = (inquiry: Inquiry) => {
-    const pet = petOf(inquiry.petId);
-    setEmailingId(inquiry.id);
-    setEmailSubject(pet ? `Your inquiry about ${pet.name}` : 'Your inquiry');
-    setEmailMessage('');
+    const pet = petById.get(inquiry.petId);
+    setEmailErrors({});
+    setEmailDraft({
+      inquiry,
+      subject: pet ? `Your inquiry about ${pet.name}` : 'Your inquiry',
+      message: '',
+    });
   };
 
   const closeEmailCompose = () => {
-    if (sendingEmail) return;
-    setEmailingId(null);
-    setEmailSubject('');
-    setEmailMessage('');
+    if (isSending) return;
+    setEmailErrors({});
+    setEmailDraft(null);
   };
 
-  const handleSendEmail = async () => {
-    if (!emailingInquiry) return;
-    const subject = emailSubject.trim();
-    const message = emailMessage.trim();
-    if (!subject || !message) {
-      toast.warning('Add a subject and message before sending.');
+  const handleSendEmail = () => {
+    if (!emailDraft) return;
+
+    const parsed = inquiryReplySchema.safeParse({
+      subject: emailDraft.subject,
+      message: emailDraft.message,
+    });
+    if (!parsed.success) {
+      setEmailErrors(toFieldErrors<'subject' | 'message'>(parsed.error.issues));
+      toast.warning('Please fix the highlighted fields.');
+      focusFirstError();
       return;
     }
+    setEmailErrors({});
 
-    setSendingEmail(true);
-    try {
-      const result = await emailShelterInquiry(emailingInquiry.id, { subject, message });
-      if (result.emailSent) {
-        setInquiries((prev) =>
-          prev.map((i) => (i.id === emailingInquiry.id ? result.inquiry : i)),
-        );
-        toast.success(`Email sent to ${emailingInquiry.fromEmail}.`);
-        setEmailingId(null);
-        setEmailSubject('');
-        setEmailMessage('');
-      } else if (result.emailStubbed) {
-        toast.warning(
-          'Email is not configured yet. Add your Gmail SMTP credentials to backend/.env.',
-        );
-      } else {
-        toast.error('Email could not be sent. Please try again.');
-      }
-    } catch (err) {
-      if (err instanceof ApiError && err.status === 409) {
-        toast.info('An email has already been sent for this inquiry.');
-        await fetchInquiries();
-        setEmailingId(null);
-      } else {
-        toast.error(err instanceof ApiError ? err.message : 'Failed to send email.');
-      }
-    } finally {
-      setSendingEmail(false);
-    }
+    emailMutation.mutate({
+      id: emailDraft.inquiry.id,
+      fromEmail: emailDraft.inquiry.fromEmail,
+      subject: parsed.data.subject,
+      message: parsed.data.message,
+    });
   };
-
-  const toolbar = (
-    <div className="flex flex-wrap items-center justify-between gap-2">
-      <DebouncedSearchInput
-        aria-label="Search inquiries"
-        value={query}
-        onDebouncedChange={(val) => {
-          setQuery(val);
-          setPage(1);
-        }}
-        placeholder="Search sender or pet"
-        className="sm:w-[240px]"
-      />
-      <div className="flex flex-wrap items-center gap-2">
-        <Select
-          aria-label="Filter by status"
-          className="h-9 w-[150px]"
-          value={statusFilter}
-          onChange={(e) => {
-            setStatusFilter(e.target.value as 'all' | 'open' | 'resolved');
-            setPage(1);
-          }}
-          options={STATUS_FILTER_OPTIONS}
-        />
-      </div>
-    </div>
-  );
-
-  const pagination =
-    totalInquiries > 0 ? (
-      <TablePagination
-        currentPage={page}
-        totalItems={totalInquiries}
-        pageSize={pageSize}
-        onPageChange={setPage}
-        onPageSizeChange={(newSize) => {
-          setPageSize(newSize);
-          setPage(1);
-        }}
-        label="inquiries"
-      />
-    ) : undefined;
 
   return (
     <div className="w-full px-4 py-6 sm:px-6">
       <SectionHeader
         title="Inquiries inbox"
         subtitle="Messages from potential adopters about your pets."
+        actions={<RefreshButton onRefresh={refresh} />}
       />
 
       <div className="mt-6 space-y-4">
         <TableCard
           title="Inquiries"
-          description="Direct messages from adopters about your listings."
+          description={
+            showLoading
+              ? 'Direct messages from adopters about your listings.'
+              : `Direct messages from adopters about your listings — ${shelterTotal} of ${MAX_INQUIRIES_PER_SHELTER} inquiries used.`
+          }
           icon={MessageCircleQuestion}
-          toolbar={toolbar}
-          isEmpty={!loading && inquiries.length === 0}
+          toolbar={
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <DebouncedSearchInput
+                aria-label="Search inquiries"
+                value={query}
+                onDebouncedChange={(value) => {
+                  setQuery(value);
+                  setPage(1);
+                  setSelectedIds(new Set());
+                }}
+                placeholder="Search sender or pet"
+                className="sm:w-[240px]"
+              />
+              <div className="flex flex-wrap items-center gap-2">
+                <Select
+                  aria-label="Filter by status"
+                  className="h-9 w-[150px]"
+                  value={statusFilter}
+                  onChange={(e) => {
+                    setStatusFilter(e.target.value as InquiryStatusFilter);
+                    setPage(1);
+                    setSelectedIds(new Set());
+                  }}
+                  options={INQUIRY_STATUS_FILTER_OPTIONS}
+                />
+                {selectedIds.size > 0 ? (
+                  <Button
+                    size="sm"
+                    variant="destructive"
+                    className="h-9"
+                    onClick={() =>
+                      setDeleteTarget({
+                        ids: [...selectedIds],
+                        label: describeSelectedInquiries(),
+                      })
+                    }
+                  >
+                    <Trash2 className="size-4" /> Delete selected ({selectedIds.size})
+                  </Button>
+                ) : null}
+              </div>
+            </div>
+          }
+          error={
+            error
+              ? describeApiError(error, 'Failed to load inquiries. Please try again.')
+              : null
+          }
+          errorTitle="Could not load inquiries"
+          onRetry={() => void refetch()}
+          isEmpty={!showLoading && !error && inquiries.length === 0}
           emptyTitle="No inquiries found"
           emptyDescription="Try a different search or filter."
-          footer={pagination}
+          footer={
+            totalInquiries > 10 ? (
+              <TablePagination
+                currentPage={page}
+                totalItems={totalInquiries}
+                pageSize={pageSize}
+                onPageChange={(next) => {
+                  setPage(next);
+                  setSelectedIds(new Set());
+                }}
+                onPageSizeChange={(newSize) => {
+                  setPageSize(newSize);
+                  setPage(1);
+                  setSelectedIds(new Set());
+                }}
+                label="inquiries"
+              />
+            ) : undefined
+          }
           contentClassName="px-0"
         >
           {/* Desktop: data table */}
@@ -209,6 +276,13 @@ export const ShelterInquiriesPage = () => {
             <Table>
               <TableHeader>
                 <TableRow>
+                  <TableHead className="w-10">
+                    <Checkbox
+                      checked={allSelected}
+                      onChange={toggleSelectAll}
+                      aria-label="Select all inquiries on this page"
+                    />
+                  </TableHead>
                   <TableHead>Pet</TableHead>
                   <TableHead>From</TableHead>
                   <TableHead>Message</TableHead>
@@ -218,277 +292,174 @@ export const ShelterInquiriesPage = () => {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {loading ? (
-                  <TableSkeletonRows columns={6} rows={5} avatar />
-                ) : inquiries.map((inquiry) => {
-                  const pet = petOf(inquiry.petId);
-                  const resolved = inquiry.resolved ?? false;
-                  return (
-                    <TableRow key={inquiry.id}>
-                      <TableCell>
-                        <div className="flex items-center gap-3">
-                          {pet ? (
-                            <img
-                              src={pet.imageUrl}
-                              alt={pet.name}
-                              className="size-10 shrink-0 rounded-lg object-cover"
-                            />
-                          ) : null}
+                {showLoading ? (
+                  <TableSkeletonRows columns={7} rows={5} avatar />
+                ) : (
+                  inquiries.map((inquiry) => {
+                    const pet = petById.get(inquiry.petId);
+                    return (
+                      <TableRow key={inquiry.id}>
+                        <TableCell className="w-10">
+                          <Checkbox
+                            checked={selectedIds.has(inquiry.id)}
+                            onChange={() => toggleSelected(inquiry.id)}
+                            aria-label={`Select inquiry from ${inquiry.fromName}`}
+                          />
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-3">
+                            {pet ? (
+                              <img
+                                src={pet.imageUrl}
+                                alt={pet.name}
+                                className="size-10 shrink-0 rounded-lg object-cover"
+                              />
+                            ) : null}
+                            <div className="min-w-0">
+                              <p className="font-medium">{pet?.name ?? '—'}</p>
+                              <p className="truncate text-xs text-muted-foreground">
+                                {pet?.breed ?? 'Unknown breed'}
+                              </p>
+                            </div>
+                          </div>
+                        </TableCell>
+                        <TableCell>
                           <div className="min-w-0">
-                            <p className="font-medium">{pet?.name ?? '—'}</p>
+                            <p className="font-medium">{inquiry.fromName}</p>
                             <p className="truncate text-xs text-muted-foreground">
-                              {pet?.breed ?? 'Unknown breed'}
+                              {inquiry.fromEmail}
                             </p>
                           </div>
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <div className="min-w-0">
-                          <p className="font-medium">{inquiry.fromName}</p>
-                          <p className="truncate text-xs text-muted-foreground">
-                            {inquiry.fromEmail}
-                          </p>
-                        </div>
-                      </TableCell>
-                      <TableCell className="max-w-[280px]">
-                        <p className="truncate text-muted-foreground">{inquiry.message}</p>
-                      </TableCell>
-                      <TableCell className="whitespace-nowrap text-muted-foreground">
-                        {formatDate(inquiry.createdAt)}
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant={resolved ? 'success' : 'warning'}>
-                          {resolved ? 'Resolved' : 'Open'}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="text-center">
-                        <div className="flex justify-center gap-1">
-                          <Button
-                            variant="ghost"
-                            size="icon-sm"
-                            className="text-muted-foreground"
-                            aria-label={`View inquiry from ${inquiry.fromName}`}
-                            onClick={() => setDetailsId(inquiry.id)}
-                          >
-                            <Eye className="size-4" />
-                          </Button>
-                          {!inquiry.emailedAt ? (
+                        </TableCell>
+                        <TableCell className="max-w-[280px]">
+                          <p className="truncate text-muted-foreground">{inquiry.message}</p>
+                        </TableCell>
+                        <TableCell className="whitespace-nowrap text-muted-foreground">
+                          {formatDate(inquiry.createdAt)}
+                        </TableCell>
+                        <TableCell>
+                          <InquiryStatusBadge resolved={inquiry.resolved} />
+                        </TableCell>
+                        <TableCell className="text-center">
+                          <div className="flex justify-center gap-1">
                             <Button
                               variant="ghost"
                               size="icon-sm"
-                              className="text-orange-600 hover:bg-orange-50 hover:text-orange-700 dark:text-orange-400 dark:hover:bg-orange-950/40"
-                              aria-label={`Email ${inquiry.fromName}`}
-                              onClick={() => openEmailCompose(inquiry)}
+                              className="text-muted-foreground"
+                              aria-label={`View inquiry from ${inquiry.fromName}`}
+                              onClick={() => setDetailsId(inquiry.id)}
                             >
-                              <Mail className="size-4" />
+                              <Eye className="size-4" />
                             </Button>
-                          ) : null}
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  );
-                })}
+                            {inquiry.emailedAt ? null : (
+                              <Button
+                                variant="ghost"
+                                size="icon-sm"
+                                className="text-orange-600 hover:bg-orange-50 hover:text-orange-700 dark:text-orange-400 dark:hover:bg-orange-950/40"
+                                aria-label={`Email ${inquiry.fromName}`}
+                                onClick={() => openEmailCompose(inquiry)}
+                              >
+                                <Mail className="size-4" />
+                              </Button>
+                            )}
+                            <Button
+                              variant="ghost"
+                              size="icon-sm"
+                              className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+                              aria-label={`Delete inquiry from ${inquiry.fromName}`}
+                              title="Delete inquiry"
+                              onClick={() =>
+                                setDeleteTarget({
+                                  ids: [inquiry.id],
+                                  label: describeInquiry(inquiry),
+                                })
+                              }
+                            >
+                              <Trash2 className="size-4" />
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })
+                )}
               </TableBody>
             </Table>
           </div>
 
           {/* Mobile: stacked cards */}
-          <div className="grid gap-3 p-4 md:hidden">
-            {loading ? (
+          <div className="grid grid-cols-1 gap-3 p-4 md:hidden">
+            {showLoading ? (
               <RecordCardSkeleton count={3} />
-            ) : inquiries.map((inquiry) => {
-              const pet = petOf(inquiry.petId);
-              const resolved = inquiry.resolved ?? false;
-              return (
-                <RecordCard
+            ) : (
+              inquiries.map((inquiry) => (
+                <InquiryMobileCard
                   key={inquiry.id}
-                  imageUrl={pet?.imageUrl}
-                  imageAlt={pet?.name}
-                  title={inquiry.fromName}
-                  subtitle={`${pet?.name ?? '—'} · ${formatDate(inquiry.createdAt)}`}
-                  badges={
-                    <Badge variant={resolved ? 'success' : 'warning'}>
-                      {resolved ? 'Resolved' : 'Open'}
-                    </Badge>
+                  inquiry={inquiry}
+                  pet={petById.get(inquiry.petId)}
+                  selected={selectedIds.has(inquiry.id)}
+                  onSelectChange={() => toggleSelected(inquiry.id)}
+                  onView={() => setDetailsId(inquiry.id)}
+                  onEmail={() => openEmailCompose(inquiry)}
+                  onDelete={() =>
+                    setDeleteTarget({
+                      ids: [inquiry.id],
+                      label: describeInquiry(inquiry),
+                    })
                   }
-                  actions={
-                    <>
-                      <Button
-                        variant="ghost"
-                        size="icon-sm"
-                        className="text-muted-foreground"
-                        aria-label={`View inquiry from ${inquiry.fromName}`}
-                        onClick={() => setDetailsId(inquiry.id)}
-                      >
-                        <Eye className="size-4" />
-                      </Button>
-                      {!inquiry.emailedAt ? (
-                        <Button
-                          variant="ghost"
-                          size="icon-sm"
-                          className="text-orange-600 hover:bg-orange-50 hover:text-orange-700 dark:text-orange-400 dark:hover:bg-orange-950/40"
-                          aria-label={`Email ${inquiry.fromName}`}
-                          onClick={() => openEmailCompose(inquiry)}
-                        >
-                          <Mail className="size-4" />
-                        </Button>
-                      ) : null}
-                    </>
-                  }
-                >
-                  <p className="line-clamp-2 text-sm text-muted-foreground">{inquiry.message}</p>
-                </RecordCard>
-              );
-            })}
+                />
+              ))
+            )}
           </div>
         </TableCard>
       </div>
 
-      {/* Read-only inquiry details */}
-      <DetailsModal
-        open={detailsInquiry !== null}
+      <InquiryDetailsModal
+        inquiry={detailsInquiry}
+        pet={detailsInquiry ? petById.get(detailsInquiry.petId) : undefined}
         onClose={() => setDetailsId(null)}
-        title={detailsInquiry ? `Inquiry from ${detailsInquiry.fromName}` : 'Inquiry'}
-        description={
-          detailsInquiry ? `Received ${formatDate(detailsInquiry.createdAt)}` : undefined
-        }
-        icon={MessageCircleQuestion}
-      >
-        {detailsInquiry && (
-          <div className="space-y-4">
-            <div className="flex items-center gap-3">
-              {petOf(detailsInquiry.petId) ? (
-                <img
-                  src={petOf(detailsInquiry.petId)?.imageUrl}
-                  alt={petOf(detailsInquiry.petId)?.name}
-                  className="size-14 rounded-lg object-cover"
-                />
-              ) : null}
-              <div className="min-w-0 flex-1">
-                <p className="font-semibold">
-                  {petOf(detailsInquiry.petId)?.name ?? 'Unknown pet'}
-                </p>
-                <p className="truncate text-xs text-muted-foreground">
-                  {petOf(detailsInquiry.petId)?.breed ?? 'Pet inquiry'}
-                </p>
-              </div>
-              <Badge variant={detailsInquiry.resolved ? 'success' : 'warning'}>
-                {detailsInquiry.resolved ? 'Resolved' : 'Open'}
-              </Badge>
-            </div>
+      />
 
-            <div className="rounded-lg border p-3">
-              <p className="text-xs uppercase tracking-wide text-muted-foreground">From</p>
-              <p className="mt-1 text-sm font-medium">{detailsInquiry.fromName}</p>
-              <p className="text-sm text-muted-foreground">{detailsInquiry.fromEmail}</p>
-            </div>
-
-            <div>
-              <p className="text-xs uppercase tracking-wide text-muted-foreground">Message</p>
-              <p className="mt-1 whitespace-pre-line text-sm leading-relaxed">
-                {detailsInquiry.message}
-              </p>
-            </div>
-
-            {detailsInquiry.emailedAt ? (
-              <div className="rounded-lg border p-3">
-                <p className="text-xs uppercase tracking-wide text-muted-foreground">
-                  Email sent
-                </p>
-                <p className="mt-1 text-sm font-medium">
-                  {detailsInquiry.emailSubject ?? 'Reply'}
-                </p>
-                {detailsInquiry.emailMessage ? (
-                  <p className="mt-1 whitespace-pre-line text-sm leading-relaxed text-muted-foreground">
-                    {detailsInquiry.emailMessage}
-                  </p>
-                ) : null}
-                <p className="mt-2 text-xs text-muted-foreground">
-                  Sent to {detailsInquiry.fromEmail} on {formatDate(detailsInquiry.emailedAt)}
-                </p>
-              </div>
-            ) : (
-              <p className="text-xs text-muted-foreground">
-                No email has been sent to this inquirer yet.
-              </p>
-            )}
-          </div>
-        )}
-      </DetailsModal>
-
-      {/* Compose dialog for the Email action */}
-      <SlideOver
-        open={emailingInquiry !== null}
+      <InquiryEmailSlideOver
+        draft={emailDraft}
+        petName={emailDraft ? petById.get(emailDraft.inquiry.petId)?.name : undefined}
+        isSending={isSending}
+        errors={emailErrors}
+        onSubjectChange={(subject) => {
+          setEmailDraft((draft) => (draft ? { ...draft, subject } : draft));
+          setEmailErrors((errors) => ({ ...errors, subject: undefined }));
+        }}
+        onMessageChange={(message) => {
+          setEmailDraft((draft) => (draft ? { ...draft, message } : draft));
+          setEmailErrors((errors) => ({ ...errors, message: undefined }));
+        }}
         onClose={closeEmailCompose}
-        title={emailingInquiry ? `Email ${emailingInquiry.fromName}` : 'Email inquirer'}
-        description={
-          emailingInquiry
-            ? `Reply about ${petOf(emailingInquiry.petId)?.name ?? 'this pet'} · ${emailingInquiry.fromEmail}`
-            : undefined
+        onSend={handleSendEmail}
+      />
+
+      <ConfirmDeleteModal
+        open={deleteTarget !== null}
+        onClose={() => {
+          if (!isDeleting) setDeleteTarget(null);
+        }}
+        onConfirm={() => {
+          if (deleteTarget) {
+            deleteMutation.mutate({
+              ids: deleteTarget.ids,
+              description: deleteTarget.label,
+            });
+          }
+        }}
+        title={
+          deleteTarget && deleteTarget.ids.length === 1
+            ? 'Delete inquiry?'
+            : `Delete ${deleteTarget?.ids.length ?? 0} inquiries?`
         }
-        icon={Mail}
-        footer={
-          <div className="flex justify-end gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={closeEmailCompose}
-              disabled={sendingEmail}
-            >
-              Cancel
-            </Button>
-            <Button
-              size="sm"
-              onClick={handleSendEmail}
-              disabled={sendingEmail || !emailSubject.trim() || !emailMessage.trim()}
-            >
-              {sendingEmail ? 'Sending…' : 'Send email'}
-            </Button>
-          </div>
-        }
-      >
-        {emailingInquiry && (
-          <div className="space-y-4">
-            <div className="rounded-lg border p-3">
-              <p className="text-xs uppercase tracking-wide text-muted-foreground">To</p>
-              <p className="mt-1 text-sm font-medium">{emailingInquiry.fromName}</p>
-              <p className="text-sm text-muted-foreground">{emailingInquiry.fromEmail}</p>
-            </div>
-
-            <div className="rounded-lg bg-muted/60 px-3 py-2">
-              <p className="text-xs font-semibold">Their message</p>
-              <p className="mt-0.5 whitespace-pre-line text-sm">{emailingInquiry.message}</p>
-            </div>
-
-            <div>
-              <Label htmlFor="inquiry-email-subject">Subject</Label>
-              <Input
-                id="inquiry-email-subject"
-                value={emailSubject}
-                onChange={(e) => setEmailSubject(e.target.value)}
-                maxLength={200}
-              />
-            </div>
-
-            <div>
-              <Label htmlFor="inquiry-email-message">Message</Label>
-              <Textarea
-                id="inquiry-email-message"
-                value={emailMessage}
-                onChange={(e) => setEmailMessage(e.target.value)}
-                placeholder={`Write your reply to ${emailingInquiry.fromName}…`}
-                className="min-h-40"
-                maxLength={5000}
-              />
-            </div>
-
-            <p className="text-xs text-muted-foreground">
-              This sends once through the shelter's email. After it is delivered, the Email
-              action is hidden.
-            </p>
-          </div>
-        )}
-      </SlideOver>
+        description="This permanently removes the selected inquiries from your inbox. The senders are not notified."
+        itemName={deleteTarget?.label}
+        confirmLabel="Delete"
+        isDeleting={isDeleting}
+      />
     </div>
   );
 };

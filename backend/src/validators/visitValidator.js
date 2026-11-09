@@ -13,6 +13,11 @@ export const visitPetParam = z.object({
 export const updateVisitStatusSchema = z.object({
   status: z.enum(['confirmed', 'completed', 'cancelled']),
   confirmedSlot: z.string().max(255).optional(),
+  /** Local wall-clock date/time ("2026-11-18T10:00") used by the dashboard. */
+  confirmedFor: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/, 'Invalid confirmed visit date and time')
+    .optional(),
   cancelReason: z.string().max(500).optional(),
   /** Short note emailed with the confirmation (visit date + message). */
   message: z.string().max(1000).optional(),

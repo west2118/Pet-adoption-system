@@ -1,4 +1,10 @@
-import { createListing, listShelterListings, removeListing, updateListing } from '../services/listingService.js';
+import {
+  createListing,
+  listShelterListings,
+  removeListing,
+  removeListings,
+  updateListing,
+} from '../services/listingService.js';
 import { sendSuccess, buildMeta } from '../utils/respond.js';
 import { parsePagination } from '../validators/commonValidator.js';
 
@@ -9,7 +15,7 @@ export const getMyListings = async (req, res) => {
   // Species/status filters run in SQL so the page count matches the filter.
   const species = req.query.species || undefined;
   const status = req.query.status || undefined;
-  const { pets, total } = await listShelterListings(req.user.shelterId, {
+  const { pets, total, shelterTotal } = await listShelterListings(req.user.shelterId, {
     limit,
     offset,
     search,
@@ -17,7 +23,7 @@ export const getMyListings = async (req, res) => {
     species,
     status,
   });
-  return sendSuccess(res, { pets }, undefined, buildMeta(page, limit, total));
+  return sendSuccess(res, { pets, shelterTotal }, undefined, buildMeta(page, limit, total));
 };
 
 export const addListing = async (req, res) => {
@@ -33,4 +39,9 @@ export const editListing = async (req, res) => {
 export const deleteListing = async (req, res) => {
   const result = await removeListing(req.params.id, req.user.shelterId);
   return sendSuccess(res, result, 'Pet listing removed successfully.');
+};
+
+export const deleteListings = async (req, res) => {
+  const result = await removeListings(req.body.ids, req.user.shelterId);
+  return sendSuccess(res, result, 'Pet listings removed successfully.');
 };

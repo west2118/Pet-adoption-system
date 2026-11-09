@@ -1,7 +1,9 @@
 import { AppError } from '../utils/AppError.js';
 import { mapInquiry } from '../utils/mappers.js';
 import {
+  countInquiriesByShelter,
   createInquiry,
+  deleteInquiriesByIds,
   findInquiryById,
   listInquiriesByShelter,
   markInquiryEmailed,
@@ -10,18 +12,37 @@ import {
 import { findPetById } from '../repositories/petRepository.js';
 import { sendInquiryReplyEmail } from './mailerService.js';
 
+// Hard cap so a shelter's inquiry inbox cannot grow without bound.
+const MAX_INQUIRIES_PER_SHELTER = 150;
+
 export const submitInquiry = async (input) => {
   const pet = await findPetById(input.petId);
   if (!pet || pet.visibility !== 'public') {
     throw new AppError('Pet not found or not publicly available.', 404);
   }
+  const inquiryCount = await countInquiriesByShelter(pet.shelter_id);
+  if (inquiryCount >= MAX_INQUIRIES_PER_SHELTER) {
+    throw new AppError(
+      'This shelter has received too many inquiries right now. Please try again later.',
+      429,
+    );
+  }
   const row = await createInquiry(input);
   return mapInquiry(row);
 };
 
+/** Removes selected inquiries; IDs from other shelters are ignored. */
+export const deleteShelterInquiries = async (ids, shelterId) => {
+  const deletedIds = await deleteInquiriesByIds(ids, shelterId);
+  return { deleted: deletedIds.length };
+};
+
 export const listShelterInquiries = async (shelterId, options = {}) => {
-  const { rows, total } = await listInquiriesByShelter(shelterId, options);
-  return { inquiries: rows.map((r) => mapInquiry(r)), total };
+  const [{ rows, total }, shelterTotal] = await Promise.all([
+    listInquiriesByShelter(shelterId, options),
+    countInquiriesByShelter(shelterId),
+  ]);
+  return { inquiries: rows.map((r) => mapInquiry(r)), total, shelterTotal };
 };
 
 export const resolveInquiry = async (id, shelterId) => {

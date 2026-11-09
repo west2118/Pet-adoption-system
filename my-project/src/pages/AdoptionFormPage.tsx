@@ -15,9 +15,8 @@ import { Button } from '@/components/ui/button';
 import { ApplicationStatusBadge } from '@/components/ui/StatusBadge';
 import { useAuth } from '@/hooks/useAuth';
 import { usePets, useShelters } from '@/hooks/useData';
-import { applicationService } from '@/services/api';
 import { adoptionApplicationService } from '@/services/adoptionApplicationService';
-import { ApiError, sessionStore } from '@/lib/apiClient';
+import { ApiError } from '@/lib/apiClient';
 import type { Pet } from '@/types';
 
 const frame = 'mx-auto w-full max-w-[1400px] px-6 lg:px-12';
@@ -125,24 +124,9 @@ export const AdoptionFormPage = () => {
     };
 
     try {
-      // Dynamic path: write to the backend when a real session exists so the
-      // shelter applications table and the adopter's own list read the same row.
-      if (sessionStore.has()) {
-        try {
-          await adoptionApplicationService.create(payload);
-          toast.success(`Application sent for ${pet?.name ?? 'your pet'}!`);
-          navigate('/applications', { replace: true });
-          return;
-        } catch (err) {
-          // Demo listings use non-UUID ids (p1, p2…) that the API rejects, and
-          // the backend may be unreachable — fall through to the local store
-          // so adopters can still complete the flow in preview mode.
-          if (err instanceof ApiError && err.status !== 0 && err.code !== 'VALIDATION_ERROR') {
-            throw err;
-          }
-        }
-      }
-      await applicationService.create({ ...payload, applicantId: user.id });
+      // The application is stored server-side so the shelter table and the
+      // adopter's own list read the same row.
+      await adoptionApplicationService.create(payload);
       toast.success(`Application sent for ${pet?.name ?? 'your pet'}!`);
       navigate('/applications', { replace: true });
     } catch (err) {

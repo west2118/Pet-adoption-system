@@ -57,6 +57,17 @@ export const signup = async (input) => {
   return { user, token, refreshToken };
 };
 
+/**
+ * Pending shelter accounts get a limited onboarding token. It is attached to
+ * the error only so the controller layer can write it into an httpOnly cookie
+ * — it must never be serialized into the response body.
+ */
+const pendingAccountError = (message, requiresOnboarding, onboardingToken) => {
+  const error = new AppError(message, 403, { requiresOnboarding });
+  error.onboardingToken = onboardingToken;
+  return error;
+};
+
 export const login = async (input) => {
   const row = await findUserByEmail(input.email);
   if (!row) {
@@ -72,17 +83,17 @@ export const login = async (input) => {
 
     if (!application) {
       // User registered as shelter staff/admin but hasn't submitted their shelter onboarding yet!
-      throw new AppError(
+      throw pendingAccountError(
         'Please complete your shelter registration.',
-        403,
-        { requiresOnboarding: true, onboardingToken },
+        true,
+        onboardingToken,
       );
     }
 
-    throw new AppError(
+    throw pendingAccountError(
       'Your account is awaiting admin approval. You will be notified by email.',
-      403,
-      { requiresOnboarding: false, onboardingToken },
+      false,
+      onboardingToken,
     );
   }
   if (row.account_status === 'rejected' || row.account_status === 'suspended') {

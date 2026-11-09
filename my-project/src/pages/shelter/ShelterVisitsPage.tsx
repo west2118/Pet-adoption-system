@@ -1,18 +1,22 @@
-import { CalendarClock, Eye, Flag, Mail, X } from 'lucide-react';
-import { useCallback, useEffect, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { CalendarClock, Eye, Flag, Mail, Trash2 } from 'lucide-react';
+import { useState } from 'react';
 import { toast } from 'react-toastify';
+
 import {
-  DetailsModal,
-  RecordCard,
+  DebouncedSearchInput,
   RecordCardSkeleton,
+  RefreshButton,
   SectionHeader,
-  SlideOver,
   TableCard,
   TablePagination,
   TableSkeletonRows,
+  focusFirstError,
 } from '@/components/shared';
+import { ConfirmDeleteModal } from '@/components/shared/ConfirmDeleteModal';
 import { Button } from '@/components/ui/button';
-import { Input, Label, Select, Textarea } from '@/components/ui/Form';
+import { Checkbox } from '@/components/ui/Checkbox';
+import { Select } from '@/components/ui/Form';
 import { VisitStatusBadge } from '@/components/ui/StatusBadge';
 import {
   Table,
@@ -22,250 +26,342 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/Table';
-import { ApiError } from '@/lib/apiClient';
+import { VisitCompleteModal } from '@/components/visits/VisitCompleteModal';
+import { VisitDeclineSlideOver } from '@/components/visits/VisitDeclineSlideOver';
+import { VisitDetailsModal } from '@/components/visits/VisitDetailsModal';
+import { VisitEmailSlideOver } from '@/components/visits/VisitEmailSlideOver';
+import { VisitMobileCard } from '@/components/visits/VisitMobileCard';
+import {
+  MAX_VISITS_PER_SHELTER,
+  VISIT_STATUS_FILTER_OPTIONS,
+  type VisitStatusFilter,
+} from '@/data/shelterVisits';
+import { useRefresh } from '@/hooks/useRefresh';
+import {
+  SHELTER_VISITS_QUERY_KEY,
+  useShelterVisitMutations,
+} from '@/hooks/useShelterVisitMutations';
+import { toFieldErrors, visitDeclineSchema, visitEmailSchema } from '@/lib/validators';
 import { visitService } from '@/services/visitService';
-import type { VisitStatus, VisitThread } from '@/types';
+import type { VisitThread } from '@/types';
+import { describeApiError } from '@/utils/errors';
 import { formatDate } from '@/utils/formatters';
 
-const STATUS_FILTER_OPTIONS = [
-  { value: 'all', label: 'All' },
-  { value: 'requested', label: 'Requested' },
-  { value: 'confirmed', label: 'Confirmed' },
-  { value: 'completed', label: 'Completed' },
-  { value: 'cancelled', label: 'Cancelled' },
-];
+/** `datetime-local` value for the confirmation form (already local wall time). */
+const toDatetimeLocal = (value?: string | null): string => {
+  if (!value) return '';
+  return /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(value) ? value.slice(0, 16) : '';
+};
 
-/**
- * Shelter visit inbox: one request per pet from an adopter. The detail view is
- * read-only — confirming (with a visit date + message) and declining happen in
- * their own email dialogs, mirroring the inquiry inbox.
- */
+/** Readable slot kept for the confirmation email and visit cards. */
+const formatVisitSlot = (value: string): string => {
+  const date = new Date(value);
+  const day = date.toLocaleDateString('en-US', {
+    weekday: 'short',
+    month: 'short',
+    day: 'numeric',
+  });
+  const time = date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+  return `${day} at ${time}`;
+};
+
 export const ShelterVisitsPage = () => {
-  const [threads, setThreads] = useState<VisitThread[]>([]);
-  const [total, setTotal] = useState(0);
-  const [loading, setLoading] = useState(true);
-  const [statusFilter, setStatusFilter] = useState('all');
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
+  const [statusFilter, setStatusFilter] = useState<VisitStatusFilter>('all');
+  const [query, setQuery] = useState('');
+
+  // Dialog state — compose/decline drafts keep their input values with the thread id.
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [working, setWorking] = useState(false);
-
-  // Compose dialog: visit date + message emailed to the adopter. Kept separate
-  // from `selectedId` so emailing never opens the read-only details modal.
-  const [composeId, setComposeId] = useState<string | null>(null);
-  const [composeOpen, setComposeOpen] = useState(false);
-  const [composeSlot, setComposeSlot] = useState('');
-  const [composeMessage, setComposeMessage] = useState('');
-  // Decline / cancel dialog.
-  const [declineId, setDeclineId] = useState<string | null>(null);
-  const [declineOpen, setDeclineOpen] = useState(false);
-  const [reason, setReason] = useState('');
-
-  // Complete visit confirmation dialog.
-  const [completeTarget, setCompleteTarget] = useState<VisitThread | null>(null);
-
-  const fetchThreads = useCallback(async () => {
-    setLoading(true);
-    try {
-      const res = await visitService.listForShelter({ page, limit: pageSize, status: statusFilter });
-      setThreads(res.items);
-      setTotal(res.total);
-    } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : 'Failed to load visits.');
-    } finally {
-      setLoading(false);
-    }
-  }, [page, pageSize, statusFilter]);
-
-  useEffect(() => {
-    fetchThreads();
-  }, [fetchThreads]);
-
-  const openRequest = async (id: string) => {
-    setSelectedId(id);
-    try {
-      const thread = await visitService.getForShelter(id);
-      setThreads((prev) => prev.map((t) => (t.id === id ? thread : t)));
-    } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : 'Failed to load visit request.');
-    }
-  };
-
-  const selected = threads.find((t) => t.id === selectedId) ?? null;
-  const composeThread = threads.find((t) => t.id === composeId) ?? null;
-  const declineThread = threads.find((t) => t.id === declineId) ?? null;
-  const actionable = selected != null && ['requested', 'confirmed'].includes(selected.status);
-
-  const closeDetails = () => setSelectedId(null);
-
-  /** Opens the confirmation email for a row without opening the details view. */
-  const openCompose = (thread?: VisitThread) => {
-    const target = thread ?? selected;
-    if (!target) return;
-    setComposeId(target.id);
-    // Start from the confirmed slot when rescheduling, else the request's slot.
-    setComposeSlot(target.confirmedSlot ?? target.preferredSlot ?? '');
-    setComposeMessage(target.shelterMessage ?? '');
-    setComposeOpen(true);
-  };
-
-  const closeCompose = () => {
-    if (working) return;
-    setComposeOpen(false);
-    setComposeId(null);
-    setComposeSlot('');
-    setComposeMessage('');
-  };
-
-  const openDecline = (thread?: VisitThread | null) => {
-    const target = thread ?? composeThread ?? selected;
-    if (!target) return;
-    setDeclineId(target.id);
-    setReason('');
-    setDeclineOpen(true);
-  };
-
-  const closeDecline = () => {
-    if (working) return;
-    setDeclineOpen(false);
-    setDeclineId(null);
-    setReason('');
-  };
-
-  /** Emails the adopter the visit date + message and confirms the request. */
-  const sendVisitEmail = async () => {
-    if (!composeThread) return;
-    const slot = composeSlot.trim();
-    if (!slot) {
-      toast.error('Add the visit date and time before sending.');
-      return;
-    }
-    setWorking(true);
-    try {
-      const thread = await visitService.updateStatus(composeThread.id, {
-        status: 'confirmed',
-        confirmedSlot: slot,
-        message: composeMessage.trim() || undefined,
-      });
-      setThreads((prev) => prev.map((t) => (t.id === composeThread.id ? thread : t)));
-      setComposeOpen(false);
-      setComposeId(null);
-      setComposeSlot('');
-      setComposeMessage('');
-      toast.success(
-        composeThread.status === 'confirmed'
-          ? `Updated visit emailed to ${thread.adopter?.email ?? 'the adopter'}.`
-          : `Visit approved — ${thread.pet?.name ?? 'the visit'} was emailed to the adopter.`,
-      );
-      await fetchThreads();
-    } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : 'Failed to send the visit email.');
-    } finally {
-      setWorking(false);
-    }
-  };
-
-  /** Mark a confirmed visit completed after confirmation in modal. */
-  const completeVisit = async (thread: VisitThread) => {
-    setWorking(true);
-    try {
-      const updated = await visitService.updateStatus(thread.id, { status: 'completed' });
-      setThreads((prev) => prev.map((t) => (t.id === thread.id ? updated : t)));
-      toast.success('Visit marked completed.');
-      setCompleteTarget(null);
-      await fetchThreads();
-    } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : 'Failed to update visit.');
-    } finally {
-      setWorking(false);
-    }
-  };
-
-  const handleStatus = async (status: VisitStatus) => {
-    if (!declineThread) return;
-    setWorking(true);
-    try {
-      const thread = await visitService.updateStatus(declineThread.id, {
-        status,
-        cancelReason: status === 'cancelled' ? reason.trim() || undefined : undefined,
-      });
-      setThreads((prev) => prev.map((t) => (t.id === declineThread.id ? thread : t)));
-      setDeclineOpen(false);
-      setDeclineId(null);
-      setReason('');
-      toast.success(
-        status === 'cancelled'
-          ? `${thread.pet?.name ?? 'Visit'} declined — the adopter has been emailed.`
-          : 'Visit marked completed.',
-      );
-      await fetchThreads();
-    } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : 'Failed to update visit.');
-    } finally {
-      setWorking(false);
-    }
-  };
-
-  const toolbar = (
-    <div className="flex flex-wrap items-center gap-2">
-      <Select
-        aria-label="Filter by status"
-        className="h-9 w-[150px]"
-        value={statusFilter}
-        onChange={(e) => {
-          setStatusFilter(e.target.value);
-          setPage(1);
-        }}
-        options={STATUS_FILTER_OPTIONS}
-      />
-    </div>
+  const [compose, setCompose] = useState<{
+    threadId: string;
+    slot: string;
+    message: string;
+  } | null>(null);
+  const [decline, setDecline] = useState<{ threadId: string; reason: string } | null>(null);
+  const [composeErrors, setComposeErrors] = useState<
+    Partial<Record<'slot' | 'message', string>>
+  >({});
+  const [declineErrors, setDeclineErrors] = useState<
+    Partial<Record<'reason', string>>
+  >({});
+  const [completeId, setCompleteId] = useState<string | null>(null);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [deleteTarget, setDeleteTarget] = useState<{ ids: string[]; label: string } | null>(
+    null,
   );
 
-  const pagination =
-    total > 0 ? (
-      <TablePagination
-        currentPage={page}
-        totalItems={total}
-        pageSize={pageSize}
-        onPageChange={setPage}
-        onPageSizeChange={(newSize) => {
-          setPageSize(newSize);
-          setPage(1);
-        }}
-        label="visits"
-      />
-    ) : undefined;
+  const { data, isLoading, isFetching, error, refetch } = useQuery({
+    queryKey: [
+      ...SHELTER_VISITS_QUERY_KEY,
+      { page, pageSize, status: statusFilter, search: query.trim() },
+    ],
+    queryFn: () =>
+      visitService.listForShelter({
+        page,
+        limit: pageSize,
+        status: statusFilter,
+        search: query.trim(),
+      }),
+  });
 
-  /** The view modal only shows the request — decisions start from Email. */
-  const detailsFooter = selected ? (
-    <Button size="sm" variant="outline" className="w-full" onClick={closeDetails}>
-      Close
-    </Button>
-  ) : undefined;
+  const { isRefreshing, refresh } = useRefresh(refetch);
+  const showLoading = isLoading || isFetching || isRefreshing;
+
+  const threads = data?.items ?? [];
+  const total = data?.total ?? 0;
+  const shelterTotal = data?.shelterTotal ?? total;
+
+  const pageIds = threads.map((thread) => thread.id);
+  const allSelected =
+    pageIds.length > 0 && pageIds.every((id) => selectedIds.has(id));
+
+  const toggleSelectAll = () => {
+    setSelectedIds((previous) => {
+      const next = new Set(previous);
+      if (allSelected) pageIds.forEach((id) => next.delete(id));
+      else pageIds.forEach((id) => next.add(id));
+      return next;
+    });
+  };
+
+  const toggleSelected = (id: string) => {
+    setSelectedIds((previous) => {
+      const next = new Set(previous);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const describeThread = (thread: VisitThread) =>
+    `Visit request for ${thread.pet?.name ?? 'pet'}${
+      thread.adopter?.name ? ` from ${thread.adopter.name}` : ''
+    }`;
+
+  const describeSelectedThreads = () => {
+    const selected = threads.filter((thread) => selectedIds.has(thread.id));
+    const [first] = selected;
+    if (selected.length === 1 && first) return describeThread(first);
+    const names = [...new Set(selected.map((thread) => thread.pet?.name ?? 'pet'))];
+    const shown = names.slice(0, 3).join(', ');
+    const extra = names.length > 3 ? ` and ${names.length - 3} more` : '';
+    return `${selected.length} visit requests for ${shown}${extra}`;
+  };
+
+  // The list row is enough to open the view; the detail query adds the email
+  // history the list endpoint does not return.
+  const { data: selectedDetails } = useQuery({
+    queryKey: ['shelterVisit', selectedId],
+    queryFn: () => visitService.getForShelter(selectedId as string),
+    enabled: selectedId !== null,
+  });
+
+  const selected = selectedDetails ?? threads.find((thread) => thread.id === selectedId) ?? null;
+  const composeThread = compose
+    ? (threads.find((thread) => thread.id === compose.threadId) ?? null)
+    : null;
+  const declineThread = decline
+    ? (threads.find((thread) => thread.id === decline.threadId) ?? null)
+    : null;
+  const completeThread = threads.find((thread) => thread.id === completeId) ?? null;
+
+  const closeDialogs = () => {
+    setCompose(null);
+    setDecline(null);
+    setComposeErrors({});
+    setDeclineErrors({});
+    setCompleteId(null);
+  };
+
+  const { approveMutation, declineMutation, completeMutation, deleteMutation, isWorking, isDeleting } =
+    useShelterVisitMutations({
+      onUpdated: closeDialogs,
+      onDeleted: () => {
+        setDeleteTarget(null);
+        setSelectedIds(new Set());
+      },
+    });
+
+  const openCompose = (thread: VisitThread) => {
+    setComposeErrors({});
+    setCompose({
+      threadId: thread.id,
+      // Rescheduling starts from the structured confirmed date/time.
+      slot: toDatetimeLocal(thread.confirmedFor),
+      message: thread.shelterMessage ?? '',
+    });
+  };
+
+  const openDecline = (thread: VisitThread) => {
+    setDeclineErrors({});
+    setDecline({ threadId: thread.id, reason: '' });
+  };
+
+  const handleSendVisitEmail = () => {
+    if (!compose || !composeThread) return;
+
+    const scheduled = new Date(compose.slot);
+    if (!compose.slot || Number.isNaN(scheduled.getTime())) {
+      setComposeErrors({ slot: 'Pick the visit date and time.' });
+      toast.warning('Please fix the highlighted fields.');
+      focusFirstError();
+      return;
+    }
+    if (scheduled.getTime() <= Date.now()) {
+      setComposeErrors({ slot: 'Pick a date and time in the future.' });
+      toast.warning('Please fix the highlighted fields.');
+      focusFirstError();
+      return;
+    }
+
+    const parsed = visitEmailSchema.safeParse({
+      slot: compose.slot,
+      message: compose.message,
+    });
+    if (!parsed.success) {
+      setComposeErrors(toFieldErrors<'slot' | 'message'>(parsed.error.issues));
+      toast.warning('Please fix the highlighted fields.');
+      focusFirstError();
+      return;
+    }
+    setComposeErrors({});
+
+    approveMutation.mutate({
+      id: composeThread.id,
+      slot: formatVisitSlot(compose.slot),
+      confirmedFor: compose.slot,
+      message: parsed.data.message || undefined,
+      isReschedule: composeThread.status === 'confirmed',
+      petName: composeThread.pet?.name,
+      adopterEmail: composeThread.adopter?.email,
+    });
+  };
+
+  const handleDecline = () => {
+    if (!decline || !declineThread) return;
+
+    const parsed = visitDeclineSchema.safeParse({ reason: decline.reason });
+    if (!parsed.success) {
+      setDeclineErrors(toFieldErrors<'reason'>(parsed.error.issues));
+      toast.warning('Please fix the highlighted fields.');
+      focusFirstError();
+      return;
+    }
+    setDeclineErrors({});
+
+    declineMutation.mutate({
+      id: declineThread.id,
+      reason: parsed.data.reason || undefined,
+      petName: declineThread.pet?.name,
+    });
+  };
+
+  const handleComplete = () => {
+    if (!completeThread) return;
+    completeMutation.mutate({ id: completeThread.id, petName: completeThread.pet?.name });
+  };
 
   return (
     <div className="w-full px-4 py-6 sm:px-6">
       <SectionHeader
         title="Visit requests"
         subtitle="Approve or decline meet-and-greet requests — the adopter is emailed automatically."
+        actions={<RefreshButton onRefresh={refresh} />}
       />
 
       <div className="mt-6">
         <TableCard
           title="Visits"
-          description="One request per pet. Email the adopter to approve, reschedule, or decline."
+          description={
+            showLoading
+              ? 'One request per pet. Email the adopter to approve, reschedule, or decline.'
+              : `One request per pet. Email the adopter to approve, reschedule, or decline — ${shelterTotal} of ${MAX_VISITS_PER_SHELTER} visit requests used.`
+          }
           icon={CalendarClock}
-          toolbar={toolbar}
-          isEmpty={!loading && threads.length === 0}
+          toolbar={
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <DebouncedSearchInput
+                aria-label="Search visits"
+                value={query}
+                onDebouncedChange={(value) => {
+                  setQuery(value);
+                  setPage(1);
+                  setSelectedIds(new Set());
+                }}
+                placeholder="Search pet or adopter"
+                className="sm:w-[240px]"
+              />
+              <div className="flex flex-wrap items-center gap-2">
+                <Select
+                  aria-label="Filter by status"
+                  className="h-9 w-[150px]"
+                  value={statusFilter}
+                  onChange={(e) => {
+                    setStatusFilter(e.target.value as VisitStatusFilter);
+                    setPage(1);
+                    setSelectedIds(new Set());
+                  }}
+                  options={VISIT_STATUS_FILTER_OPTIONS}
+                />
+                {selectedIds.size > 0 ? (
+                  <Button
+                    size="sm"
+                    variant="destructive"
+                    className="h-9"
+                    onClick={() =>
+                      setDeleteTarget({
+                        ids: [...selectedIds],
+                        label: describeSelectedThreads(),
+                      })
+                    }
+                  >
+                    <Trash2 className="size-4" /> Delete selected ({selectedIds.size})
+                  </Button>
+                ) : null}
+              </div>
+            </div>
+          }
+          error={
+            error ? describeApiError(error, 'Failed to load visits. Please try again.') : null
+          }
+          errorTitle="Could not load visits"
+          onRetry={() => void refetch()}
+          isEmpty={!showLoading && !error && threads.length === 0}
           emptyTitle="No visit requests"
           emptyDescription="Adopter meet-and-greet requests will appear here."
-          footer={pagination}
+          footer={
+            total > 10 ? (
+              <TablePagination
+                currentPage={page}
+                totalItems={total}
+                pageSize={pageSize}
+                onPageChange={(next) => {
+                  setPage(next);
+                  setSelectedIds(new Set());
+                }}
+                onPageSizeChange={(newSize) => {
+                  setPageSize(newSize);
+                  setPage(1);
+                  setSelectedIds(new Set());
+                }}
+                label="visits"
+              />
+            ) : undefined
+          }
           contentClassName="px-0"
         >
           <div className="hidden md:block">
             <Table>
               <TableHeader>
                 <TableRow>
+                  <TableHead className="w-10">
+                    <Checkbox
+                      checked={allSelected}
+                      onChange={toggleSelectAll}
+                      aria-label="Select all visit requests on this page"
+                    />
+                  </TableHead>
                   <TableHead>Pet</TableHead>
                   <TableHead>Adopter</TableHead>
                   <TableHead>Preferred slot</TableHead>
@@ -275,11 +371,18 @@ export const ShelterVisitsPage = () => {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {loading ? (
-                  <TableSkeletonRows columns={6} rows={5} avatar />
+                {showLoading ? (
+                  <TableSkeletonRows columns={7} rows={5} avatar />
                 ) : (
                   threads.map((thread) => (
                     <TableRow key={thread.id}>
+                      <TableCell className="w-10">
+                        <Checkbox
+                          checked={selectedIds.has(thread.id)}
+                          onChange={() => toggleSelected(thread.id)}
+                          aria-label={`Select visit request for ${thread.pet?.name ?? 'pet'}`}
+                        />
+                      </TableCell>
                       <TableCell>
                         <div className="flex items-center gap-3">
                           {thread.pet?.imageUrl ? (
@@ -295,48 +398,66 @@ export const ShelterVisitsPage = () => {
                       <TableCell className="text-muted-foreground">
                         {thread.adopter?.name ?? '—'}
                       </TableCell>
-                      <TableCell className="text-muted-foreground">{thread.preferredSlot}</TableCell>
+                      <TableCell className="text-muted-foreground">
+                        {thread.preferredSlot}
+                      </TableCell>
                       <TableCell>
                         <VisitStatusBadge status={thread.status} />
                       </TableCell>
                       <TableCell className="whitespace-nowrap text-muted-foreground">
                         {formatDate(thread.updatedAt)}
                       </TableCell>
-                      <TableCell className="text-center">
-                        <Button
-                          variant="ghost"
-                          size="icon-sm"
-                          className="text-muted-foreground"
-                          aria-label={`View visit request for ${thread.pet?.name ?? 'pet'}`}
-                          onClick={() => void openRequest(thread.id)}
-                        >
-                          <Eye className="size-4" />
-                        </Button>
-                        {thread.status === 'requested' || thread.status === 'confirmed' ? (
-                          <Button
-                            variant="ghost"
-                            size="icon-sm"
-                            className="text-orange-600 hover:bg-orange-50 hover:text-orange-700 dark:text-orange-400 dark:hover:bg-orange-950/40"
-                            aria-label={`Email ${thread.adopter?.name ?? 'adopter'} about the visit`}
-                            title="Email the adopter (date + message)"
-                            onClick={() => openCompose(thread)}
-                          >
-                            <Mail className="size-4" />
-                          </Button>
-                        ) : null}
-                        {thread.status === 'confirmed' ? (
-                          <Button
-                            variant="ghost"
-                            size="icon-sm"
-                            className="text-green-600 hover:bg-green-50 hover:text-green-700 dark:text-green-400 dark:hover:bg-green-950/40"
-                            aria-label={`Mark visit for ${thread.pet?.name ?? 'pet'} completed`}
-                            title="Mark completed"
-                            onClick={() => setCompleteTarget(thread)}
-                            disabled={working}
-                          >
-                            <Flag className="size-4" />
-                          </Button>
-                        ) : null}
+                      <TableCell className="text-center">                          <div className="flex justify-center gap-1">
+                            <Button
+                              variant="ghost"
+                              size="icon-sm"
+                              className="text-muted-foreground"
+                              aria-label={`View visit request for ${thread.pet?.name ?? 'pet'}`}
+                              onClick={() => setSelectedId(thread.id)}
+                            >
+                              <Eye className="size-4" />
+                            </Button>
+                            {thread.status === 'requested' || thread.status === 'confirmed' ? (
+                              <Button
+                                variant="ghost"
+                                size="icon-sm"
+                                className="text-orange-600 hover:bg-orange-50 hover:text-orange-700 dark:text-orange-400 dark:hover:bg-orange-950/40"
+                                aria-label={`Email ${thread.adopter?.name ?? 'adopter'} about the visit`}
+                                title="Email the adopter (date + message)"
+                                onClick={() => openCompose(thread)}
+                              >
+                                <Mail className="size-4" />
+                              </Button>
+                            ) : null}
+                            {thread.status === 'confirmed' ? (
+                              <Button
+                                variant="ghost"
+                                size="icon-sm"
+                                className="text-green-600 hover:bg-green-50 hover:text-green-700 dark:text-green-400 dark:hover:bg-green-950/40"
+                                aria-label={`Mark visit for ${thread.pet?.name ?? 'pet'} completed`}
+                                title="Mark completed"
+                                onClick={() => setCompleteId(thread.id)}
+                                disabled={isWorking}
+                              >
+                                <Flag className="size-4" />
+                              </Button>
+                            ) : null}
+                            <Button
+                              variant="ghost"
+                              size="icon-sm"
+                              className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+                              aria-label={`Delete visit request for ${thread.pet?.name ?? 'pet'}`}
+                              title="Delete visit request"
+                              onClick={() =>
+                                setDeleteTarget({
+                                  ids: [thread.id],
+                                  label: describeThread(thread),
+                                })
+                              }
+                            >
+                              <Trash2 className="size-4" />
+                            </Button>
+                          </div>
                       </TableCell>
                     </TableRow>
                   ))
@@ -345,358 +466,103 @@ export const ShelterVisitsPage = () => {
             </Table>
           </div>
 
-          <div className="grid gap-3 p-4 md:hidden">
-            {loading ? (
+          <div className="grid grid-cols-1 gap-3 p-4 md:hidden">
+            {showLoading ? (
               <RecordCardSkeleton count={3} />
             ) : (
               threads.map((thread) => (
-                <RecordCard
+                <VisitMobileCard
                   key={thread.id}
-                  imageUrl={thread.pet?.imageUrl}
-                  imageAlt={thread.pet?.name}
-                  title={thread.pet?.name ?? 'Visit'}
-                  subtitle={`${thread.adopter?.name ?? 'Adopter'} · ${thread.preferredSlot}`}
-                  badges={<VisitStatusBadge status={thread.status} />}
-                  actions={
-                    <>
-                      <Button
-                        variant="ghost"
-                        size="icon-sm"
-                        className="text-muted-foreground"
-                        aria-label={`View visit request for ${thread.pet?.name ?? 'pet'}`}
-                        onClick={() => void openRequest(thread.id)}
-                      >
-                        <Eye className="size-4" />
-                      </Button>
-                      {thread.status === 'requested' || thread.status === 'confirmed' ? (
-                        <Button
-                          variant="ghost"
-                          size="icon-sm"
-                          className="text-orange-600 hover:bg-orange-50 hover:text-orange-700 dark:text-orange-400 dark:hover:bg-orange-950/40"
-                          aria-label={`Email ${thread.adopter?.name ?? 'adopter'} about the visit`}
-                          onClick={() => openCompose(thread)}
-                        >
-                          <Mail className="size-4" />
-                        </Button>
-                      ) : null}
-                      {thread.status === 'confirmed' ? (
-                        <Button
-                          variant="ghost"
-                          size="icon-sm"
-                          className="text-green-600 hover:bg-green-50 hover:text-green-700 dark:text-green-400 dark:hover:bg-green-950/40"
-                          aria-label={`Mark visit for ${thread.pet?.name ?? 'pet'} completed`}
-                          title="Mark completed"
-                          onClick={() => setCompleteTarget(thread)}
-                          disabled={working}
-                        >
-                          <Flag className="size-4" />
-                        </Button>
-                      ) : null}
-                    </>
+                  thread={thread}
+                  isWorking={isWorking}
+                  selected={selectedIds.has(thread.id)}
+                  onSelectChange={() => toggleSelected(thread.id)}
+                  onView={() => setSelectedId(thread.id)}
+                  onEmail={() => openCompose(thread)}
+                  onComplete={() => setCompleteId(thread.id)}
+                  onDelete={() =>
+                    setDeleteTarget({
+                      ids: [thread.id],
+                      label: describeThread(thread),
+                    })
                   }
-                >
-                  <p className="text-sm text-muted-foreground">
-                    Updated {formatDate(thread.updatedAt)}
-                  </p>
-                </RecordCard>
+                />
               ))
             )}
           </div>
         </TableCard>
       </div>
 
-      {/* Read-only request view — no inputs; decisions happen in the dialogs below. */}
-      <DetailsModal
-        open={selected !== null}
-        onClose={closeDetails}
-        title={selected?.pet?.name ? `Visit request · ${selected.pet.name}` : 'Visit request'}
-        description={
-          selected
-            ? `Preferred ${selected.preferredSlot}${selected.confirmedSlot ? ` · confirmed ${selected.confirmedSlot}` : ''}`
-            : undefined
-        }
-        icon={CalendarClock}
-        size="xl"
-        footer={detailsFooter}
-      >
-        {selected && (
-          <div className="space-y-4">
-            <div className="flex flex-wrap items-center gap-2">
-              <VisitStatusBadge status={selected.status} />
-              <span className="text-sm text-muted-foreground">
-                Requested {formatDate(selected.createdAt)}
-              </span>
-            </div>
+      <VisitDetailsModal thread={selected} onClose={() => setSelectedId(null)} />
 
-            <dl className="grid gap-3 rounded-lg border p-4 text-sm sm:grid-cols-2">
-              <div>
-                <dt className="font-mono text-[11px] uppercase tracking-[0.16em] text-muted-foreground">
-                  Adopter
-                </dt>
-                <dd className="mt-1">{selected.adopter?.name ?? '—'}</dd>
-              </div>
-              <div>
-                <dt className="font-mono text-[11px] uppercase tracking-[0.16em] text-muted-foreground">
-                  Email
-                </dt>
-                <dd className="mt-1 break-all">{selected.adopter?.email ?? '—'}</dd>
-              </div>
-              <div>
-                <dt className="font-mono text-[11px] uppercase tracking-[0.16em] text-muted-foreground">
-                  Preferred slot
-                </dt>
-                <dd className="mt-1">{selected.preferredSlot}</dd>
-              </div>
-              <div>
-                <dt className="font-mono text-[11px] uppercase tracking-[0.16em] text-muted-foreground">
-                  Confirmed slot
-                </dt>
-                <dd className="mt-1">{selected.confirmedSlot ?? 'Not confirmed yet'}</dd>
-              </div>
-              <div>
-                <dt className="font-mono text-[11px] uppercase tracking-[0.16em] text-muted-foreground">
-                  Last update
-                </dt>
-                <dd className="mt-1">{formatDate(selected.updatedAt)}</dd>
-              </div>
-            </dl>
-
-            <div className="rounded-lg border p-3">
-              <p className="text-xs uppercase tracking-wide text-muted-foreground">
-                Reason for visit
-              </p>
-              <p className="mt-1 whitespace-pre-line text-sm leading-relaxed">
-                {selected.reason?.trim() || 'No reason provided.'}
-              </p>
-            </div>
-
-            {selected.shelterMessage ? (
-              <div className="rounded-lg border p-3">
-                <p className="text-xs uppercase tracking-wide text-muted-foreground">
-                  Email sent to the adopter
-                </p>
-                <p className="mt-1 whitespace-pre-line text-sm leading-relaxed">
-                  {selected.shelterMessage}
-                </p>
-              </div>
-            ) : null}
-
-            {selected.status === 'cancelled' && selected.cancelReason ? (
-              <p className="rounded-lg bg-muted/60 px-3 py-2 text-sm text-muted-foreground">
-                Note: {selected.cancelReason}
-              </p>
-            ) : null}
-
-            {!actionable ? (
-              <p className="text-xs text-muted-foreground">
-                This visit request is closed. Its status and email history stay here for reference.
-              </p>
-            ) : null}
-          </div>
-        )}
-      </DetailsModal>
-
-      {/* Confirmation email: visit date + message, like the inquiry reply. */}
-      <SlideOver
-        open={composeOpen}
-        onClose={closeCompose}
-        title={
-          composeThread ? `Email ${composeThread.adopter?.name ?? 'the adopter'}` : 'Email adopter'
-        }
-        description={
-          composeThread
-            ? `${composeThread.pet?.name ?? 'Visit'} · ${composeThread.adopter?.email ?? 'no email on file'}`
-            : undefined
-        }
-        icon={Mail}
-        footer={
-          <div className="flex flex-wrap items-center justify-end gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              className="mr-auto text-destructive"
-              onClick={() => {
-                setComposeOpen(false);
-                openDecline(composeThread);
-              }}
-              disabled={working}
-            >
-              <X className="size-3.5" />{' '}
-              {composeThread?.status === 'confirmed' ? 'Cancel visit' : 'Decline instead'}
-            </Button>
-            <Button variant="outline" size="sm" onClick={closeCompose} disabled={working}>
-              Close
-            </Button>
-            <Button
-              size="sm"
-              onClick={() => void sendVisitEmail()}
-              disabled={working || !composeSlot.trim()}
-            >
-              {working
-                ? 'Sending…'
-                : composeThread?.status === 'confirmed'
-                  ? 'Send update'
-                  : 'Send & approve'}
-            </Button>
-          </div>
-        }
-      >
-        {composeThread && (
-          <div className="space-y-4">
-            <div className="rounded-lg border p-3">
-              <p className="text-xs uppercase tracking-wide text-muted-foreground">To</p>
-              <p className="mt-1 text-sm font-medium">{composeThread.adopter?.name ?? 'Adopter'}</p>
-              <p className="text-sm text-muted-foreground">
-                {composeThread.adopter?.email ?? 'No email on file'}
-              </p>
-            </div>
-
-            <div className="rounded-lg bg-muted/60 px-3 py-2">
-              <p className="text-xs font-semibold">Their request</p>
-              <p className="mt-0.5 text-sm">
-                {composeThread.pet?.name ?? 'Pet'} · preferred {composeThread.preferredSlot}
-              </p>
-            </div>
-
-            <div>
-              <Label htmlFor="visit-email-slot">Visit date &amp; time</Label>
-              <Input
-                id="visit-email-slot"
-                value={composeSlot}
-                onChange={(e) => setComposeSlot(e.target.value)}
-                placeholder="e.g. Sat, Oct 18 at 10:00 AM"
-                maxLength={255}
-              />
-            </div>
-
-            <div>
-              <Label htmlFor="visit-email-message">Message</Label>
-              <Textarea
-                id="visit-email-message"
-                value={composeMessage}
-                onChange={(e) => setComposeMessage(e.target.value)}
-                placeholder={`Where to meet and anything ${composeThread.adopter?.name ?? 'they'} should bring…`}
-                className="min-h-40"
-                maxLength={1000}
-              />
-            </div>
-
-            <p className="text-xs text-muted-foreground">
-              Sending emails the adopter this date and message and{' '}
-              {composeThread.status === 'confirmed'
-                ? 'updates the confirmed schedule.'
-                : 'approves the visit request.'}
-            </p>
-          </div>
-        )}
-      </SlideOver>
-
-      {/* Decline / cancel visit with a reason emailed to the adopter. */}
-      <SlideOver
-        open={declineOpen}
-        onClose={closeDecline}
-        title={
-          declineThread?.status === 'confirmed' ? 'Cancel this visit?' : 'Decline this visit?'
-        }
-        description={
-          declineThread
-            ? `${declineThread.pet?.name ?? 'Visit'} · ${declineThread.adopter?.email ?? 'adopter'}`
-            : undefined
-        }
-        icon={X}
-        footer={
-          <div className="flex justify-end gap-2">
-            <Button variant="outline" size="sm" onClick={closeDecline} disabled={working}>
-              Keep request
-            </Button>
-            <Button
-              variant="destructive"
-              size="sm"
-              onClick={() => void handleStatus('cancelled')}
-              disabled={working}
-            >
-              {working
-                ? 'Working…'
-                : declineThread?.status === 'confirmed'
-                  ? 'Cancel visit'
-                  : 'Decline request'}
-            </Button>
-          </div>
-        }
-      >
-        <div className="space-y-4">
-          <p className="text-sm text-muted-foreground">
-            The adopter is emailed this decision. Their request keeps the cancelled status here.
-          </p>
-          <div>
-            <Label htmlFor="visit-cancel-reason">Reason emailed to the adopter (optional)</Label>
-            <Textarea
-              id="visit-cancel-reason"
-              value={reason}
-              onChange={(e) => setReason(e.target.value)}
-              placeholder="Let the adopter know why…"
-              maxLength={500}
-            />
-          </div>
-        </div>
-      </SlideOver>
-
-      {/* Confirmation modal for marking a visit completed */}
-      <DetailsModal
-        open={completeTarget !== null}
-        onClose={() => {
-          if (!working) setCompleteTarget(null);
+      <VisitEmailSlideOver
+        thread={composeThread}
+        slot={compose?.slot ?? ''}
+        message={compose?.message ?? ''}
+        isSending={approveMutation.isPending}
+        errors={composeErrors}
+        onSlotChange={(value) => {
+          setCompose((draft) => (draft ? { ...draft, slot: value } : draft));
+          setComposeErrors((errors) => ({ ...errors, slot: undefined }));
         }}
-        title="Mark visit as completed?"
-        description="Verify this meet-and-greet session has taken place."
-        icon={Flag}
-        size="md"
-        footer={
-          <div className="flex w-full items-center justify-end gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setCompleteTarget(null)}
-              disabled={working}
-            >
-              Cancel
-            </Button>
-            <Button
-              size="sm"
-              className="bg-green-600 hover:bg-green-700 text-white"
-              onClick={() => {
-                if (completeTarget) void completeVisit(completeTarget);
-              }}
-              disabled={working}
-            >
-              {working ? 'Updating…' : 'Yes, mark completed'}
-            </Button>
-          </div>
+        onMessageChange={(value) => {
+          setCompose((draft) => (draft ? { ...draft, message: value } : draft));
+          setComposeErrors((errors) => ({ ...errors, message: undefined }));
+        }}
+        onClose={() => setCompose(null)}
+        onDecline={() => {
+          if (!composeThread) return;
+          setCompose(null);
+          openDecline(composeThread);
+        }}
+        onSend={handleSendVisitEmail}
+      />
+
+      <VisitDeclineSlideOver
+        thread={declineThread}
+        reason={decline?.reason ?? ''}
+        isWorking={declineMutation.isPending}
+        errors={declineErrors}
+        onReasonChange={(value) => {
+          setDecline((draft) => (draft ? { ...draft, reason: value } : draft));
+          setDeclineErrors((errors) => ({ ...errors, reason: undefined }));
+        }}
+        onClose={() => setDecline(null)}
+        onConfirm={handleDecline}
+      />
+
+      <VisitCompleteModal
+        thread={completeThread}
+        isWorking={completeMutation.isPending}
+        onClose={() => {
+          if (!completeMutation.isPending) setCompleteId(null);
+        }}
+        onConfirm={handleComplete}
+      />
+
+      <ConfirmDeleteModal
+        open={deleteTarget !== null}
+        onClose={() => {
+          if (!isDeleting) setDeleteTarget(null);
+        }}
+        onConfirm={() => {
+          if (deleteTarget) {
+            deleteMutation.mutate({
+              ids: deleteTarget.ids,
+              description: deleteTarget.label,
+            });
+          }
+        }}
+        title={
+          deleteTarget && deleteTarget.ids.length === 1
+            ? 'Delete visit request?'
+            : `Delete ${deleteTarget?.ids.length ?? 0} visit requests?`
         }
-      >
-        {completeTarget && (
-          <div className="space-y-3 text-sm">
-            <p className="text-muted-foreground">
-              Are you sure you want to mark the visit for{' '}
-              <strong className="text-foreground font-medium">{completeTarget.pet?.name ?? 'this pet'}</strong> with{' '}
-              <strong className="text-foreground font-medium">{completeTarget.adopter?.name ?? 'the adopter'}</strong> as completed?
-            </p>
-            <div className="rounded-lg bg-muted/60 p-3 text-xs space-y-1">
-              <div>
-                <span className="text-muted-foreground">Confirmed slot:</span>{' '}
-                <span className="font-medium text-foreground">{completeTarget.confirmedSlot || completeTarget.preferredSlot}</span>
-              </div>
-              <div>
-                <span className="text-muted-foreground">Adopter:</span>{' '}
-                <span className="font-medium text-foreground">{completeTarget.adopter?.name ?? '—'} ({completeTarget.adopter?.email ?? '—'})</span>
-              </div>
-            </div>
-            <p className="text-xs text-muted-foreground">
-              This will update the visit status to completed and conclude this scheduled visit.
-            </p>
-          </div>
-        )}
-      </DetailsModal>
+        description="This permanently removes the selected visit requests from your records. The adopter is not notified."
+        itemName={deleteTarget?.label}
+        confirmLabel="Delete"
+        isDeleting={isDeleting}
+      />
     </div>
   );
 };

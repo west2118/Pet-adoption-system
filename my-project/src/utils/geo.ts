@@ -8,8 +8,8 @@ const toRadians = (degrees: number): number => (degrees * Math.PI) / 180;
 /**
  * Great-circle distance between two coordinates in kilometres.
  *
- * Mirrors the SQL Haversine expression used by `GET /pets?lat=&lng=` so the
- * demo-mode mock fallback ranks pets exactly like the backend does.
+ * Mirrors the SQL Haversine expression used by `GET /pets?lat=&lng=` so
+ * client-side ranking matches the backend.
  */
 export const haversineKm = (from: Coordinates, to: Coordinates): number => {
   const earthRadiusKm = 6371;

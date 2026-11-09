@@ -36,12 +36,17 @@ export const listWaiverTemplates = async (): Promise<WaiverTemplate[]> => {
   return templates;
 };
 
+export interface WaiverTemplatePage extends PaginatedResult<WaiverTemplate> {
+  /** Unfiltered count of the shelter's own templates (used for the cap). */
+  customTotal: number;
+}
+
 export const listWaiverTemplatesPaginated = async (options: {
   page?: number;
   limit?: number;
   category?: string;
   search?: string;
-} = {}): Promise<PaginatedResult<WaiverTemplate>> => {
+} = {}): Promise<WaiverTemplatePage> => {
   const page = options.page ?? 1;
   const limit = options.limit ?? 10;
   const queryParams = new URLSearchParams();
@@ -50,15 +55,17 @@ export const listWaiverTemplatesPaginated = async (options: {
   if (options.category && options.category !== 'all') queryParams.set('category', options.category);
   if (options.search) queryParams.set('search', options.search);
 
-  const { data, meta } = await apiRequestWithMeta<{ templates: WaiverTemplate[] }>(
-    `/shelter/waiver-templates?${queryParams.toString()}`,
-    { auth: 'full' },
-  );
+  const { data, meta } = await apiRequestWithMeta<{
+    templates: WaiverTemplate[];
+    customTotal?: number;
+  }>(`/shelter/waiver-templates?${queryParams.toString()}`, { auth: 'full' });
   return {
     items: data.templates,
     total: meta?.total ?? data.templates.length,
     page: meta?.page ?? page,
     limit: meta?.limit ?? limit,
+    customTotal:
+      data.customTotal ?? data.templates.filter((template) => !template.isDefault).length,
   };
 };
 

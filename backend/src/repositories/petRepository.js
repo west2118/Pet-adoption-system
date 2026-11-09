@@ -318,3 +318,23 @@ export const deletePet = async (id) => {
   const { rowCount } = await pool.query('DELETE FROM pets WHERE id = $1', [id]);
   return rowCount > 0;
 };
+
+/** Total pet records a shelter holds (all visibilities and statuses). */
+export const countPetsByShelter = async (shelterId) => {
+  const { rows } = await pool.query(
+    'SELECT COUNT(*)::int AS total FROM pets WHERE shelter_id = $1',
+    [shelterId],
+  );
+  return rows[0].total;
+};
+
+/** Deletes selected pets that belong to the shelter. */
+export const deletePetsByIds = async (ids, shelterId) => {
+  const { rows } = await pool.query(
+    `DELETE FROM pets
+      WHERE id = ANY($1::uuid[]) AND shelter_id = $2
+      RETURNING id`,
+    [ids, shelterId],
+  );
+  return rows.map((row) => row.id);
+};

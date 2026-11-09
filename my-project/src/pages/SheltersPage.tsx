@@ -1,6 +1,6 @@
 import { ArrowRight, HeartHandshake } from 'lucide-react';
 import { Link } from 'react-router-dom';
-import { BlurText, GridOverlay, Reveal, TablePagination } from '@/components/shared';
+import { BlurText, ErrorState, GridOverlay, Reveal, TablePagination } from '@/components/shared';
 import { ShelterPlate } from '@/components/features/ShelterPlate';
 import { EmptyState, LoadingGrid } from '@/components/ui/Feedback';
 import { Button } from '@/components/ui/button';
@@ -11,7 +11,8 @@ const frame = 'mx-auto w-full max-w-[1400px] px-6 lg:px-12';
 export const SheltersPage = () => {
   // The directory is paged by the backend (10 rescues per request); the header
   // numbers come from its stats endpoint so they still cover the whole network.
-  const { shelters, total, pageSize, page, setPage, loading, error } = useSheltersPage();
+  const { shelters, total, pageSize, page, setPage, loading, error, refresh } =
+    useSheltersPage();
   const networkStats = useShelterStats();
 
   const totalPets = networkStats?.petsInCare ?? 0;
@@ -100,7 +101,11 @@ export const SheltersPage = () => {
             {loading ? (
               <LoadingGrid count={3} />
             ) : error ? (
-              <EmptyState title="Could not load shelters" description={error} />
+              <ErrorState
+                title="Could not load shelters"
+                description={error}
+                onRetry={refresh}
+              />
             ) : shelters.length === 0 ? (
               <EmptyState
                 title="No partner shelters yet"
@@ -126,7 +131,7 @@ export const SheltersPage = () => {
           </div>
 
           {/* Backend-owned paging: 10 rescues per request, `total` from its meta. */}
-          {total > 0 && (
+          {total > 12 && (
             <div className="mt-14">
               <TablePagination
                 currentPage={page}

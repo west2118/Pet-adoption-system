@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import type { CSSProperties, ElementType, ReactNode } from 'react';
-import { motion, useReducedMotion } from 'framer-motion';
+import { motion } from 'framer-motion';
 
 interface RevealProps {
   children: ReactNode;
@@ -15,8 +15,7 @@ interface RevealProps {
  * Fades + lifts its children into view once, the first time they enter the viewport.
  *
  * Backed by framer-motion's `whileInView`: the `once` viewport keeps it a single
- * reveal, and `useReducedMotion` skips the movement entirely when the user has
- * asked the OS for less motion.
+ * reveal. Motion is always enabled so the experience is identical on every device.
  */
 export const Reveal = ({
   children,
@@ -25,8 +24,6 @@ export const Reveal = ({
   as: Tag = 'div',
   style,
 }: RevealProps) => {
-  const shouldReduceMotion = useReducedMotion();
-
   // `motion.create` is memoised so a custom `as` never recreates the component
   // on every render (which would remount its subtree).
   const MotionTag = useMemo(() => {
@@ -38,7 +35,7 @@ export const Reveal = ({
 
   return (
     <MotionTag
-      initial={shouldReduceMotion ? false : { opacity: 0, y: 32 }}
+      initial={{ opacity: 0, y: 32 }}
       whileInView={{ opacity: 1, y: 0 }}
       viewport={{ once: true, margin: '0px 0px -24px 0px' }}
       transition={{

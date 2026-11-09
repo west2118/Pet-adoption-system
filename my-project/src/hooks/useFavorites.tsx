@@ -1,18 +1,14 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
-import { sessionStore } from '@/lib/apiClient';
 import { useAuth } from '@/hooks/useAuth';
-import {
-  favoriteService,
-  isServerPersistedPetId,
-  readFavoritesCache,
-  writeFavoritesCache,
-} from '@/services/favoriteService';
+import { favoriteService } from '@/services/favoriteService';
 import type { ToggleFavoriteResult } from '@/services/favoriteService';
+import { describeApiError } from '@/utils/errors';
 
 interface FavoritesContextValue {
   favorites: string[];
   loading: boolean;
+  error: string | null;
   isFavorite: (petId: string) => boolean;
   toggleFavorite: (petId: string) => Promise<ToggleFavoriteResult>;
 }
@@ -24,6 +20,7 @@ export const FavoritesProvider = ({ children }: { children: ReactNode }) => {
   const userId = user?.id ?? null;
   const [favorites, setFavorites] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   // Favorites belong to the signed-in user: reload whenever the session
   // identity changes, clear on logout. Guests hold no list — tapping a heart
@@ -31,7 +28,7 @@ export const FavoritesProvider = ({ children }: { children: ReactNode }) => {
   useEffect(() => {
     let mounted = true;
     (async () => {
-      if (!userId || !sessionStore.has()) {
+      if (!userId) {
         if (mounted) {
           setFavorites([]);
           setLoading(false);
@@ -41,11 +38,10 @@ export const FavoritesProvider = ({ children }: { children: ReactNode }) => {
       try {
         const pets = await favoriteService.listMine();
         if (!mounted) return;
-        const ids = pets.map((p) => p.id);
-        setFavorites(ids);
-        writeFavoritesCache(userId, ids);
-      } catch {
-        if (mounted) setFavorites(readFavoritesCache(userId));
+        setFavorites(pets.map((p) => p.id));
+        setError(null);
+      } catch (err) {
+        if (mounted) setError(describeApiError(err, 'Could not load your favorites.'));
       } finally {
         if (mounted) setLoading(false);
       }
@@ -57,7 +53,7 @@ export const FavoritesProvider = ({ children }: { children: ReactNode }) => {
 
   const toggleFavorite = useCallback(
     async (petId: string): Promise<ToggleFavoriteResult> => {
-      if (!userId || !sessionStore.has()) return 'login-required';
+      if (!userId) return 'login-required';
 
       const adding = !favorites.includes(petId);
       const next = adding
@@ -66,17 +62,9 @@ export const FavoritesProvider = ({ children }: { children: ReactNode }) => {
       // Optimistic flip so the heart responds instantly.
       setFavorites(next);
 
-      // Demo catalogue ids fail the backend UUID validation, so they persist
-      // in the per-user local cache only.
-      if (!isServerPersistedPetId(petId)) {
-        writeFavoritesCache(userId, next);
-        return adding ? 'added' : 'removed';
-      }
-
       try {
         if (adding) await favoriteService.add(petId);
         else await favoriteService.remove(petId);
-        writeFavoritesCache(userId, next);
         return adding ? 'added' : 'removed';
       } catch {
         // Roll back the optimistic flip — the heart returns to its real state.
@@ -87,21 +75,14 @@ export const FavoritesProvider = ({ children }: { children: ReactNode }) => {
     [favorites, userId],
   );
 
-  const isFavorite = useCallback(
-    (petId: string) => favorites.includes(petId),
-    [favorites],
-  );
+  const isFavorite = useCallback((petId: string) => favorites.includes(petId), [favorites]);
 
   const value = useMemo(
-    () => ({ favorites, loading, isFavorite, toggleFavorite }),
-    [favorites, loading, isFavorite, toggleFavorite],
+    () => ({ favorites, loading, error, isFavorite, toggleFavorite }),
+    [favorites, loading, error, isFavorite, toggleFavorite],
   );
 
-  return (
-    <FavoritesContext.Provider value={value}>
-      {children}
-    </FavoritesContext.Provider>
-  );
+  return <FavoritesContext.Provider value={value}>{children}</FavoritesContext.Provider>;
 };
 
 export const useFavorites = (): FavoritesContextValue => {

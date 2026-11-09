@@ -26,6 +26,9 @@ export const getShelterOverview = async (shelterId) => {
     appKpis,
     appStatusRes,
     trendRes,
+    inquiryKpis,
+    visitKpis,
+    upcomingVisitRes,
     recentAppsRes,
     inventoryRes,
   ] = await Promise.all([
@@ -79,6 +82,47 @@ export const getShelterOverview = async (shelterId) => {
       [shelterId],
     ),
     pool.query(
+      `SELECT COUNT(*)::int AS total,
+              COUNT(*) FILTER (WHERE NOT i.resolved)::int AS open
+         FROM inquiries i
+         JOIN pets p ON p.id = i.pet_id
+        WHERE p.shelter_id = $1`,
+      [shelterId],
+    ),
+    pool.query(
+      `SELECT COUNT(*)::int AS total,
+              COUNT(*) FILTER (WHERE t.status IN ('requested', 'confirmed'))::int AS open,
+              COUNT(*) FILTER (WHERE t.status = 'requested')::int AS pending,
+              COUNT(*) FILTER (WHERE t.status = 'confirmed')::int AS confirmed,
+              COUNT(*) FILTER (
+                WHERE t.status = 'confirmed' AND t.confirmed_for >= CURRENT_DATE
+              )::int AS upcoming
+         FROM visit_threads t
+         JOIN pets p ON p.id = t.pet_id
+        WHERE p.shelter_id = $1`,
+      [shelterId],
+    ),
+    pool.query(
+      `WITH days AS (
+         SELECT CURRENT_DATE + day_offset AS day
+           FROM generate_series(0, 13) AS day_offset
+       )
+       SELECT TO_CHAR(d.day, 'YYYY-MM-DD') AS date,
+              TO_CHAR(d.day, 'Mon FMDD') AS label,
+              COUNT(v.id)::int AS count
+         FROM days d
+         LEFT JOIN (
+           SELECT t.id, t.confirmed_for
+             FROM visit_threads t
+             JOIN pets p ON p.id = t.pet_id
+            WHERE p.shelter_id = $1
+              AND t.status = 'confirmed'
+         ) v ON v.confirmed_for::date = d.day
+        GROUP BY d.day
+        ORDER BY d.day`,
+      [shelterId],
+    ),
+    pool.query(
       `SELECT a.* FROM adoption_applications a
          JOIN pets p ON p.id = a.pet_id
         WHERE p.shelter_id = $1
@@ -110,6 +154,9 @@ export const getShelterOverview = async (shelterId) => {
     appKpis: appKpis.rows[0],
     appStatuses: appStatusRes.rows,
     trend: trendRes.rows,
+    inquiryKpis: inquiryKpis.rows[0],
+    visitKpis: visitKpis.rows[0],
+    upcomingVisitTrend: upcomingVisitRes.rows,
     recentApplications: recentAppsRes.rows,
     recentPets,
     inventory: inventoryRes.rows,

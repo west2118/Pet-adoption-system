@@ -1,6 +1,4 @@
-import { ApiError, apiRequest, apiRequestWithMeta, sessionStore } from '@/lib/apiClient';
-import { mockApplications } from '@/data/mockData';
-import { applicationService } from '@/services/api';
+import { apiRequest, apiRequestWithMeta } from '@/lib/apiClient';
 import type { PaginatedResult } from '@/services/api';
 import type { AdoptionApplication, ApplicationStatus } from '@/types';
 
@@ -38,7 +36,7 @@ export const createAdoptionApplication = async (
 
 export const listMyApplications = async (): Promise<AdoptionApplication[]> => {
   // Callers that want the whole list (profile summaries) opt in explicitly —
-  // the default page size for GET /applications/my is now 5.
+  // the default page size for GET /applications/my is 5.
   const { applications } = await apiRequest<{ applications: AdoptionApplication[] }>(
     '/applications/my?limit=100',
     { auth: 'full' },
@@ -46,7 +44,7 @@ export const listMyApplications = async (): Promise<AdoptionApplication[]> => {
   return applications;
 };
 
-/** Mirrors the backend's default page size for GET /applications/my (demo fallback only). */
+/** Backend default page size for GET /applications/my. */
 const MY_APPLICATIONS_PAGE_SIZE = 5;
 
 export interface ApplicationSummary {
@@ -56,51 +54,28 @@ export interface ApplicationSummary {
   adopted: number;
 }
 
-const shouldFallbackToMocks = (err: unknown): boolean =>
-  err instanceof ApiError && (err.status === 0 || err.status === 401 || err.status === 403);
-
-const mockRowsFor = (applicantId?: string): AdoptionApplication[] =>
-  mockApplications.filter((a) => !applicantId || a.applicantId === applicantId);
-
 /**
  * One page of the adopter's applications ("My applications").
  *
  * No `limit` is sent — the backend's default for this endpoint is **5** and
  * it answers with `meta { page, limit, total, totalPages }`.
- * `applicantId` is only used by the in-memory demo fallback.
  */
 export const listMyApplicationsPaginated = async (
-  options: { page?: number; applicantId?: string } = {},
+  options: { page?: number } = {},
 ): Promise<PaginatedResult<AdoptionApplication>> => {
   const page = options.page ?? 1;
-  if (sessionStore.has()) {
-    try {
-      const { data, meta } = await apiRequestWithMeta<{ applications: AdoptionApplication[] }>(
-        `/applications/my?page=${page}`,
-        { auth: 'full' },
-      );
-      const limit = meta?.limit ?? MY_APPLICATIONS_PAGE_SIZE;
-      const total = meta?.total ?? data.applications.length;
-      return {
-        items: data.applications,
-        total,
-        page: meta?.page ?? page,
-        limit,
-        totalPages: meta?.totalPages ?? Math.ceil(total / limit),
-      };
-    } catch (err) {
-      if (!shouldFallbackToMocks(err)) throw err;
-    }
-  }
-
-  const rows = mockRowsFor(options.applicantId);
-  const start = (page - 1) * MY_APPLICATIONS_PAGE_SIZE;
+  const { data, meta } = await apiRequestWithMeta<{ applications: AdoptionApplication[] }>(
+    `/applications/my?page=${page}`,
+    { auth: 'full' },
+  );
+  const limit = meta?.limit ?? MY_APPLICATIONS_PAGE_SIZE;
+  const total = meta?.total ?? data.applications.length;
   return {
-    items: rows.slice(start, start + MY_APPLICATIONS_PAGE_SIZE),
-    total: rows.length,
-    page,
-    limit: MY_APPLICATIONS_PAGE_SIZE,
-    totalPages: Math.ceil(rows.length / MY_APPLICATIONS_PAGE_SIZE),
+    items: data.applications,
+    total,
+    page: meta?.page ?? page,
+    limit,
+    totalPages: meta?.totalPages ?? Math.ceil(total / limit),
   };
 };
 
@@ -108,28 +83,12 @@ export const listMyApplicationsPaginated = async (
  * Status counters across ALL of an adopter's applications — keeps the summary
  * bar correct while the list itself is paged.
  */
-export const getMyApplicationSummary = async (
-  applicantId?: string,
-): Promise<ApplicationSummary> => {
-  if (sessionStore.has()) {
-    try {
-      const { summary } = await apiRequest<{ summary: ApplicationSummary }>(
-        '/applications/my/stats',
-        { auth: 'full' },
-      );
-      return summary;
-    } catch (err) {
-      if (!shouldFallbackToMocks(err)) throw err;
-    }
-  }
-
-  const rows = mockRowsFor(applicantId);
-  return {
-    total: rows.length,
-    underReview: rows.filter((a) => a.status === 'Under Review').length,
-    approved: rows.filter((a) => a.status === 'Approved').length,
-    adopted: rows.filter((a) => a.status === 'Adopted').length,
-  };
+export const getMyApplicationSummary = async (): Promise<ApplicationSummary> => {
+  const { summary } = await apiRequest<{ summary: ApplicationSummary }>(
+    '/applications/my/stats',
+    { auth: 'full' },
+  );
+  return summary;
 };
 
 export const listShelterApplications = async (
@@ -173,27 +132,11 @@ export const cancelMyApplication = async (
   id: string,
   reason?: string,
 ): Promise<AdoptionApplication> => {
-  if (sessionStore.has()) {
-    try {
-      const { application } = await apiRequest<{ application: AdoptionApplication }>(
-        `/applications/${encodeURIComponent(id)}/cancel`,
-        { method: 'PATCH', body: { reason }, auth: 'full' },
-      );
-      return application;
-    } catch (err) {
-      if (!shouldFallbackToMocks(err)) throw err;
-    }
-  }
-
-  const updated = await applicationService.updateStatus(
-    id,
-    'Cancelled',
-    reason ?? 'Cancelled by applicant',
+  const { application } = await apiRequest<{ application: AdoptionApplication }>(
+    `/applications/${encodeURIComponent(id)}/cancel`,
+    { method: 'PATCH', body: { reason }, auth: 'full' },
   );
-  if (!updated) {
-    throw new ApiError('Application not found.', 404, 'NOT_FOUND');
-  }
-  return updated;
+  return application;
 };
 
 /**

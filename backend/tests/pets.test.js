@@ -7,7 +7,7 @@ process.env.JWT_SECRET = 'test-secret-at-least-16-chars';
 process.env.JWT_EXPIRES_IN = '7d';
 process.env.ALLOWED_ORIGINS = 'http://localhost:5173';
 
-const { petQuerySchema } = await import('../src/validators/petValidator.js');
+const { petQuerySchema, shelterListingQuerySchema } = await import('../src/validators/petValidator.js');
 const { parsePagination } = await import('../src/validators/commonValidator.js');
 const { buildPublicFilters } = await import('../src/repositories/petRepository.js');
 
@@ -41,6 +41,46 @@ describe('GET /pets pagination (backend owns the limit)', () => {
     assert.equal(parsed.temperament, 'Playful');
     assert.equal(parsed.location, 'Quezon City');
     assert.equal(parsed.excludeAdopted, 'true');
+  });
+});
+
+describe('GET /shelter/listings query (filters validated on the backend)', () => {
+  it('defaults pagination and clears every facet', () => {
+    assert.deepEqual(shelterListingQuerySchema.parse({}), {
+      page: '1',
+      limit: '10',
+      search: '',
+      visibility: 'all',
+      species: 'all',
+      status: 'all',
+    });
+  });
+
+  it('accepts every listing filter as a backend query', () => {
+    assert.deepEqual(
+      shelterListingQuerySchema.parse({
+        page: '2',
+        limit: '20',
+        search: 'luna',
+        visibility: 'private',
+        species: 'cat',
+        status: 'Adopted',
+      }),
+      {
+        page: '2',
+        limit: '20',
+        search: 'luna',
+        visibility: 'private',
+        species: 'cat',
+        status: 'Adopted',
+      },
+    );
+  });
+
+  it('rejects unknown enum values before they reach SQL', () => {
+    assert.equal(shelterListingQuerySchema.safeParse({ species: 'dragon' }).success, false);
+    assert.equal(shelterListingQuerySchema.safeParse({ visibility: 'hidden' }).success, false);
+    assert.equal(shelterListingQuerySchema.safeParse({ status: 'Lost' }).success, false);
   });
 });
 

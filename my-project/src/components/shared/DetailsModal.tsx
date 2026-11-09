@@ -2,7 +2,7 @@ import type { LucideIcon } from 'lucide-react';
 import { X } from 'lucide-react';
 import { useEffect, useRef } from 'react';
 import type { ReactNode } from 'react';
-import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
+import { AnimatePresence, motion } from 'framer-motion';
 import { useScrollLock } from '@/hooks/useScrollLock';
 import { cn } from '@/lib/utils';
 
@@ -39,7 +39,6 @@ export const DetailsModal = ({
   size = 'md',
 }: DetailsModalProps) => {
   const overlayRef = useRef<HTMLDivElement>(null);
-  const shouldReduceMotion = useReducedMotion();
 
   useScrollLock(open, overlayRef);
 
@@ -68,9 +67,9 @@ export const DetailsModal = ({
             className="absolute inset-0 bg-black/40"
             onClick={onClose}
             aria-hidden="true"
-            initial={shouldReduceMotion ? false : { opacity: 0 }}
+            initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
-            exit={shouldReduceMotion ? undefined : { opacity: 0 }}
+            exit={{ opacity: 0 }}
             transition={{ duration: 0.2 }}
           />
           <div className="absolute inset-0 overflow-hidden">
@@ -80,9 +79,9 @@ export const DetailsModal = ({
                   'flex max-h-[85vh] w-full flex-col overflow-hidden rounded-xl border bg-card shadow-xl',
                   sizeClasses[size],
                 )}
-                initial={shouldReduceMotion ? false : { opacity: 0, scale: 0.95 }}
+                initial={{ opacity: 0, scale: 0.95 }}
                 animate={{ opacity: 1, scale: 1 }}
-                exit={shouldReduceMotion ? undefined : { opacity: 0, scale: 0.95 }}
+                exit={{ opacity: 0, scale: 0.95 }}
                 transition={{ duration: 0.2, ease: 'easeOut' }}
               >
                 <div className="flex shrink-0 items-center gap-3 border-b p-5 pb-4">

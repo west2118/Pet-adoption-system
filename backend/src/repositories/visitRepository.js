@@ -16,7 +16,8 @@ export const VISIT_TRANSITIONS = {
 
 const THREAD_WITH_PET = `
   SELECT t.*, p.shelter_id, p.name AS pet_name, p.image_url AS pet_image,
-         u.name AS adopter_name, u.email AS adopter_email
+         u.name AS adopter_name, u.email AS adopter_email,
+         TO_CHAR(t.confirmed_for, 'YYYY-MM-DD"T"HH24:MI') AS confirmed_for_local
     FROM visit_threads t
     JOIN pets p ON p.id = t.pet_id
     JOIN users u ON u.id = t.adopter_id
@@ -92,12 +93,47 @@ export const getVisitSummaryByAdopter = async (adopterId) => {
   };
 };
 
-export const listThreadsByShelter = async (shelterId, { limit = 10, offset = 0, status } = {}) => {
+/** Total visit requests received by one shelter (all statuses). */
+export const countThreadsByShelter = async (shelterId) => {
+  const { rows } = await pool.query(
+    `SELECT COUNT(*)::int AS total
+       FROM visit_threads t
+       JOIN pets p ON p.id = t.pet_id
+      WHERE p.shelter_id = $1`,
+    [shelterId],
+  );
+  return rows[0].total;
+};
+
+/** Deletes selected visit requests that belong to the shelter's pets. */
+export const deleteThreadsByIds = async (ids, shelterId) => {
+  const { rows } = await pool.query(
+    `DELETE FROM visit_threads t
+      USING pets p
+      WHERE t.pet_id = p.id
+        AND t.id = ANY($1::uuid[])
+        AND p.shelter_id = $2
+      RETURNING t.id`,
+    [ids, shelterId],
+  );
+  return rows.map((row) => row.id);
+};
+
+export const listThreadsByShelter = async (
+  shelterId,
+  { limit = 10, offset = 0, status, search } = {},
+) => {
   const conditions = ['p.shelter_id = $1'];
   const values = [shelterId];
   if (status && status !== 'all') {
     values.push(status);
     conditions.push(`t.status = $${values.length}`);
+  }
+  if (search) {
+    values.push(`%${search}%`);
+    conditions.push(
+      `(p.name ILIKE $${values.length} OR u.name ILIKE $${values.length} OR u.email ILIKE $${values.length})`,
+    );
   }
   const where = `WHERE ${conditions.join(' AND ')}`;
   const { rows } = await pool.query(
@@ -106,7 +142,8 @@ export const listThreadsByShelter = async (shelterId, { limit = 10, offset = 0, 
   );
   const count = await pool.query(
     `SELECT COUNT(*)::int AS total FROM visit_threads t
-      JOIN pets p ON p.id = t.pet_id ${where}`,
+      JOIN pets p ON p.id = t.pet_id
+      JOIN users u ON u.id = t.adopter_id ${where}`,
     values,
   );
   return { rows, total: count.rows[0].total };
@@ -114,17 +151,30 @@ export const listThreadsByShelter = async (shelterId, { limit = 10, offset = 0, 
 
 export const updateThreadStatus = async (
   threadId,
-  { status, confirmedSlot, cancelReason, message },
+  { status, confirmedSlot, confirmedFor, cancelReason, message },
 ) => {
   const { rows } = await pool.query(
     `UPDATE visit_threads
         SET status = $2::visit_thread_status,
             confirmed_slot = COALESCE($3, confirmed_slot),
+            confirmed_for = CASE
+              WHEN $2::visit_thread_status = 'confirmed'
+                THEN COALESCE($6::timestamp, confirmed_for)
+              ELSE confirmed_for
+            END,
             cancel_reason = CASE WHEN $2::visit_thread_status = 'cancelled' THEN $4 ELSE NULL END,
             shelter_message = COALESCE($5, shelter_message),
             updated_at = CURRENT_TIMESTAMP
-      WHERE id = $1 RETURNING *`,
-    [threadId, status, confirmedSlot ?? null, cancelReason ?? null, message ?? null],
+      WHERE id = $1
+      RETURNING *, TO_CHAR(confirmed_for, 'YYYY-MM-DD"T"HH24:MI') AS confirmed_for_local`,
+    [
+      threadId,
+      status,
+      confirmedSlot ?? null,
+      cancelReason ?? null,
+      message ?? null,
+      confirmedFor ?? null,
+    ],
   );
   return rows[0] ?? null;
 };

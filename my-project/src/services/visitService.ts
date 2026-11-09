@@ -79,28 +79,45 @@ export const cancelMyVisit = async (id: string, cancelReason?: string): Promise<
   return data.thread;
 };
 
+export interface ShelterVisitsPage extends PaginatedResult<VisitThread> {
+  /** Unfiltered visit-request count for this shelter, used for the cap display. */
+  shelterTotal: number;
+}
+
 export const listShelterVisits = async (options: {
   page?: number;
   limit?: number;
   status?: string;
-} = {}): Promise<PaginatedResult<VisitThread>> => {
+  search?: string;
+} = {}): Promise<ShelterVisitsPage> => {
   const page = options.page ?? 1;
   const limit = options.limit ?? 10;
   const queryParams = new URLSearchParams();
   queryParams.set('page', String(page));
   queryParams.set('limit', String(limit));
   if (options.status && options.status !== 'all') queryParams.set('status', options.status);
+  if (options.search) queryParams.set('search', options.search);
 
-  const { data, meta } = await apiRequestWithMeta<{ threads: VisitThread[] }>(
-    `/shelter/visits?${queryParams.toString()}`,
-    { auth: 'full' },
-  );
+  const { data, meta } = await apiRequestWithMeta<{
+    threads: VisitThread[];
+    shelterTotal?: number;
+  }>(`/shelter/visits?${queryParams.toString()}`, { auth: 'full' });
   return {
     items: data.threads,
     total: meta?.total ?? data.threads.length,
     page: meta?.page ?? page,
     limit: meta?.limit ?? limit,
+    shelterTotal: data.shelterTotal ?? meta?.total ?? data.threads.length,
   };
+};
+
+export const deleteShelterVisits = async (ids: string[]): Promise<number> => {
+  const data = await apiRequest<{ deleted: number }>('/shelter/visits', {
+    method: 'DELETE',
+    auth: 'full',
+    body: { ids },
+  });
+  return data.deleted;
 };
 
 export const getShelterVisit = async (id: string): Promise<VisitThread> => {
@@ -116,6 +133,8 @@ export const updateShelterVisitStatus = async (
   input: {
     status: VisitStatus;
     confirmedSlot?: string;
+    /** Local wall-clock date/time (`YYYY-MM-DDTHH:mm`) for the dashboard. */
+    confirmedFor?: string;
     cancelReason?: string;
     /** Emailed with the confirmation (date + short message). */
     message?: string;
@@ -134,6 +153,7 @@ export const visitService = {
   listMine: listMyVisits,
   cancelMine: cancelMyVisit,
   listForShelter: listShelterVisits,
+  deleteForShelter: deleteShelterVisits,
   getForShelter: getShelterVisit,
   updateStatus: updateShelterVisitStatus,
 };

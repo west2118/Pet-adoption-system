@@ -1,20 +1,24 @@
+import { useQuery } from '@tanstack/react-query';
 import {
   Archive,
   ArrowRight,
+  CalendarClock,
   ClipboardList,
   Clock3,
   HeartHandshake,
   Inbox,
   Layers,
+  MessageCircleQuestion,
   Package,
   PawPrint,
   PieChart,
   TrendingUp,
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
-import { useEffect, useState } from 'react';
 import {
   ChartCard,
+  ErrorState,
+  RefreshButton,
   SectionHeader,
   ShelterOverviewSkeleton,
   SummaryStatCard,
@@ -27,64 +31,62 @@ import { ApplicationsTrendChart } from '@/components/features/charts/Application
 import { PetsBySpeciesChart } from '@/components/features/charts/PetsBySpeciesChart';
 import { ApplicationsByStatusChart } from '@/components/features/charts/ApplicationsByStatusChart';
 import { ListingsByStatusChart } from '@/components/features/charts/ListingsByStatusChart';
+import { UpcomingVisitsChart } from '@/components/features/charts/UpcomingVisitsChart';
 import { Button } from '@/components/ui/button';
+import { useRefresh } from '@/hooks/useRefresh';
 import { getShelterOverview } from '@/services/api';
-import type { ShelterOverviewData } from '@/services/api';
+import { describeApiError } from '@/utils/errors';
 
 export const ShelterOverviewPage = () => {
   // Every figure below is counted in SQL (GET /shelter/overview, JWT-scoped).
-  // Dynamic only — failures render an explicit error, never local mock math.
-  const [overview, setOverview] = useState<ShelterOverviewData | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  // React Query owns the request, so the header refresh and the error retry
+  // refetch the same query instead of keeping a second copy of the loader state.
+  const {
+    data: overview,
+    isLoading,
+    isFetching,
+    error,
+    refetch,
+  } = useQuery({
+    queryKey: ['shelterOverview'],
+    queryFn: getShelterOverview,
+  });
 
-  useEffect(() => {
-    let mounted = true;
-    getShelterOverview()
-      .then((data) => {
-        if (mounted) {
-          setOverview(data);
-          setError(null);
-        }
-      })
-      .catch(() => {
-        if (mounted) setError('Failed to load shelter overview.');
-      });
-    return () => {
-      mounted = false;
-    };
-  }, []);
+  const { isRefreshing, refresh } = useRefresh(refetch);
+  const showLoading = isLoading || isFetching || isRefreshing;
 
-  if (!overview && !error) {
-    return <ShelterOverviewSkeleton />;
+  // Keep the page header visible while the dashboard content loads.
+  const pageHeader = (
+    <SectionHeader
+      title="Dashboard"
+      subtitle="A snapshot of your listings, applications, and adoption performance."
+      actions={overview ? <RefreshButton onRefresh={refresh} /> : undefined}
+    />
+  );
+
+  // Skeleton on first load and during a refetch, matching the shelter tables.
+  if (showLoading) {
+    return (
+      <div className="w-full px-4 py-6 sm:px-6">
+        {pageHeader}
+        <ShelterOverviewSkeleton />
+      </div>
+    );
   }
 
   if (!overview) {
     return (
       <div className="w-full px-4 py-6 sm:px-6">
-        <SectionHeader
-          title="Shelter overview"
-          subtitle="A snapshot of your listings, applications, and adoption performance."
-        />
-        <div className="mt-6 rounded-lg border border-destructive/30 bg-destructive/5 p-5 text-sm">
-          <p className="font-semibold text-destructive">Could not load the overview.</p>
-          <p className="mt-1 text-muted-foreground">
-            {error} Check that the backend is running and your staff account has a
-            shelter assigned.
-          </p>
-          <Button
-            size="sm"
-            variant="outline"
-            className="mt-3"
-            onClick={() => {
-              setError(null);
-              setOverview(null);
-              getShelterOverview()
-                .then((data) => setOverview(data))
-                .catch(() => setError('Failed to load shelter overview.'));
-            }}
-          >
-            Retry
-          </Button>
+        {pageHeader}
+        <div className="mt-6">
+          <ErrorState
+            title="Could not load the overview"
+            description={`${describeApiError(
+              error,
+              'Failed to load the shelter overview.',
+            )} Check that the backend is running and your staff account has a shelter assigned.`}
+            onRetry={() => void refetch()}
+          />
         </div>
       </div>
     );
@@ -94,13 +96,10 @@ export const ShelterOverviewPage = () => {
 
   return (
     <div className="w-full px-4 py-6 sm:px-6">
-      <SectionHeader
-        title="Shelter overview"
-        subtitle="A snapshot of your listings, applications, and adoption performance."
-      />
+      {pageHeader}
 
       {/* Summary stats */}
-      <SummaryStatGrid columns={4} className="mt-6">
+      <SummaryStatGrid columns={3} className="mt-6">
         <SummaryStatCard
           title="Total pets"
           value={stats.totalPets}
@@ -125,6 +124,18 @@ export const ShelterOverviewPage = () => {
           icon={HeartHandshake}
           subtitle={`${stats.adoptionRate}% of applications`}
         />
+        <SummaryStatCard
+          title="Inquiries"
+          value={stats.openInquiries}
+          icon={MessageCircleQuestion}
+          subtitle="Not resolved"
+        />
+        <SummaryStatCard
+          title="Visit requests"
+          value={stats.openVisits}
+          icon={CalendarClock}
+          subtitle="Not resolved"
+        />
       </SummaryStatGrid>
 
       {/* Charts */}
@@ -146,6 +157,15 @@ export const ShelterOverviewPage = () => {
           <PetsBySpeciesChart data={overview.petsBySpecies} />
         </ChartCard>
       </div>
+
+      <ChartCard
+        title="Upcoming visits"
+        description="Confirmed meet-and-greets scheduled over the next 14 days."
+        icon={CalendarClock}
+        className="mt-4"
+      >
+        <UpcomingVisitsChart data={overview.upcomingVisitTrend} />
+      </ChartCard>
 
       <div className="mt-4 grid gap-4 lg:grid-cols-2">
         <ChartCard

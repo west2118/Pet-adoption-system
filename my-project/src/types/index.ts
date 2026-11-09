@@ -166,6 +166,8 @@ export interface VisitThread {
   preferredSlot: string;
   reason?: string | null;
   confirmedSlot?: string | null;
+  /** Structured confirmed date/time (`YYYY-MM-DDTHH:mm`) used by the dashboard. */
+  confirmedFor?: string | null;
   cancelReason?: string | null;
   /** Message the shelter emailed with the confirmed visit date. */
   shelterMessage?: string | null;

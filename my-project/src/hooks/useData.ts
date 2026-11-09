@@ -1,13 +1,11 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-  applicationService,
   getPetFacets,
   getShelterStats,
   listPetsPaginated,
   listSheltersPaginated,
   petService,
   shelterService,
-  userService,
 } from '@/services/api';
 import type { PetFacets, ShelterStats } from '@/services/api';
 import { adoptionApplicationService } from '@/services/adoptionApplicationService';
@@ -16,9 +14,9 @@ import {
   listMyApplicationsPaginated,
 } from '@/services/adoptionApplicationService';
 import type { ApplicationSummary } from '@/services/adoptionApplicationService';
-import { sessionStore } from '@/lib/apiClient';
 import type { NearbySearch } from '@/hooks/useNearbyPets';
-import type { AdoptionApplication, Pet, PetFilters, Shelter, User } from '@/types';
+import type { AdoptionApplication, Pet, PetFilters, Shelter } from '@/types';
+import { describeApiError } from '@/utils/errors';
 
 export const usePets = () => {
   const [pets, setPets] = useState<Pet[]>([]);
@@ -31,8 +29,8 @@ export const usePets = () => {
       setError(null);
       const data = await petService.list();
       setPets(data);
-    } catch {
-      setError('Failed to load pets. Please try again.');
+    } catch (err) {
+      setError(describeApiError(err, 'Failed to load pets. Please try again.'));
     } finally {
       setLoading(false);
     }
@@ -44,8 +42,8 @@ export const usePets = () => {
       try {
         const data = await petService.list();
         if (mounted) setPets(data);
-      } catch {
-        if (mounted) setError('Failed to load pets.');
+      } catch (err) {
+        if (mounted) setError(describeApiError(err, 'Failed to load pets.'));
       } finally {
         if (mounted) setLoading(false);
       }
@@ -61,29 +59,37 @@ export const usePets = () => {
 export const useShelters = () => {
   const [shelters, setShelters] = useState<Shelter[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [reload, setReload] = useState(0);
 
   useEffect(() => {
     let mounted = true;
     const fetchShelters = async () => {
       try {
+        setLoading(true);
         const data = await shelterService.list();
-        if (mounted) {
-          setShelters(data);
-          setLoading(false);
-        }
-      } catch {
-        if (mounted) {
-          setLoading(false);
-        }
+        if (!mounted) return;
+        setShelters(data);
+        setError(null);
+      } catch (err) {
+        if (mounted) setError(describeApiError(err, 'Failed to load shelters.'));
+      } finally {
+        if (mounted) setLoading(false);
       }
     };
     fetchShelters();
     return () => {
       mounted = false;
     };
-  }, []);
+  }, [reload]);
 
-  return { shelters, setShelters, loading };
+  return {
+    shelters,
+    setShelters,
+    loading,
+    error,
+    refresh: () => setReload((value) => value + 1),
+  };
 };
 
 /** Typing a search should not hit the API on every keystroke. */
@@ -187,7 +193,7 @@ export const useBrowsePetsPage = (
           totalPages,
           error: null,
         });
-      } catch {
+      } catch (err) {
         if (!mounted) return;
         setResult({
           key: requestKey,
@@ -195,7 +201,7 @@ export const useBrowsePetsPage = (
           total: 0,
           limit: 10,
           totalPages: 1,
-          error: 'Failed to load pets. Please try again.',
+          error: describeApiError(err, 'Failed to load pets. Please try again.'),
         });
       }
     };
@@ -261,7 +267,7 @@ export const useHeroPets = () => {
         const res = await listPetsPaginated({ page: 1 });
         if (mounted) setPets(res.items);
       } catch {
-        // Ignore failure
+        // Hero artwork is decorative; leave it empty when the API is down.
       }
     };
     fetchHeroPets();
@@ -283,15 +289,25 @@ export const useHeroPets = () => {
 export const useFeaturedPets = (limit = 6) => {
   const [pets, setPets] = useState<Pet[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [reload, setReload] = useState(0);
 
   useEffect(() => {
     let mounted = true;
     const fetchFeatured = async () => {
       try {
-        const res = await listPetsPaginated({ page: 1, limit, status: 'Available', excludeAdopted: true });
-        if (mounted) setPets(res.items);
-      } catch {
-        if (mounted) setPets([]);
+        setLoading(true);
+        const res = await listPetsPaginated({
+          page: 1,
+          limit,
+          status: 'Available',
+          excludeAdopted: true,
+        });
+        if (!mounted) return;
+        setPets(res.items);
+        setError(null);
+      } catch (err) {
+        if (mounted) setError(describeApiError(err, 'Failed to load featured pets.'));
       } finally {
         if (mounted) setLoading(false);
       }
@@ -300,9 +316,9 @@ export const useFeaturedPets = (limit = 6) => {
     return () => {
       mounted = false;
     };
-  }, [limit]);
+  }, [limit, reload]);
 
-  return { pets, loading };
+  return { pets, loading, error, refresh: () => setReload((value) => value + 1) };
 };
 
 /**
@@ -311,6 +327,7 @@ export const useFeaturedPets = (limit = 6) => {
  */
 export const useSheltersPage = () => {
   const [page, setPage] = useState(1);
+  const [reload, setReload] = useState(0);
   const [result, setResult] = useState<{
     key: string;
     shelters: Shelter[];
@@ -320,7 +337,7 @@ export const useSheltersPage = () => {
     error: string | null;
   } | null>(null);
 
-  const requestKey = String(page);
+  const requestKey = `${page}|${reload}`;
 
   useEffect(() => {
     let mounted = true;
@@ -342,7 +359,7 @@ export const useSheltersPage = () => {
           totalPages,
           error: null,
         });
-      } catch {
+      } catch (err) {
         if (!mounted) return;
         setResult({
           key: requestKey,
@@ -350,7 +367,7 @@ export const useSheltersPage = () => {
           total: 0,
           limit: 10,
           totalPages: 1,
-          error: 'Failed to load shelters. Please try again.',
+          error: describeApiError(err, 'Failed to load shelters. Please try again.'),
         });
       }
     };
@@ -372,6 +389,7 @@ export const useSheltersPage = () => {
     setPage,
     loading,
     error: loading ? null : (result?.error ?? null),
+    refresh: () => setReload((value) => value + 1),
   };
 };
 
@@ -403,7 +421,7 @@ export const useShelterStats = () => {
  * for this endpoint is 5, and `refresh()` re-reads the current page (the
  * page's Refresh button).
  */
-export const useMyApplicationsPage = (applicantId?: string) => {
+export const useMyApplicationsPage = () => {
   const [page, setPage] = useState(1);
   const [reload, setReload] = useState(0);
   const [result, setResult] = useState<{
@@ -421,7 +439,7 @@ export const useMyApplicationsPage = (applicantId?: string) => {
     let mounted = true;
     const fetchApplications = async () => {
       try {
-        const res = await listMyApplicationsPaginated({ page, applicantId });
+        const res = await listMyApplicationsPaginated({ page });
         if (!mounted) return;
         const totalPages = res.totalPages ?? Math.max(1, Math.ceil(res.total / res.limit));
         if (totalPages > 0 && page > totalPages) {
@@ -436,7 +454,7 @@ export const useMyApplicationsPage = (applicantId?: string) => {
           totalPages,
           error: null,
         });
-      } catch {
+      } catch (err) {
         if (!mounted) return;
         setResult({
           key: requestKey,
@@ -444,7 +462,7 @@ export const useMyApplicationsPage = (applicantId?: string) => {
           total: 0,
           limit: 5,
           totalPages: 1,
-          error: 'Failed to load your applications. Please try again.',
+          error: describeApiError(err, 'Failed to load your applications. Please try again.'),
         });
       }
     };
@@ -453,7 +471,7 @@ export const useMyApplicationsPage = (applicantId?: string) => {
     return () => {
       mounted = false;
     };
-  }, [applicantId, page, reload, requestKey]);
+  }, [page, reload, requestKey]);
 
   const loading = result?.key !== requestKey;
 
@@ -474,14 +492,14 @@ export const useMyApplicationsPage = (applicantId?: string) => {
  * Status counters across ALL of an adopter's applications. `reload` lets a
  * page refetch the counters after an application is withdrawn.
  */
-export const useMyApplicationSummary = (applicantId?: string, reload = 0) => {
+export const useMyApplicationSummary = (reload = 0) => {
   const [summary, setSummary] = useState<ApplicationSummary | null>(null);
 
   useEffect(() => {
     let mounted = true;
     const fetchSummary = async () => {
       try {
-        const data = await getMyApplicationSummary(applicantId);
+        const data = await getMyApplicationSummary();
         if (mounted) setSummary(data);
       } catch {
         // Summary bar degrades to placeholders when the counts are unavailable.
@@ -491,17 +509,16 @@ export const useMyApplicationSummary = (applicantId?: string, reload = 0) => {
     return () => {
       mounted = false;
     };
-  }, [applicantId, reload]);
+  }, [reload]);
 
   return summary;
 };
 
 /**
  * Shelter-portal inventory: the logged-in shelter's own listings
- * (public + private) via GET /shelter/listings. Falls back to the public
- * catalogue filtered by shelter in demo mode (no session).
+ * (public + private) via GET /shelter/listings.
  */
-export const useShelterListings = (shelterId?: string | null) => {
+export const useShelterListings = () => {
   const [pets, setPets] = useState<Pet[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -510,22 +527,22 @@ export const useShelterListings = (shelterId?: string | null) => {
     try {
       setLoading(true);
       setError(null);
-      setPets(await petService.listMine(shelterId ?? undefined));
-    } catch {
-      setError('Failed to load listings. Please try again.');
+      setPets(await petService.listMine());
+    } catch (err) {
+      setError(describeApiError(err, 'Failed to load listings. Please try again.'));
     } finally {
       setLoading(false);
     }
-  }, [shelterId]);
+  }, []);
 
   useEffect(() => {
     let mounted = true;
     (async () => {
       try {
-        const data = await petService.listMine(shelterId ?? undefined);
+        const data = await petService.listMine();
         if (mounted) setPets(data);
-      } catch {
-        if (mounted) setError('Failed to load listings.');
+      } catch (err) {
+        if (mounted) setError(describeApiError(err, 'Failed to load listings.'));
       } finally {
         if (mounted) setLoading(false);
       }
@@ -533,67 +550,28 @@ export const useShelterListings = (shelterId?: string | null) => {
     return () => {
       mounted = false;
     };
-  }, [shelterId]);
+  }, []);
 
   return { pets, setPets, loading, error, refresh };
 };
 
-export const useUsers = () => {
-  const [users, setUsers] = useState<User[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    let mounted = true;
-    const fetchUsers = async () => {
-      try {
-        const data = await userService.list();
-        if (mounted) {
-          setUsers(data);
-          setLoading(false);
-        }
-      } catch {
-        if (mounted) {
-          setLoading(false);
-        }
-      }
-    };
-    fetchUsers();
-    return () => {
-      mounted = false;
-    };
-  }, []);
-
-  return { users, setUsers, loading };
-};
-
-export const useApplications = (applicantId?: string, mode?: 'mine' | 'shelter') => {
+export const useApplications = (mode?: 'mine' | 'shelter') => {
   const [applications, setApplications] = useState<AdoptionApplication[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async (): Promise<AdoptionApplication[]> => {
-    const hasSession = sessionStore.has();
-    // Backend-first when a real session exists so adopter submissions and the
-    // shelter table read the same Postgres rows. Fall back to the in-memory
-    // mocks for demo mode (no token) or when the API is unreachable.
-    if (hasSession) {
-      try {
-        if (mode === 'shelter' || !applicantId) {
-          return await adoptionApplicationService.listForShelter();
-        }
-        return await adoptionApplicationService.listMine();
-      } catch {
-        // fall through to mocks below
-      }
-    }
-    return applicantId
-      ? applicationService.listByApplicant(applicantId)
-      : applicationService.list();
-  }, [applicantId, mode]);
+    if (mode === 'shelter') return adoptionApplicationService.listForShelter();
+    return adoptionApplicationService.listMine();
+  }, [mode]);
 
   const refresh = useCallback(async () => {
     setLoading(true);
     try {
       setApplications(await load());
+      setError(null);
+    } catch (err) {
+      setError(describeApiError(err, 'Failed to load applications. Please try again.'));
     } finally {
       setLoading(false);
     }
@@ -604,9 +582,15 @@ export const useApplications = (applicantId?: string, mode?: 'mine' | 'shelter')
     (async () => {
       try {
         const data = await load();
-        if (mounted) setApplications(data);
-      } catch {
-        if (mounted) setApplications([]);
+        if (mounted) {
+          setApplications(data);
+          setError(null);
+        }
+      } catch (err) {
+        if (mounted) {
+          setApplications([]);
+          setError(describeApiError(err, 'Failed to load applications.'));
+        }
       } finally {
         if (mounted) setLoading(false);
       }
@@ -616,5 +600,5 @@ export const useApplications = (applicantId?: string, mode?: 'mine' | 'shelter')
     };
   }, [load]);
 
-  return { applications, loading, refresh, setApplications };
+  return { applications, loading, error, refresh, setApplications };
 };

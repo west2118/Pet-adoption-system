@@ -84,7 +84,7 @@ export const RouteLoader = () => {
       </div>
 
       <div className="relative flex flex-col items-center gap-7">
-        <span className="flex size-14 items-center justify-center rounded-2xl bg-[var(--brand)] text-white shadow-[0_12px_32px_rgba(233,122,44,0.35)] motion-safe:animate-boot-pulse">
+        <span className="flex size-14 items-center justify-center rounded-2xl bg-[var(--brand)] text-white shadow-[0_12px_32px_rgba(233,122,44,0.35)] animate-boot-pulse">
           <PawPrint className="size-7" />
         </span>
 
@@ -92,7 +92,7 @@ export const RouteLoader = () => {
           {WORDMARK.map((char, i) => (
             <span
               key={`${char}-${i}`}
-              className="inline-block motion-safe:animate-boot-rise motion-safe:opacity-0 motion-reduce:opacity-100"
+              className="inline-block animate-boot-rise opacity-0"
               style={{ animationDelay: `${i * 55}ms` }}
             >
               {char}
@@ -101,7 +101,7 @@ export const RouteLoader = () => {
         </span>
 
         <span className="relative h-0.5 w-44 overflow-hidden rounded-full bg-foreground/10">
-          <span className="absolute inset-0 origin-left rounded-full bg-[var(--brand)] motion-safe:animate-boot-fill" />
+          <span className="absolute inset-0 origin-left rounded-full bg-[var(--brand)] animate-boot-fill" />
         </span>
 
         <p className="font-mono text-[10px] uppercase tracking-[0.24em] text-muted-foreground">

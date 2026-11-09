@@ -1,7 +1,9 @@
 import { AppError } from '../utils/AppError.js';
 import {
   VISIT_TRANSITIONS,
+  countThreadsByShelter,
   createThread,
+  deleteThreadsByIds,
   findThreadByPetAndAdopter,
   findThreadById,
   getVisitSummaryByAdopter,
@@ -24,6 +26,7 @@ export const mapVisitThread = (row) => {
     preferredSlot: row.preferred_slot ?? '',
     reason: row.reason ?? null,
     confirmedSlot: row.confirmed_slot ?? null,
+    confirmedFor: row.confirmed_for_local ?? null,
     cancelReason: row.cancel_reason ?? null,
     shelterMessage: row.shelter_message ?? null,
     createdAt: row.created_at,
@@ -51,6 +54,9 @@ const assertParticipant = (thread, userId, shelterId) => {
   return { isAdopter, isShelter };
 };
 
+// Hard cap so a shelter's visit queue cannot grow without bound.
+const MAX_VISITS_PER_SHELTER = 150;
+
 /** Creates the single visit request for a (pet, adopter) pair. */
 export const requestVisit = async (adopterId, input) => {
   const pet = await findPetById(input.petId);
@@ -62,6 +68,13 @@ export const requestVisit = async (adopterId, input) => {
     throw new AppError(
       'You have already requested a visit for this pet. Check My visits for its status.',
       409,
+    );
+  }
+  const visitCount = await countThreadsByShelter(pet.shelter_id);
+  if (visitCount >= MAX_VISITS_PER_SHELTER) {
+    throw new AppError(
+      'This shelter has received too many visit requests right now. Please try again later.',
+      429,
     );
   }
   const adopter = await findUserById(adopterId);
@@ -110,6 +123,12 @@ export const requestVisit = async (adopterId, input) => {
   };
 };
 
+/** Removes selected visit requests; IDs from other shelters are ignored. */
+export const deleteShelterVisits = async (ids, shelterId) => {
+  const deletedIds = await deleteThreadsByIds(ids, shelterId);
+  return { deleted: deletedIds.length };
+};
+
 export const listMyVisits = async (adopterId, pagination) => {
   const { rows, total } = await listThreadsByAdopter(adopterId, pagination);
   return { threads: rows.map(mapVisitThread), total };
@@ -124,8 +143,11 @@ export const getMyVisitForPet = async (adopterId, petId) => {
 };
 
 export const listShelterVisits = async (shelterId, pagination) => {
-  const { rows, total } = await listThreadsByShelter(shelterId, pagination);
-  return { threads: rows.map(mapVisitThread), total };
+  const [{ rows, total }, shelterTotal] = await Promise.all([
+    listThreadsByShelter(shelterId, pagination),
+    countThreadsByShelter(shelterId),
+  ]);
+  return { threads: rows.map(mapVisitThread), total, shelterTotal };
 };
 
 export const getVisitThread = async (threadId, userId, shelterId) => {
@@ -164,8 +186,18 @@ export const setVisitStatus = async (threadId, shelterId, input) => {
     input.status === 'confirmed'
       ? input.confirmedSlot || thread.confirmed_slot || thread.preferred_slot
       : input.confirmedSlot;
+  // Keep the structured scheduling date in step with the readable slot so the
+  // shelter dashboard can chart confirmed visits by day.
+  const confirmedFor =
+    input.status === 'confirmed'
+      ? input.confirmedFor ?? thread.confirmed_for_local ?? null
+      : thread.confirmed_for_local;
 
-  const updated = await updateThreadStatus(threadId, { ...input, confirmedSlot });
+  const updated = await updateThreadStatus(threadId, {
+    ...input,
+    confirmedSlot,
+    confirmedFor,
+  });
   const adopter = await findUserById(thread.adopter_id);
   const pet = await findPetById(thread.pet_id);
 

@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import {
+  deleteInquiries,
   emailInquiry,
   getShelterInquiries,
   markInquiryResolved,
@@ -8,7 +9,7 @@ import { authenticate } from '../middlewares/authenticate.js';
 import { authorize } from '../middlewares/authorize.js';
 import { requireShelter } from '../middlewares/requireShelter.js';
 import { validate } from '../middlewares/validate.js';
-import { uuidParam } from '../validators/commonValidator.js';
+import { bulkDeleteSchema, uuidParam } from '../validators/commonValidator.js';
 import { sendInquiryEmailSchema } from '../validators/inquiryValidator.js';
 
 export const shelterInquiryRoutes = Router();
@@ -20,6 +21,7 @@ shelterInquiryRoutes.use(
 );
 
 shelterInquiryRoutes.get('/', getShelterInquiries);
+shelterInquiryRoutes.delete('/', validate(bulkDeleteSchema), deleteInquiries);
 shelterInquiryRoutes.patch(
   '/:id/resolve',
   validate(uuidParam, 'params'),

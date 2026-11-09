@@ -1,4 +1,5 @@
 import {
+  deleteShelterInquiries,
   listShelterInquiries,
   resolveInquiry,
   sendInquiryEmail,
@@ -19,15 +20,25 @@ export const createInquiry = async (req, res) => {
   return sendSuccess(res, { inquiry }, 'Inquiry submitted successfully.', undefined, 201);
 };
 
+export const deleteInquiries = async (req, res) => {
+  const result = await deleteShelterInquiries(req.body.ids, req.user.shelterId);
+  return sendSuccess(res, result, 'Inquiries deleted.');
+};
+
 export const getShelterInquiries = async (req, res) => {
   const { page, limit, offset } = parsePagination(req.query);
   const resolved = parseResolved(req.query.resolved);
   const search = req.query.search || undefined;
-  const { inquiries, total } = await listShelterInquiries(
+  const { inquiries, total, shelterTotal } = await listShelterInquiries(
     req.user.shelterId,
     { limit, offset, resolved, search },
   );
-  return sendSuccess(res, { inquiries }, undefined, buildMeta(page, limit, total));
+  return sendSuccess(
+    res,
+    { inquiries, shelterTotal },
+    undefined,
+    buildMeta(page, limit, total),
+  );
 };
 
 export const markInquiryResolved = async (req, res) => {

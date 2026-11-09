@@ -1,9 +1,9 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
-import { ApiError, sessionStore, tokenStore } from '@/lib/apiClient';
+import { ApiError } from '@/lib/apiClient';
 import { authService } from '@/services/authService';
 import type { SignupInput, SignupResult } from '@/services/authService';
-import type { User, UserRole } from '@/types';
+import type { User } from '@/types';
 
 interface AuthContextValue {
   user: User | null;
@@ -12,62 +12,32 @@ interface AuthContextValue {
   login: (email: string, password: string) => Promise<User>;
   signup: (input: SignupInput) => Promise<SignupResult>;
   logout: () => void;
-  switchRole: (role: UserRole) => void;
   /** Re-fetch the current session user. */
   refresh: () => Promise<void>;
-  /** Update the signed-in user's profile (backend when a session exists, local preview otherwise). */
-  updateProfile: (input: { name?: string; avatarUrl?: string | null }) => Promise<User | null>;
+  /** Update the signed-in user's profile (server-only). */
+  updateProfile: (input: { name?: string; avatarUrl?: string | null }) => Promise<User>;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
-
-const DEMO_USERS: Record<UserRole, User> = {
-  adopter: { id: 'u1', name: 'Juan Dela Cruz', email: 'juan@example.com', role: 'adopter' },
-  shelter_staff: {
-    id: 'staff1',
-    name: 'Maria Santos',
-    email: 'maria@happytails.ph',
-    role: 'shelter_staff',
-    shelterId: 's1',
-    accountStatus: 'approved',
-  },
-  platform_admin: {
-    id: 'admin1',
-    name: 'Platform Admin',
-    email: 'admin@paws.ph',
-    role: 'platform_admin',
-  },
-};
 
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [user, setUser] = useState<User | null>(null);
   const [initializing, setInitializing] = useState(true);
 
+  /**
+   * The session lives in httpOnly cookies, so the only way to know who is
+   * signed in is to ask the backend. `/auth/me` runs through the authenticate
+   * middleware; the API client rotates an expired access cookie once before
+   * reporting 401, which simply means "no session".
+   */
   useEffect(() => {
     let mounted = true;
     (async () => {
-      // No session flag (logged out or demo preview): skip the server check
-      // entirely instead of firing a doomed /auth/me that 401s.
-      if (!sessionStore.has()) {
-        if (mounted) setInitializing(false);
-        return;
-      }
       try {
         const me = await authService.me();
         if (mounted) setUser(me);
-      } catch (err) {
-        // Access cookie may have expired while the refresh cookie is still
-        // valid — rotate once before treating this as a real logout.
-        if (err instanceof ApiError && err.status === 401) {
-          try {
-            const refreshed = await authService.refreshSession();
-            if (mounted) setUser(refreshed);
-            return;
-          } catch {
-            // Refresh rejected: session genuinely dead.
-          }
-        }
-        sessionStore.clear();
+      } catch {
+        if (mounted) setUser(null);
       } finally {
         if (mounted) setInitializing(false);
       }
@@ -85,7 +55,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   const signup = useCallback(async (input: SignupInput) => {
     const result = await authService.signup(input);
-    if (result.token) setUser(result.user);
+    if (!result.requiresOnboarding) setUser(result.user);
     return result;
   }, []);
 
@@ -97,51 +67,29 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     } catch {
       // Ignore failure to ensure local state clears
     }
-    tokenStore.clearOnboarding();
     setUser(null);
   }, []);
 
   const refresh = useCallback(async () => {
-    if (!sessionStore.has()) return;
     try {
       setUser(await authService.me());
     } catch (err) {
-      if (err instanceof ApiError && err.status === 401) {
-        sessionStore.clear();
-        setUser(null);
-      }
+      if (err instanceof ApiError && err.status === 401) setUser(null);
     }
   }, []);
 
-  // Demo-only: lets the UI preview other roles without a real backend session.
-  const switchRole = useCallback((role: UserRole) => setUser(DEMO_USERS[role]), []);
-
   const updateProfile = useCallback(
     async (input: { name?: string; avatarUrl?: string | null }) => {
-      if (sessionStore.has()) {
-        const updated = await authService.updateMe(input);
-        setUser(updated);
-        return updated;
-      }
-      // Demo preview (no session): keep the edit in local auth state only.
-      let next: User | null = null;
-      setUser((prev) => {
-        if (!prev) return prev;
-        next = {
-          ...prev,
-          ...(input.name !== undefined ? { name: input.name } : {}),
-          ...(input.avatarUrl !== undefined ? { avatarUrl: input.avatarUrl ?? undefined } : {}),
-        };
-        return next;
-      });
-      return next;
+      const updated = await authService.updateMe(input);
+      setUser(updated);
+      return updated;
     },
     [],
   );
 
   const value = useMemo(
-    () => ({ user, initializing, login, signup, logout, switchRole, refresh, updateProfile }),
-    [user, initializing, login, signup, logout, switchRole, refresh, updateProfile],
+    () => ({ user, initializing, login, signup, logout, refresh, updateProfile }),
+    [user, initializing, login, signup, logout, refresh, updateProfile],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

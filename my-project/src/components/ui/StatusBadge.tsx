@@ -21,7 +21,7 @@ export const PetStatusBadge = ({ status }: { status: PetStatus }) => {
               ? 'info'
               : 'muted'
       }
-      className={cn('uppercase tracking-wide')}
+      className={cn('capitalize tracking-wide')}
     >
       {status}
     </Badge>
@@ -58,4 +58,18 @@ export const VisitStatusBadge = ({ status }: { status: VisitStatus }) => {
         ? 'warning'
         : 'muted';
   return <Badge variant={variant} className="capitalize">{status}</Badge>;
+};
+
+export const UserRoleBadge = ({ role }: { role: import('@/types').UserRole }) => {
+  const variant =
+    role === 'platform_admin'
+      ? 'destructive'
+      : role === 'shelter_staff'
+        ? 'info'
+        : 'muted';
+  return (
+    <Badge variant={variant}>
+      {role.replace('_', ' ')}
+    </Badge>
+  );
 };

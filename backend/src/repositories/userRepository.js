@@ -73,6 +73,20 @@ export const listUsers = async ({ limit = 10, offset = 0, role, search } = {}) =
   return { rows, total: count.rows[0].total };
 };
 
+/** Total portal accounts and admin (owner) count for one shelter. */
+export const countShelterUsers = async (shelterId, exceptUserId = null) => {
+  const { rows } = await pool.query(
+    `SELECT COUNT(*)::int AS total,
+            COUNT(*) FILTER (WHERE is_owner)::int AS admins
+       FROM users
+      WHERE shelter_id = $1
+        AND role = 'shelter_staff'
+        AND ($2::uuid IS NULL OR id <> $2)`,
+    [shelterId, exceptUserId],
+  );
+  return { total: rows[0].total, admins: rows[0].admins };
+};
+
 /** One page of a single shelter's staff/admin accounts. */
 export const listUsersByShelter = async (shelterId, { limit = 10, offset = 0, search } = {}) => {
   const values = [shelterId];
