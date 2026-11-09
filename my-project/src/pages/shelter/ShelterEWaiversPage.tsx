@@ -31,6 +31,7 @@ import {
 } from '@/components/waivers';
 import {
   EMPTY_WAIVER_TEMPLATE_FORM,
+  MAX_CUSTOM_WAIVER_TEMPLATES,
   type WaiverTemplateFormErrors,
   type WaiverTemplateFormValues,
 } from '@/data/waiverTemplates';
@@ -83,6 +84,8 @@ export const ShelterEWaiversPage = () => {
 
   const templates = data?.items ?? [];
   const totalTemplates = data?.total ?? 0;
+  const customTemplateCount = data?.customTotal ?? 0;
+  const customLimitReached = customTemplateCount >= MAX_CUSTOM_WAIVER_TEMPLATES;
   const loadError = error
     ? describeApiError(error, 'Failed to load waiver templates.')
     : null;
@@ -117,6 +120,7 @@ export const ShelterEWaiversPage = () => {
   };
 
   const openAdd = () => {
+    if (customLimitReached) return;
     setEditing(null);
     setForm(EMPTY_WAIVER_TEMPLATE_FORM);
     setFormErrors({});
@@ -174,7 +178,11 @@ export const ShelterEWaiversPage = () => {
       <div className="mt-6 space-y-4">
         <TableCard
           title="Waiver templates"
-          description="Platform defaults plus your shelter's private templates."
+          description={
+            showLoading
+              ? 'Platform defaults plus your shelter\'s private templates.'
+              : `Platform defaults plus your shelter's private templates — ${customTemplateCount} of ${MAX_CUSTOM_WAIVER_TEMPLATES} custom templates used.`
+          }
           icon={FileSignature}
           toolbar={
             <div className="flex flex-wrap items-center justify-between gap-2">
@@ -188,7 +196,16 @@ export const ShelterEWaiversPage = () => {
                 placeholder="Search name or category"
                 className="sm:w-[280px]"
               />
-              <Button size="sm" onClick={openAdd}>
+              <Button
+                size="sm"
+                onClick={openAdd}
+                disabled={customLimitReached}
+                title={
+                  customLimitReached
+                    ? `This shelter already has the maximum of ${MAX_CUSTOM_WAIVER_TEMPLATES} custom templates.`
+                    : undefined
+                }
+              >
                 <Plus className="size-4" /> Add template
               </Button>
             </div>
@@ -295,7 +312,7 @@ export const ShelterEWaiversPage = () => {
           </div>
 
           {/* Mobile: stacked cards */}
-          <div className="grid gap-3 p-4 md:hidden">
+          <div className="grid grid-cols-1 gap-3 p-4 md:hidden">
             {showLoading ? (
               <RecordCardSkeleton count={4} />
             ) : (

@@ -1,8 +1,9 @@
-import { Eye, Mail, PawPrint } from 'lucide-react';
+import { Eye, Mail, PawPrint, Trash2 } from 'lucide-react';
 
 import { MobileRecordCard } from '@/components/shared';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/Checkbox';
 import type { Inquiry } from '@/services/api';
 import type { Pet } from '@/types';
 import { formatDate } from '@/utils/formatters';
@@ -12,18 +13,31 @@ import { InquiryStatusBadge } from './InquiryStatusBadge';
 export interface InquiryMobileCardProps {
   inquiry: Inquiry;
   pet?: Pet;
+  selected: boolean;
+  onSelectChange: () => void;
   onView: () => void;
   onEmail: () => void;
+  onDelete: () => void;
 }
 
 /** Small-screen card for one adopter inquiry. */
 export const InquiryMobileCard = ({
   inquiry,
   pet,
+  selected,
+  onSelectChange,
   onView,
   onEmail,
+  onDelete,
 }: InquiryMobileCardProps) => (
   <MobileRecordCard
+    selection={
+      <Checkbox
+        checked={selected}
+        onChange={onSelectChange}
+        aria-label={`Select inquiry from ${inquiry.fromName}`}
+      />
+    }
     media={
       pet ? (
         <img
@@ -67,6 +81,15 @@ export const InquiryMobileCard = ({
             <Mail className="size-4" />
           </Button>
         )}
+        <Button
+          variant="ghost"
+          size="icon"
+          className="rounded-full text-destructive hover:bg-destructive/10 hover:text-destructive"
+          aria-label={`Delete inquiry from ${inquiry.fromName}`}
+          onClick={onDelete}
+        >
+          <Trash2 className="size-4" />
+        </Button>
       </>
     }
   >

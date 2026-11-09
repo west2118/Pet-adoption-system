@@ -14,6 +14,7 @@ import {
 } from '../repositories/userRepository.js';
 import { findShelterById } from '../repositories/shelterRepository.js';
 import { listAllPets as fetchAllPets } from '../repositories/petRepository.js';
+import { assertShelterUserCapacity } from './shelterUserService.js';
 
 export const getSystemStats = async () => {
   const [stats, summaryRows, recent] = await Promise.all([
@@ -53,6 +54,14 @@ export const setUserRole = async (id, role, shelterId) => {
     const shelter = await findShelterById(shelterId);
     if (!shelter) {
       throw new AppError('Assigned shelter not found.', 404);
+    }
+    const alreadyAssigned =
+      existing.role === 'shelter_staff' && existing.shelter_id === shelterId;
+    if (!alreadyAssigned) {
+      await assertShelterUserCapacity(shelterId, {
+        addingUser: true,
+        promotingAdmin: existing.is_owner === true,
+      });
     }
   }
   const row = await persistUserRole(id, role, role === 'shelter_staff' ? shelterId : null);

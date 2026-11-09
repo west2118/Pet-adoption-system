@@ -17,13 +17,13 @@ export const getWaiverTemplates = async (req, res) => {
   const { page, limit, offset } = parsePagination(req.query);
   const category = req.query.category || undefined;
   const search = req.query.search || undefined;
-  const { templates, total } = await listWaiverTemplates(req.user.shelterId, {
+  const { templates, total, customTotal } = await listWaiverTemplates(req.user.shelterId, {
     limit,
     offset,
     category,
     search,
   });
-  return sendSuccess(res, { templates }, undefined, buildMeta(page, limit, total));
+  return sendSuccess(res, { templates, customTotal }, undefined, buildMeta(page, limit, total));
 };
 
 export const addWaiverTemplate = async (req, res) => {

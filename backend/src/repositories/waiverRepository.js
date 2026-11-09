@@ -27,6 +27,17 @@ export const listTemplatesByShelter = async (shelterId, { limit, offset, categor
   return { rows, total: count.rows[0].total };
 };
 
+/** Count a shelter's own (non-default) templates for the per-shelter cap. */
+export const countCustomTemplates = async (shelterId) => {
+  const { rows } = await pool.query(
+    `SELECT COUNT(*)::int AS total
+       FROM waiver_templates
+      WHERE shelter_id = $1 AND is_default = false`,
+    [shelterId],
+  );
+  return rows[0].total;
+};
+
 export const findTemplateById = async (id) => {
   const { rows } = await pool.query('SELECT * FROM waiver_templates WHERE id = $1', [id]);
   return rows[0] ?? null;

@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { Eye, Mail, MessageCircleQuestion } from 'lucide-react';
+import { Eye, Mail, MessageCircleQuestion, Trash2 } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { toast } from 'react-toastify';
 
@@ -20,7 +20,9 @@ import {
   TableSkeletonRows,
   focusFirstError,
 } from '@/components/shared';
+import { ConfirmDeleteModal } from '@/components/shared/ConfirmDeleteModal';
 import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/Checkbox';
 import { Select } from '@/components/ui/Form';
 import {
   Table,
@@ -32,6 +34,7 @@ import {
 } from '@/components/ui/Table';
 import {
   INQUIRY_STATUS_FILTER_OPTIONS,
+  MAX_INQUIRIES_PER_SHELTER,
   type InquiryStatusFilter,
 } from '@/data/shelterInquiries';
 import { usePets } from '@/hooks/useData';
@@ -61,6 +64,10 @@ export const ShelterInquiriesPage = () => {
   const [emailErrors, setEmailErrors] = useState<
     Partial<Record<'subject' | 'message', string>>
   >({});
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [deleteTarget, setDeleteTarget] = useState<{ ids: string[]; label: string } | null>(
+    null,
+  );
 
   const petById = useMemo(() => new Map(pets.map((pet) => [pet.id, pet])), [pets]);
 
@@ -83,11 +90,54 @@ export const ShelterInquiriesPage = () => {
 
   const inquiries = data?.items ?? [];
   const totalInquiries = data?.total ?? 0;
+  const shelterTotal = data?.shelterTotal ?? totalInquiries;
 
-  const { emailMutation, isSending } = useShelterInquiryMutations({
-    onEmailed: () => setEmailDraft(null),
-    onConflict: () => setEmailDraft(null),
-  });
+  const pageIds = inquiries.map((inquiry) => inquiry.id);
+  const allSelected =
+    pageIds.length > 0 && pageIds.every((id) => selectedIds.has(id));
+
+  const toggleSelectAll = () => {
+    setSelectedIds((previous) => {
+      const next = new Set(previous);
+      if (allSelected) pageIds.forEach((id) => next.delete(id));
+      else pageIds.forEach((id) => next.add(id));
+      return next;
+    });
+  };
+
+  const toggleSelected = (id: string) => {
+    setSelectedIds((previous) => {
+      const next = new Set(previous);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const describeInquiry = (inquiry: Inquiry) => {
+    const pet = petById.get(inquiry.petId);
+    return `Inquiry from ${inquiry.fromName}${pet ? ` about ${pet.name}` : ''}`;
+  };
+
+  const describeSelectedInquiries = () => {
+    const selected = inquiries.filter((inquiry) => selectedIds.has(inquiry.id));
+    const [first] = selected;
+    if (selected.length === 1 && first) return describeInquiry(first);
+    const names = [...new Set(selected.map((inquiry) => inquiry.fromName))];
+    const shown = names.slice(0, 3).join(', ');
+    const extra = names.length > 3 ? ` and ${names.length - 3} more` : '';
+    return `${selected.length} inquiries from ${shown}${extra}`;
+  };
+
+  const { emailMutation, deleteMutation, isSending, isDeleting } =
+    useShelterInquiryMutations({
+      onEmailed: () => setEmailDraft(null),
+      onConflict: () => setEmailDraft(null),
+      onDeleted: () => {
+        setDeleteTarget(null);
+        setSelectedIds(new Set());
+      },
+    });
 
   const detailsInquiry = inquiries.find((inquiry) => inquiry.id === detailsId) ?? null;
 
@@ -141,7 +191,11 @@ export const ShelterInquiriesPage = () => {
       <div className="mt-6 space-y-4">
         <TableCard
           title="Inquiries"
-          description="Direct messages from adopters about your listings."
+          description={
+            showLoading
+              ? 'Direct messages from adopters about your listings.'
+              : `Direct messages from adopters about your listings — ${shelterTotal} of ${MAX_INQUIRIES_PER_SHELTER} inquiries used.`
+          }
           icon={MessageCircleQuestion}
           toolbar={
             <div className="flex flex-wrap items-center justify-between gap-2">
@@ -151,6 +205,7 @@ export const ShelterInquiriesPage = () => {
                 onDebouncedChange={(value) => {
                   setQuery(value);
                   setPage(1);
+                  setSelectedIds(new Set());
                 }}
                 placeholder="Search sender or pet"
                 className="sm:w-[240px]"
@@ -163,9 +218,25 @@ export const ShelterInquiriesPage = () => {
                   onChange={(e) => {
                     setStatusFilter(e.target.value as InquiryStatusFilter);
                     setPage(1);
+                    setSelectedIds(new Set());
                   }}
                   options={INQUIRY_STATUS_FILTER_OPTIONS}
                 />
+                {selectedIds.size > 0 ? (
+                  <Button
+                    size="sm"
+                    variant="destructive"
+                    className="h-9"
+                    onClick={() =>
+                      setDeleteTarget({
+                        ids: [...selectedIds],
+                        label: describeSelectedInquiries(),
+                      })
+                    }
+                  >
+                    <Trash2 className="size-4" /> Delete selected ({selectedIds.size})
+                  </Button>
+                ) : null}
               </div>
             </div>
           }
@@ -185,10 +256,14 @@ export const ShelterInquiriesPage = () => {
                 currentPage={page}
                 totalItems={totalInquiries}
                 pageSize={pageSize}
-                onPageChange={setPage}
+                onPageChange={(next) => {
+                  setPage(next);
+                  setSelectedIds(new Set());
+                }}
                 onPageSizeChange={(newSize) => {
                   setPageSize(newSize);
                   setPage(1);
+                  setSelectedIds(new Set());
                 }}
                 label="inquiries"
               />
@@ -201,6 +276,13 @@ export const ShelterInquiriesPage = () => {
             <Table>
               <TableHeader>
                 <TableRow>
+                  <TableHead className="w-10">
+                    <Checkbox
+                      checked={allSelected}
+                      onChange={toggleSelectAll}
+                      aria-label="Select all inquiries on this page"
+                    />
+                  </TableHead>
                   <TableHead>Pet</TableHead>
                   <TableHead>From</TableHead>
                   <TableHead>Message</TableHead>
@@ -211,12 +293,19 @@ export const ShelterInquiriesPage = () => {
               </TableHeader>
               <TableBody>
                 {showLoading ? (
-                  <TableSkeletonRows columns={6} rows={5} avatar />
+                  <TableSkeletonRows columns={7} rows={5} avatar />
                 ) : (
                   inquiries.map((inquiry) => {
                     const pet = petById.get(inquiry.petId);
                     return (
                       <TableRow key={inquiry.id}>
+                        <TableCell className="w-10">
+                          <Checkbox
+                            checked={selectedIds.has(inquiry.id)}
+                            onChange={() => toggleSelected(inquiry.id)}
+                            aria-label={`Select inquiry from ${inquiry.fromName}`}
+                          />
+                        </TableCell>
                         <TableCell>
                           <div className="flex items-center gap-3">
                             {pet ? (
@@ -273,6 +362,21 @@ export const ShelterInquiriesPage = () => {
                                 <Mail className="size-4" />
                               </Button>
                             )}
+                            <Button
+                              variant="ghost"
+                              size="icon-sm"
+                              className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+                              aria-label={`Delete inquiry from ${inquiry.fromName}`}
+                              title="Delete inquiry"
+                              onClick={() =>
+                                setDeleteTarget({
+                                  ids: [inquiry.id],
+                                  label: describeInquiry(inquiry),
+                                })
+                              }
+                            >
+                              <Trash2 className="size-4" />
+                            </Button>
                           </div>
                         </TableCell>
                       </TableRow>
@@ -284,7 +388,7 @@ export const ShelterInquiriesPage = () => {
           </div>
 
           {/* Mobile: stacked cards */}
-          <div className="grid gap-3 p-4 md:hidden">
+          <div className="grid grid-cols-1 gap-3 p-4 md:hidden">
             {showLoading ? (
               <RecordCardSkeleton count={3} />
             ) : (
@@ -293,8 +397,16 @@ export const ShelterInquiriesPage = () => {
                   key={inquiry.id}
                   inquiry={inquiry}
                   pet={petById.get(inquiry.petId)}
+                  selected={selectedIds.has(inquiry.id)}
+                  onSelectChange={() => toggleSelected(inquiry.id)}
                   onView={() => setDetailsId(inquiry.id)}
                   onEmail={() => openEmailCompose(inquiry)}
+                  onDelete={() =>
+                    setDeleteTarget({
+                      ids: [inquiry.id],
+                      label: describeInquiry(inquiry),
+                    })
+                  }
                 />
               ))
             )}
@@ -323,6 +435,30 @@ export const ShelterInquiriesPage = () => {
         }}
         onClose={closeEmailCompose}
         onSend={handleSendEmail}
+      />
+
+      <ConfirmDeleteModal
+        open={deleteTarget !== null}
+        onClose={() => {
+          if (!isDeleting) setDeleteTarget(null);
+        }}
+        onConfirm={() => {
+          if (deleteTarget) {
+            deleteMutation.mutate({
+              ids: deleteTarget.ids,
+              description: deleteTarget.label,
+            });
+          }
+        }}
+        title={
+          deleteTarget && deleteTarget.ids.length === 1
+            ? 'Delete inquiry?'
+            : `Delete ${deleteTarget?.ids.length ?? 0} inquiries?`
+        }
+        description="This permanently removes the selected inquiries from your inbox. The senders are not notified."
+        itemName={deleteTarget?.label}
+        confirmLabel="Delete"
+        isDeleting={isDeleting}
       />
     </div>
   );

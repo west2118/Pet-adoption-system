@@ -164,6 +164,11 @@ export const listMyListings = async (): Promise<Pet[]> => {
   return data.pets;
 };
 
+export interface MyListingsPage extends PaginatedResult<Pet> {
+  /** Unfiltered pet count for this shelter, used for the per-shelter cap. */
+  shelterTotal: number;
+}
+
 /**
  * One page of the shelter's own inventory.
  *
@@ -181,7 +186,7 @@ export const listMyListingsPaginated = async (options: {
   species?: string;
   /** Server-side status filter (`all` or a PetStatus). */
   status?: string;
-} = {}): Promise<PaginatedResult<Pet>> => {
+} = {}): Promise<MyListingsPage> => {
   const page = options.page ?? 1;
   const queryParams = new URLSearchParams();
   queryParams.set('page', String(page));
@@ -197,7 +202,7 @@ export const listMyListingsPaginated = async (options: {
     queryParams.set('status', options.status);
   }
 
-  const { data, meta } = await apiRequestWithMeta<PetsListResponse>(
+  const { data, meta } = await apiRequestWithMeta<PetsListResponse & { shelterTotal?: number }>(
     `/shelter/listings?${queryParams.toString()}`,
     { auth: 'full' },
   );
@@ -210,6 +215,7 @@ export const listMyListingsPaginated = async (options: {
     page: meta?.page ?? page,
     limit,
     totalPages: meta?.totalPages ?? Math.ceil(total / limit),
+    shelterTotal: data.shelterTotal ?? total,
   };
 };
 
@@ -237,6 +243,16 @@ export const removePet = async (id: string): Promise<void> => {
   });
 };
 
+/** Bulk-delete selected listings. The backend only removes this shelter's pets. */
+export const removePets = async (ids: string[]): Promise<number> => {
+  const data = await apiRequest<{ deleted: number }>('/shelter/listings', {
+    method: 'DELETE',
+    auth: 'full',
+    body: { ids },
+  });
+  return data.deleted;
+};
+
 export const petService = {
   list: listPets,
   listByShelter: listPetsByShelter,
@@ -246,4 +262,5 @@ export const petService = {
   create: createPet,
   update: updatePet,
   remove: removePet,
+  removeMany: removePets,
 };

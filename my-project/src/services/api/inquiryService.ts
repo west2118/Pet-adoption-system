@@ -5,6 +5,12 @@ import type { PaginatedResult } from './shared';
 
 interface ShelterInquiriesResponse {
   inquiries: Inquiry[];
+  shelterTotal?: number;
+}
+
+export interface ShelterInquiriesPage extends PaginatedResult<Inquiry> {
+  /** Unfiltered inquiry count for this shelter, used for the cap display. */
+  shelterTotal: number;
 }
 
 interface InquiryResponse {
@@ -55,6 +61,16 @@ export const emailShelterInquiry = async (
   );
 };
 
+/** Bulk-delete selected inquiries. The backend only removes rows for this shelter. */
+export const deleteShelterInquiries = async (ids: string[]): Promise<number> => {
+  const data = await apiRequest<{ deleted: number }>('/shelter/inquiries', {
+    method: 'DELETE',
+    auth: 'full',
+    body: { ids },
+  });
+  return data.deleted;
+};
+
 /**
  * Shelter inbox (paginated). The backend scopes rows to the staff member's
  * shelter via the JWT; no shelter id is sent from the client.
@@ -64,7 +80,7 @@ export const listShelterInquiriesPaginated = async (options: {
   limit?: number;
   resolved?: boolean;
   search?: string;
-} = {}): Promise<PaginatedResult<Inquiry>> => {
+} = {}): Promise<ShelterInquiriesPage> => {
   const page = options.page ?? 1;
   const limit = options.limit ?? 10;
   const queryParams = new URLSearchParams();
@@ -82,5 +98,6 @@ export const listShelterInquiriesPaginated = async (options: {
     total: meta?.total ?? data.inquiries.length,
     page: meta?.page ?? page,
     limit: meta?.limit ?? limit,
+    shelterTotal: data.shelterTotal ?? meta?.total ?? data.inquiries.length,
   };
 };

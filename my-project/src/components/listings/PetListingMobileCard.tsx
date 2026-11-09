@@ -2,12 +2,15 @@ import { Eye, Pencil, Trash2 } from 'lucide-react';
 
 import { MobileRecordCard } from '@/components/shared';
 import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/Checkbox';
 import { PetStatusBadge, SpeciesBadge, VisibilityBadge } from '@/components/ui/StatusBadge';
 import type { Pet } from '@/types';
 import { formatDate } from '@/utils/formatters';
 
 export interface PetListingMobileCardProps {
   pet: Pet;
+  selected: boolean;
+  onSelectChange: () => void;
   onView: (pet: Pet) => void;
   onEdit: (pet: Pet) => void;
   onDelete: (pet: Pet) => void;
@@ -20,11 +23,20 @@ export interface PetListingMobileCardProps {
  */
 export const PetListingMobileCard = ({
   pet,
+  selected,
+  onSelectChange,
   onView,
   onEdit,
   onDelete,
 }: PetListingMobileCardProps) => (
   <MobileRecordCard
+    selection={
+      <Checkbox
+        checked={selected}
+        onChange={onSelectChange}
+        aria-label={`Select ${pet.name}`}
+      />
+    }
     media={
       <img
         src={pet.imageUrl}

@@ -14,7 +14,7 @@ export const ShelterSidebar = ({ mobileOpen = false, onClose }: ShelterSidebarPr
       mobileOpen={mobileOpen}
       onClose={onClose}
       links={[
-        { to: '/shelter', end: true, label: 'Overview', icon: LayoutDashboard },
+        { to: '/shelter', end: true, label: 'Dashboard', icon: LayoutDashboard },
         { to: '/shelter/listings', label: 'Listings', icon: PawPrint },
         { to: '/shelter/applications', label: 'Applications', icon: ClipboardList },
         { to: '/shelter/inquiries', label: 'Inquiries', icon: MessageCircleQuestion },

@@ -26,7 +26,7 @@ export const PetDeleteModal = ({
         if (pet) onConfirm(pet.id);
       }}
       title="Delete pet listing?"
-      description="This permanently removes the listing from your inventory."
+      description="Deleting this pet also permanently deletes all data connected to it: adoption applications and their status history, issued waivers and waiver versions, inquiries, visit requests, and adopter favorites."
       itemName={pet?.name}
       confirmLabel="Delete listing"
       isDeleting={isDeleting}

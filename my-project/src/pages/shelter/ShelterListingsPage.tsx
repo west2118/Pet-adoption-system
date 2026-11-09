@@ -12,6 +12,7 @@ import {
   TablePagination,
   TableSkeletonRows,
 } from '@/components/shared';
+import { ConfirmDeleteModal } from '@/components/shared/ConfirmDeleteModal';
 import { PetStatusBadge, SpeciesBadge, VisibilityBadge } from '@/components/ui/StatusBadge';
 import {
   Table,
@@ -23,6 +24,7 @@ import {
 } from '@/components/ui/Table';
 import { Select } from '@/components/ui/Form';
 import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/Checkbox';
 
 import {
   PetDeleteModal,
@@ -41,6 +43,7 @@ import type { Pet, PetStatus, PetVisibility } from '@/types';
 import { formatDate } from '@/utils/formatters';
 
 import {
+  MAX_PETS_PER_SHELTER,
   SPECIES_FILTER_OPTIONS,
   STATUS_FILTER_OPTIONS,
   VISIBILITY_FILTER_OPTIONS,
@@ -67,6 +70,8 @@ export const ShelterListingsPage = () => {
   const [editingPet, setEditingPet] = useState<Pet | null>(null);
   const [detailsPet, setDetailsPet] = useState<Pet | null>(null);
   const [pendingDeletePet, setPendingDeletePet] = useState<Pet | null>(null);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
 
   // Queries
   const {
@@ -103,6 +108,40 @@ export const ShelterListingsPage = () => {
 
   const pets = listingsData?.items ?? [];
   const totalPets = listingsData?.total ?? 0;
+  const shelterTotal = listingsData?.shelterTotal ?? 0;
+  const petLimitReached = shelterTotal >= MAX_PETS_PER_SHELTER;
+
+  const pageIds = pets.map((pet) => pet.id);
+  const allSelected =
+    pageIds.length > 0 && pageIds.every((id) => selectedIds.has(id));
+
+  const toggleSelectAll = () => {
+    setSelectedIds((previous) => {
+      const next = new Set(previous);
+      if (allSelected) pageIds.forEach((id) => next.delete(id));
+      else pageIds.forEach((id) => next.add(id));
+      return next;
+    });
+  };
+
+  const toggleSelected = (id: string) => {
+    setSelectedIds((previous) => {
+      const next = new Set(previous);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const describeSelectedPets = () => {
+    const selected = pets.filter((pet) => selectedIds.has(pet.id));
+    const [first] = selected;
+    if (selected.length === 1 && first) return first.name;
+    const names = selected.map((pet) => pet.name);
+    const shown = names.slice(0, 3).join(', ');
+    const extra = names.length > 3 ? ` and ${names.length - 3} more` : '';
+    return `${selected.length} listings: ${shown}${extra}`;
+  };
 
   // Mutations
   const handleFormSaved = () => {
@@ -114,14 +153,21 @@ export const ShelterListingsPage = () => {
     createMutation,
     updateMutation,
     deleteMutation,
+    bulkDeleteMutation,
     isSaving,
+    isBulkDeleting,
   } = useShelterListingMutations({
     onCreated: handleFormSaved,
     onUpdated: handleFormSaved,
     onDeleted: () => setPendingDeletePet(null),
+    onBulkDeleted: () => {
+      setBulkDeleteOpen(false);
+      setSelectedIds(new Set());
+    },
   });
 
   const handleOpenAdd = () => {
+    if (petLimitReached) return;
     setEditingPet(null);
     setSlideOpen(true);
   };
@@ -173,10 +219,23 @@ export const ShelterListingsPage = () => {
       <div className="mt-6 space-y-4">
         <TableCard
           title="Inventory"
-          description="Public and private pets in your shelter's inventory."
+          description={
+            showLoading
+              ? "Public and private pets in your shelter's inventory."
+              : `Public and private pets in your shelter's inventory — ${shelterTotal} of ${MAX_PETS_PER_SHELTER} listings used.`
+          }
           icon={PawPrint}
           action={
-            <Button size="lg" onClick={handleOpenAdd}>
+            <Button
+              size="lg"
+              onClick={handleOpenAdd}
+              disabled={petLimitReached}
+              title={
+                petLimitReached
+                  ? `This shelter already has its maximum of ${MAX_PETS_PER_SHELTER} pet listings.`
+                  : undefined
+              }
+            >
               <Plus className="size-4" /> Add pet
             </Button>
           }
@@ -188,6 +247,7 @@ export const ShelterListingsPage = () => {
                 onDebouncedChange={(val) => {
                   setQuery(val);
                   setPage(1);
+                  setSelectedIds(new Set());
                 }}
                 placeholder="Search name or breed"
                 className="sm:w-[240px]"
@@ -200,6 +260,7 @@ export const ShelterListingsPage = () => {
                   onChange={(e) => {
                     setSpeciesFilter(e.target.value);
                     setPage(1);
+                    setSelectedIds(new Set());
                   }}
                   options={SPECIES_FILTER_OPTIONS}
                 />
@@ -210,6 +271,7 @@ export const ShelterListingsPage = () => {
                   onChange={(e) => {
                     setStatusFilter(e.target.value as 'all' | PetStatus);
                     setPage(1);
+                    setSelectedIds(new Set());
                   }}
                   options={STATUS_FILTER_OPTIONS}
                 />
@@ -220,9 +282,20 @@ export const ShelterListingsPage = () => {
                   onChange={(e) => {
                     setVisibilityFilter(e.target.value as 'all' | PetVisibility);
                     setPage(1);
+                    setSelectedIds(new Set());
                   }}
                   options={VISIBILITY_FILTER_OPTIONS}
                 />
+                {selectedIds.size > 0 ? (
+                  <Button
+                    size="sm"
+                    variant="destructive"
+                    className="h-9"
+                    onClick={() => setBulkDeleteOpen(true)}
+                  >
+                    <Trash2 className="size-4" /> Delete selected ({selectedIds.size})
+                  </Button>
+                ) : null}
               </div>
             </div>
           }
@@ -246,10 +319,14 @@ export const ShelterListingsPage = () => {
                 currentPage={page}
                 totalItems={totalPets}
                 pageSize={pageSize}
-                onPageChange={setPage}
+                onPageChange={(next) => {
+                  setPage(next);
+                  setSelectedIds(new Set());
+                }}
                 onPageSizeChange={(newSize) => {
                   setPageSize(newSize);
                   setPage(1);
+                  setSelectedIds(new Set());
                 }}
                 label="listings"
               />
@@ -262,6 +339,13 @@ export const ShelterListingsPage = () => {
             <Table>
               <TableHeader>
                 <TableRow>
+                  <TableHead className="w-10">
+                    <Checkbox
+                      checked={allSelected}
+                      onChange={toggleSelectAll}
+                      aria-label="Select all pet listings on this page"
+                    />
+                  </TableHead>
                   <TableHead>Pet</TableHead>
                   <TableHead>Species</TableHead>
                   <TableHead>Status</TableHead>
@@ -272,10 +356,17 @@ export const ShelterListingsPage = () => {
               </TableHeader>
               <TableBody>
                 {showLoading ? (
-                  <TableSkeletonRows columns={6} rows={6} avatar />
+                  <TableSkeletonRows columns={7} rows={6} avatar />
                 ) : (
                   pets.map((pet) => (
                     <TableRow key={pet.id}>
+                      <TableCell className="w-10">
+                        <Checkbox
+                          checked={selectedIds.has(pet.id)}
+                          onChange={() => toggleSelected(pet.id)}
+                          aria-label={`Select ${pet.name}`}
+                        />
+                      </TableCell>
                       <TableCell>
                         <div className="flex items-center gap-3">
                           <img
@@ -340,7 +431,7 @@ export const ShelterListingsPage = () => {
           </div>
 
           {/* Mobile: stacked cards */}
-          <div className="grid gap-3 p-4 md:hidden">
+          <div className="grid grid-cols-1 gap-3 p-4 md:hidden">
             {showLoading ? (
               <RecordCardSkeleton count={3} />
             ) : (
@@ -348,6 +439,8 @@ export const ShelterListingsPage = () => {
                 <PetListingMobileCard
                   key={pet.id}
                   pet={pet}
+                  selected={selectedIds.has(pet.id)}
+                  onSelectChange={() => toggleSelected(pet.id)}
                   onView={setDetailsPet}
                   onEdit={handleOpenEdit}
                   onDelete={handleAskRemove}
@@ -386,6 +479,28 @@ export const ShelterListingsPage = () => {
         onConfirm={(petId) =>
           deleteMutation.mutate({ id: petId, name: pendingDeletePet?.name })
         }
+      />
+
+      <ConfirmDeleteModal
+        open={bulkDeleteOpen}
+        onClose={() => {
+          if (!isBulkDeleting) setBulkDeleteOpen(false);
+        }}
+        onConfirm={() =>
+          bulkDeleteMutation.mutate({
+            ids: [...selectedIds],
+            description: describeSelectedPets(),
+          })
+        }
+        title={
+          selectedIds.size === 1
+            ? 'Delete pet listing?'
+            : `Delete ${selectedIds.size} pet listings?`
+        }
+        description="Deleting the selected pets also permanently deletes all data connected to them: adoption applications and their status history, issued waivers and waiver versions, inquiries, visit requests, and adopter favorites."
+        itemName={describeSelectedPets()}
+        confirmLabel="Delete listings"
+        isDeleting={isBulkDeleting}
       />
     </div>
   );

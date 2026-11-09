@@ -1,5 +1,8 @@
 import type { AgeGroup } from '@/types';
 
+// Matches the backend cap: each shelter can hold at most 150 pet records.
+export const MAX_PETS_PER_SHELTER = 150;
+
 export const STATUS_OPTIONS = [
   { value: 'Available', label: 'Available' },
   { value: 'In Process', label: 'In Process' },

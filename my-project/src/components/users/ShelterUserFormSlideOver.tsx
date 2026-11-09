@@ -116,7 +116,8 @@ export const ShelterUserFormSlideOver = ({
             error={errors.accountType}
           />
           <p className="mt-1.5 text-xs text-muted-foreground">
-            Admins can manage this page; staff can use the rest of the shelter portal.
+            Admins can manage this page; staff can use the rest of the shelter portal. Each
+            shelter allows 1 admin and 2 staff accounts.
           </p>
         </div>
         <div>

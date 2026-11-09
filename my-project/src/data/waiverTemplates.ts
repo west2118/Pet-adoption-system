@@ -6,6 +6,9 @@ export interface WaiverTemplateFormValues {
 
 export type WaiverTemplateFormErrors = Partial<Record<'name' | 'body', string>>;
 
+// Matches the backend cap: 5 platform defaults + 10 custom templates per shelter.
+export const MAX_CUSTOM_WAIVER_TEMPLATES = 10;
+
 export const WAIVER_TEMPLATE_CATEGORY_OPTIONS = [
   { value: 'Adoption', label: 'Adoption' },
   { value: 'Foster', label: 'Foster' },

@@ -86,10 +86,9 @@ export const VisitEmailSlideOver = ({
             <Label htmlFor="visit-email-slot">Visit date &amp; time</Label>
             <ValidatedInput
               id="visit-email-slot"
+              type="datetime-local"
               value={slot}
               onChange={(e) => onSlotChange(e.target.value)}
-              placeholder="e.g. Sat, Oct 18 at 10:00 AM"
-              maxLength={255}
               error={errors.slot}
             />
           </div>

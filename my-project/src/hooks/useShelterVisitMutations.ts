@@ -8,6 +8,8 @@ interface ApproveVisitVariables {
   id: string;
   /** Visit date and time emailed to the adopter. */
   slot: string;
+  /** Structured date/time (`YYYY-MM-DDTHH:mm`) used by the dashboard chart. */
+  confirmedFor?: string;
   message?: string;
   /** True when the visit was already confirmed and this is a reschedule. */
   isReschedule: boolean;
@@ -26,9 +28,17 @@ interface CompleteVisitVariables {
   petName?: string;
 }
 
+interface DeleteVisitsVariables {
+  ids: string[];
+  /** Human-readable summary of the selected requests, used in the toast. */
+  description?: string;
+}
+
 interface UseShelterVisitMutationsOptions {
   /** Runs after any status change, e.g. to close the open dialog. */
   onUpdated?: () => void;
+  /** Runs after a bulk delete succeeds, e.g. to close the confirmation modal. */
+  onDeleted?: () => void;
 }
 
 export const SHELTER_VISITS_QUERY_KEY = ['shelterVisits'] as const;
@@ -42,6 +52,7 @@ const VISIT_DETAILS_QUERY_KEY = ['shelterVisit'] as const;
  */
 export const useShelterVisitMutations = ({
   onUpdated,
+  onDeleted,
 }: UseShelterVisitMutationsOptions = {}) => {
   const queryClient = useQueryClient();
 
@@ -51,10 +62,11 @@ export const useShelterVisitMutations = ({
   };
 
   const approveMutation = useMutation({
-    mutationFn: ({ id, slot, message }: ApproveVisitVariables) =>
+    mutationFn: ({ id, slot, confirmedFor, message }: ApproveVisitVariables) =>
       visitService.updateStatus(id, {
         status: 'confirmed',
         confirmedSlot: slot,
+        confirmedFor,
         message,
       }),
     onSuccess: (_thread, { isReschedule, petName, adopterEmail }) => {
@@ -98,12 +110,32 @@ export const useShelterVisitMutations = ({
     },
   });
 
+  const deleteMutation = useMutation({
+    mutationFn: ({ ids }: DeleteVisitsVariables) => visitService.deleteForShelter(ids),
+    onSuccess: (deleted, { description }) => {
+      toast.success(
+        description
+          ? `${description} deleted.`
+          : deleted === 1
+            ? 'Visit request deleted.'
+            : `${deleted} visit requests deleted.`,
+      );
+      invalidateVisits();
+      onDeleted?.();
+    },
+    onError: (err) => {
+      toast.error(err instanceof ApiError ? err.message : 'Failed to delete visit requests.');
+    },
+  });
+
   return {
     approveMutation,
     declineMutation,
     completeMutation,
+    deleteMutation,
     /** True while any visit decision is being saved. */
     isWorking:
       approveMutation.isPending || declineMutation.isPending || completeMutation.isPending,
+    isDeleting: deleteMutation.isPending,
   };
 };

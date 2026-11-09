@@ -1,10 +1,16 @@
 import { Router } from 'express';
-import { addListing, deleteListing, editListing, getMyListings } from '../controllers/listingController.js';
+import {
+  addListing,
+  deleteListing,
+  deleteListings,
+  editListing,
+  getMyListings,
+} from '../controllers/listingController.js';
 import { authenticate } from '../middlewares/authenticate.js';
 import { authorize } from '../middlewares/authorize.js';
 import { requireShelter } from '../middlewares/requireShelter.js';
 import { validate } from '../middlewares/validate.js';
-import { uuidParam } from '../validators/commonValidator.js';
+import { bulkDeleteSchema, uuidParam } from '../validators/commonValidator.js';
 import { createPetSchema, shelterListingQuerySchema, updatePetSchema } from '../validators/petValidator.js';
 
 export const listingRoutes = Router();
@@ -19,4 +25,5 @@ listingRoutes.patch(
   validate(updatePetSchema),
   editListing,
 );
+listingRoutes.delete('/', validate(bulkDeleteSchema), deleteListings);
 listingRoutes.delete('/:id', validate(uuidParam, 'params'), deleteListing);

@@ -18,3 +18,12 @@ export interface StatusPoint {
   status: ApplicationStatus;
   count: number;
 }
+
+/** Confirmed meet-and-greets scheduled for one calendar day. */
+export interface VisitTrendPoint {
+  /** ISO day (`YYYY-MM-DD`). */
+  date: string;
+  /** Short display label from the backend (e.g. "Nov 18"). */
+  label: string;
+  count: number;
+}

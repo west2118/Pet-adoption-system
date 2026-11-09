@@ -13,6 +13,9 @@ export const SHELTER_ACCOUNT_TYPE_OPTIONS = [
   { value: 'admin', label: 'Admin' },
 ];
 
+// Matches the backend cap: each shelter gets one admin and two staff accounts.
+export const MAX_SHELTER_USERS = 3;
+
 export const EMPTY_SHELTER_USER_FORM: ShelterUserFormValues = {
   name: '',
   email: '',

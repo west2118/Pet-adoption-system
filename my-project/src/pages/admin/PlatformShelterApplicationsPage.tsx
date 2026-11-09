@@ -273,7 +273,7 @@ export const PlatformShelterApplicationsPage = () => {
           </div>
 
           {/* Mobile view */}
-          <div className="grid gap-3 p-4 md:hidden">
+          <div className="grid grid-cols-1 gap-3 p-4 md:hidden">
             {showLoading ? (
               <TableSkeletonRows columns={1} rows={4} />
             ) : (

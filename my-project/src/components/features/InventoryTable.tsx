@@ -10,6 +10,7 @@ import {
 } from '@/components/ui/Table';
 import { PetStatusBadge, VisibilityBadge } from '@/components/ui/StatusBadge';
 import { EmptyState } from '@/components/ui/Feedback';
+import { MobileRecordCard, RecordCardSkeleton } from '@/components/shared';
 import { TableSkeletonRows } from '@/components/shared/SkeletonLoaders';
 
 interface InventoryTableProps {
@@ -31,44 +32,72 @@ export const InventoryTable = ({ pets, loading = false }: InventoryTableProps) =
   }
 
   return (
-    <Table>
-      <TableHeader>
-        <TableRow>
-          <TableHead>Pet</TableHead>
-          <TableHead>Species</TableHead>
-          <TableHead>Visibility</TableHead>
-          <TableHead>Status</TableHead>
-          <TableHead className="text-right">Added</TableHead>
-        </TableRow>
-      </TableHeader>
-      <TableBody>
+    <>
+      {/* Desktop: data table */}
+      <div className="hidden md:block">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Pet</TableHead>
+              <TableHead>Species</TableHead>
+              <TableHead>Visibility</TableHead>
+              <TableHead>Status</TableHead>
+              <TableHead className="text-right">Added</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {loading ? (
+              <TableSkeletonRows columns={5} rows={5} avatar />
+            ) : pets.map((pet) => (
+              <TableRow key={pet.id}>
+                <TableCell>
+                  <div className="flex items-center gap-2.5">
+                    <img
+                      src={pet.imageUrl}
+                      alt={pet.name}
+                      className="size-9 shrink-0 rounded-lg object-cover"
+                    />
+                    <p className="font-medium">{pet.name}</p>
+                  </div>
+                </TableCell>
+                <TableCell className="capitalize text-muted-foreground">{pet.species}</TableCell>
+                <TableCell>
+                  <VisibilityBadge visibility={pet.visibility} />
+                </TableCell>
+                <TableCell>
+                  <PetStatusBadge status={pet.status} />
+                </TableCell>
+                <TableCell className="whitespace-nowrap text-right text-muted-foreground">
+                  {formatDate(pet.dateAdded)}
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </div>
+
+      {/* Mobile: stacked cards (read-only on the dashboard) */}
+      <div className="grid grid-cols-1 gap-3 p-4 md:hidden">
         {loading ? (
-          <TableSkeletonRows columns={5} rows={5} avatar />
+          <RecordCardSkeleton count={4} />
         ) : pets.map((pet) => (
-          <TableRow key={pet.id}>
-            <TableCell>
-              <div className="flex items-center gap-2.5">
-                <img
-                  src={pet.imageUrl}
-                  alt={pet.name}
-                  className="size-9 shrink-0 rounded-lg object-cover"
-                />
-                <p className="font-medium">{pet.name}</p>
-              </div>
-            </TableCell>
-            <TableCell className="capitalize text-muted-foreground">{pet.species}</TableCell>
-            <TableCell>
-              <VisibilityBadge visibility={pet.visibility} />
-            </TableCell>
-            <TableCell>
-              <PetStatusBadge status={pet.status} />
-            </TableCell>
-            <TableCell className="whitespace-nowrap text-right text-muted-foreground">
-              {formatDate(pet.dateAdded)}
-            </TableCell>
-          </TableRow>
+          <MobileRecordCard
+            key={pet.id}
+            media={
+              <img
+                src={pet.imageUrl}
+                alt={pet.name}
+                className="size-16 shrink-0 rounded-xl object-cover ring-1 ring-border/60"
+              />
+            }
+            title={pet.name}
+            subtitle={pet.species.charAt(0).toUpperCase() + pet.species.slice(1)}
+            status={<PetStatusBadge status={pet.status} />}
+            badges={<VisibilityBadge visibility={pet.visibility} />}
+            meta={`Added ${formatDate(pet.dateAdded)}`}
+          />
         ))}
-      </TableBody>
-    </Table>
+      </div>
+    </>
   );
 };

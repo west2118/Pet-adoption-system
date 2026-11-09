@@ -3,6 +3,8 @@ import type { ReactNode } from 'react';
 import { cn } from '@/lib/utils';
 
 export interface MobileRecordCardProps {
+  /** Optional selection checkbox rendered before the media tile. */
+  selection?: ReactNode;
   /** Photo or icon tile shown on the left. */
   media?: ReactNode;
   title: ReactNode;
@@ -26,6 +28,7 @@ export interface MobileRecordCardProps {
  * and record actions in a dedicated footer so they are easy to tap.
  */
 export const MobileRecordCard = ({
+  selection,
   media,
   title,
   subtitle,
@@ -38,16 +41,17 @@ export const MobileRecordCard = ({
 }: MobileRecordCardProps) => (
   <article
     className={cn(
-      'rounded-xl border bg-card p-3 shadow-xs transition-shadow focus-within:shadow-sm hover:shadow-sm',
+      'min-w-0 rounded-xl border bg-card p-3 shadow-xs transition-shadow focus-within:shadow-sm hover:shadow-sm',
       className,
     )}
   >
     <div className="flex items-start gap-3">
+      {selection ? <div className="flex h-16 shrink-0 items-center">{selection}</div> : null}
       {media}
 
       <div className="min-w-0 flex-1">
         <div className="flex items-start justify-between gap-2">
-          <div className="min-w-0">
+          <div className="min-w-0 flex-1">
             <p className="truncate font-semibold leading-tight">{title}</p>
             {subtitle ? (
               <p className="mt-0.5 truncate text-xs text-muted-foreground">{subtitle}</p>

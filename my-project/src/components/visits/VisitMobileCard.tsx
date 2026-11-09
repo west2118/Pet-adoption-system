@@ -1,8 +1,9 @@
-import { CalendarClock, Check, Eye, Flag, Mail } from 'lucide-react';
+import { CalendarClock, Check, Eye, Flag, Mail, Trash2 } from 'lucide-react';
 
 import { MobileRecordCard } from '@/components/shared';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/Checkbox';
 import { VisitStatusBadge } from '@/components/ui/StatusBadge';
 import type { VisitThread } from '@/types';
 import { formatDate } from '@/utils/formatters';
@@ -10,24 +11,37 @@ import { formatDate } from '@/utils/formatters';
 export interface VisitMobileCardProps {
   thread: VisitThread;
   isWorking: boolean;
+  selected: boolean;
+  onSelectChange: () => void;
   onView: () => void;
   onEmail: () => void;
   onComplete: () => void;
+  onDelete: () => void;
 }
 
 /** Small-screen card for one meet-and-greet request. */
 export const VisitMobileCard = ({
   thread,
   isWorking,
+  selected,
+  onSelectChange,
   onView,
   onEmail,
   onComplete,
+  onDelete,
 }: VisitMobileCardProps) => {
   const canEmail = thread.status === 'requested' || thread.status === 'confirmed';
   const petName = thread.pet?.name ?? 'pet';
 
   return (
     <MobileRecordCard
+      selection={
+        <Checkbox
+          checked={selected}
+          onChange={onSelectChange}
+          aria-label={`Select visit request for ${petName}`}
+        />
+      }
       media={
         thread.pet?.imageUrl ? (
           <img
@@ -87,6 +101,15 @@ export const VisitMobileCard = ({
               <Flag className="size-4" />
             </Button>
           ) : null}
+          <Button
+            variant="ghost"
+            size="icon"
+            className="rounded-full text-destructive hover:bg-destructive/10 hover:text-destructive"
+            aria-label={`Delete visit request for ${petName}`}
+            onClick={onDelete}
+          >
+            <Trash2 className="size-4" />
+          </Button>
         </>
       }
     >

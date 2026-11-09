@@ -33,6 +33,7 @@ import {
 } from '@/components/users';
 import {
   EMPTY_SHELTER_USER_FORM,
+  MAX_SHELTER_USERS,
   accountTypeOf,
   type ShelterUserFormValues,
 } from '@/data/shelterUsers';
@@ -85,8 +86,21 @@ export const ShelterUsersPage = () => {
   const { isRefreshing, refresh } = useRefresh(refetch);
   const showLoading = isLoading || isFetching || isRefreshing;
 
+  // The table query is filtered by search, so fetch the unfiltered total while
+  // searching to keep the per-shelter account limit accurate.
+  const trimmedQuery = query.trim();
+  const { data: usageData } = useQuery({
+    queryKey: [...SHELTER_USERS_QUERY_KEY, 'usage'],
+    queryFn: () => listShelterUsersPaginated({ page: 1, limit: MAX_SHELTER_USERS }),
+    enabled: trimmedQuery.length > 0,
+  });
+
   const usersList = data?.items ?? [];
   const totalUsers = data?.total ?? 0;
+  const shelterUserCount = trimmedQuery
+    ? (usageData?.total ?? MAX_SHELTER_USERS)
+    : totalUsers;
+  const userLimitReached = shelterUserCount >= MAX_SHELTER_USERS;
 
   const closeSlide = () => {
     setSlideOpen(false);
@@ -102,6 +116,7 @@ export const ShelterUsersPage = () => {
     });
 
   const openAddUser = () => {
+    if (userLimitReached) return;
     setEditingUser(null);
     setForm(EMPTY_SHELTER_USER_FORM);
     setFormErrors({});
@@ -183,11 +198,24 @@ export const ShelterUsersPage = () => {
 
         <TableCard
           title="Shelter team"
-          description="Admins and staff assigned to this shelter."
+          description={
+            showLoading
+              ? 'Admins and staff assigned to this shelter.'
+              : `Admins and staff assigned to this shelter — ${shelterUserCount} of ${MAX_SHELTER_USERS} accounts used (max 1 admin + 2 staff).`
+          }
           icon={Users}
           action={
             canManage ? (
-              <Button size="sm" onClick={openAddUser}>
+              <Button
+                size="sm"
+                onClick={openAddUser}
+                disabled={userLimitReached}
+                title={
+                  userLimitReached
+                    ? `This shelter already has its maximum of ${MAX_SHELTER_USERS} accounts (1 admin + 2 staff).`
+                    : undefined
+                }
+              >
                 <Plus className="size-4" /> Add user
               </Button>
             ) : undefined
@@ -322,7 +350,7 @@ export const ShelterUsersPage = () => {
             </Table>
           </div>
 
-          <div className="grid gap-3 p-4 md:hidden">
+          <div className="grid grid-cols-1 gap-3 p-4 md:hidden">
             {showLoading ? (
               <RecordCardSkeleton count={3} />
             ) : (

@@ -2,7 +2,13 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'react-toastify';
 
 import { ApiError } from '@/lib/apiClient';
-import { emailShelterInquiry } from '@/services/api';
+import { deleteShelterInquiries, emailShelterInquiry } from '@/services/api';
+
+interface DeleteInquiriesVariables {
+  ids: string[];
+  /** Human-readable summary of the selected inquiries, used in the toast. */
+  description?: string;
+}
 
 interface SendInquiryEmailVariables {
   id: string;
@@ -17,6 +23,8 @@ interface UseShelterInquiryMutationsOptions {
   onEmailed?: () => void;
   /** Runs when the inquiry already has an email on record. */
   onConflict?: () => void;
+  /** Runs after a bulk delete succeeds, e.g. to close the confirmation modal. */
+  onDeleted?: () => void;
 }
 
 export const SHELTER_INQUIRIES_QUERY_KEY = ['shelterInquiries'] as const;
@@ -30,6 +38,7 @@ export const SHELTER_INQUIRIES_QUERY_KEY = ['shelterInquiries'] as const;
 export const useShelterInquiryMutations = ({
   onEmailed,
   onConflict,
+  onDeleted,
 }: UseShelterInquiryMutationsOptions = {}) => {
   const queryClient = useQueryClient();
 
@@ -65,5 +74,28 @@ export const useShelterInquiryMutations = ({
     },
   });
 
-  return { emailMutation, isSending: emailMutation.isPending };
+  const deleteMutation = useMutation({
+    mutationFn: ({ ids }: DeleteInquiriesVariables) => deleteShelterInquiries(ids),
+    onSuccess: (deleted, { description }) => {
+      toast.success(
+        description
+          ? `${description} deleted.`
+          : deleted === 1
+            ? 'Inquiry deleted.'
+            : `${deleted} inquiries deleted.`,
+      );
+      void invalidateInquiries();
+      onDeleted?.();
+    },
+    onError: (err) => {
+      toast.error(err instanceof ApiError ? err.message : 'Failed to delete inquiries.');
+    },
+  });
+
+  return {
+    emailMutation,
+    deleteMutation,
+    isSending: emailMutation.isPending,
+    isDeleting: deleteMutation.isPending,
+  };
 };

@@ -195,7 +195,7 @@ export const AdminPetsPage = () => {
           </div>
 
           {/* Mobile Cards */}
-          <div className="grid gap-3 p-4 md:hidden">
+          <div className="grid grid-cols-1 gap-3 p-4 md:hidden">
             {showLoading ? (
               <RecordCardSkeleton count={3} />
             ) : (

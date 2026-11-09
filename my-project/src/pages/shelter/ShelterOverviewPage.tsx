@@ -2,11 +2,13 @@ import { useQuery } from '@tanstack/react-query';
 import {
   Archive,
   ArrowRight,
+  CalendarClock,
   ClipboardList,
   Clock3,
   HeartHandshake,
   Inbox,
   Layers,
+  MessageCircleQuestion,
   Package,
   PawPrint,
   PieChart,
@@ -29,6 +31,7 @@ import { ApplicationsTrendChart } from '@/components/features/charts/Application
 import { PetsBySpeciesChart } from '@/components/features/charts/PetsBySpeciesChart';
 import { ApplicationsByStatusChart } from '@/components/features/charts/ApplicationsByStatusChart';
 import { ListingsByStatusChart } from '@/components/features/charts/ListingsByStatusChart';
+import { UpcomingVisitsChart } from '@/components/features/charts/UpcomingVisitsChart';
 import { Button } from '@/components/ui/button';
 import { useRefresh } from '@/hooks/useRefresh';
 import { getShelterOverview } from '@/services/api';
@@ -52,18 +55,29 @@ export const ShelterOverviewPage = () => {
   const { isRefreshing, refresh } = useRefresh(refetch);
   const showLoading = isLoading || isFetching || isRefreshing;
 
+  // Keep the page header visible while the dashboard content loads.
+  const pageHeader = (
+    <SectionHeader
+      title="Dashboard"
+      subtitle="A snapshot of your listings, applications, and adoption performance."
+      actions={overview ? <RefreshButton onRefresh={refresh} /> : undefined}
+    />
+  );
+
   // Skeleton on first load and during a refetch, matching the shelter tables.
   if (showLoading) {
-    return <ShelterOverviewSkeleton />;
+    return (
+      <div className="w-full px-4 py-6 sm:px-6">
+        {pageHeader}
+        <ShelterOverviewSkeleton />
+      </div>
+    );
   }
 
   if (!overview) {
     return (
       <div className="w-full px-4 py-6 sm:px-6">
-        <SectionHeader
-          title="Shelter overview"
-          subtitle="A snapshot of your listings, applications, and adoption performance."
-        />
+        {pageHeader}
         <div className="mt-6">
           <ErrorState
             title="Could not load the overview"
@@ -82,14 +96,10 @@ export const ShelterOverviewPage = () => {
 
   return (
     <div className="w-full px-4 py-6 sm:px-6">
-      <SectionHeader
-        title="Shelter overview"
-        subtitle="A snapshot of your listings, applications, and adoption performance."
-        actions={<RefreshButton onRefresh={refresh} />}
-      />
+      {pageHeader}
 
       {/* Summary stats */}
-      <SummaryStatGrid columns={4} className="mt-6">
+      <SummaryStatGrid columns={3} className="mt-6">
         <SummaryStatCard
           title="Total pets"
           value={stats.totalPets}
@@ -114,6 +124,18 @@ export const ShelterOverviewPage = () => {
           icon={HeartHandshake}
           subtitle={`${stats.adoptionRate}% of applications`}
         />
+        <SummaryStatCard
+          title="Inquiries"
+          value={stats.openInquiries}
+          icon={MessageCircleQuestion}
+          subtitle="Not resolved"
+        />
+        <SummaryStatCard
+          title="Visit requests"
+          value={stats.openVisits}
+          icon={CalendarClock}
+          subtitle="Not resolved"
+        />
       </SummaryStatGrid>
 
       {/* Charts */}
@@ -135,6 +157,15 @@ export const ShelterOverviewPage = () => {
           <PetsBySpeciesChart data={overview.petsBySpecies} />
         </ChartCard>
       </div>
+
+      <ChartCard
+        title="Upcoming visits"
+        description="Confirmed meet-and-greets scheduled over the next 14 days."
+        icon={CalendarClock}
+        className="mt-4"
+      >
+        <UpcomingVisitsChart data={overview.upcomingVisitTrend} />
+      </ChartCard>
 
       <div className="mt-4 grid gap-4 lg:grid-cols-2">
         <ChartCard
