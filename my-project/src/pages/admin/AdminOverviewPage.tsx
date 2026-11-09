@@ -1,3 +1,4 @@
+import { useQuery } from '@tanstack/react-query';
 import {
   ArrowRight,
   Building2,
@@ -9,7 +10,6 @@ import {
   PieChart,
   Users,
 } from 'lucide-react';
-import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   ChartCard,
@@ -26,34 +26,26 @@ import { SheltersSummaryTable } from '@/components/features/SheltersSummaryTable
 import { ListingsByShelterChart } from '@/components/features/charts/ListingsByShelterChart';
 import { UsersByRoleChart } from '@/components/features/charts/UsersByRoleChart';
 import { Button } from '@/components/ui/button';
+import { useRefresh } from '@/hooks/useRefresh';
 import { getAdminStats } from '@/services/api';
-import type { AdminStats } from '@/services/api';
+import { describeApiError } from '@/utils/errors';
+
+export const ADMIN_STATS_QUERY_KEY = ['adminStats'] as const;
 
 export const AdminOverviewPage = () => {
-  const [adminStats, setAdminStats] = useState<AdminStats | null>(null);
-  const [statsError, setStatsError] = useState<string | null>(null);
+  const {
+    data: adminStats,
+    isLoading,
+    isFetching,
+    error,
+    refetch,
+  } = useQuery({
+    queryKey: ADMIN_STATS_QUERY_KEY,
+    queryFn: getAdminStats,
+  });
 
-  const loadStats = useCallback(async () => {
-    try {
-      const stats = await getAdminStats();
-      setAdminStats(stats);
-      setStatsError(null);
-    } catch {
-      setStatsError('Failed to load dashboard figures.');
-    }
-  }, []);
-
-  useEffect(() => {
-    // Loading state is owned by the loader.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    void loadStats();
-  }, [loadStats]);
-
-  const handleRetry = () => {
-    setStatsError(null);
-    setAdminStats(null);
-    void loadStats();
-  };
+  const { isRefreshing, refresh } = useRefresh(refetch);
+  const showLoading = isLoading || isFetching || isRefreshing;
 
   const totalShelters = adminStats?.shelters.total ?? 0;
   const locations = adminStats?.shelters.locations ?? 0;
@@ -69,8 +61,7 @@ export const AdminOverviewPage = () => {
   const pendingApplications =
     (adminStats?.applications.submitted ?? 0) + (adminStats?.applications.under_review ?? 0);
   const successfulAdoptions = adminStats?.applications.approved ?? 0;
-  const totalDecisions =
-    (adminStats?.applications.total ?? 0) - pendingApplications;
+  const totalDecisions = (adminStats?.applications.total ?? 0) - pendingApplications;
   const adoptionRate =
     totalDecisions > 0 ? Math.round((successfulAdoptions / totalDecisions) * 100) : 0;
 
@@ -80,24 +71,22 @@ export const AdminOverviewPage = () => {
     { name: 'Platform admins', value: platformAdmins },
   ];
 
-  const overviewLoading = !adminStats && !statsError;
-
   return (
     <div className="w-full px-4 py-6 sm:px-6">
       <SectionHeader
         title="Platform administration"
         subtitle="Developer oversight — all shelters, all users, and global metrics."
-        actions={<RefreshButton onRefresh={loadStats} />}
+        actions={<RefreshButton onRefresh={refresh} />}
       />
 
       <div className="mt-6 space-y-4">
-        {statsError ? (
+        {error ? (
           <ErrorState
             title="Could not load dashboard figures"
-            description={`${statsError} Check that the backend is running and you are signed in as a platform admin.`}
-            onRetry={handleRetry}
+            description={`${describeApiError(error, 'Failed to load dashboard figures.')} Check that the backend is running and you are signed in as a platform admin.`}
+            onRetry={() => void refetch()}
           />
-        ) : overviewLoading ? (
+        ) : showLoading && !adminStats ? (
           <SummaryStatGrid>
             <SummaryStatCardSkeleton />
             <SummaryStatCardSkeleton />
@@ -205,4 +194,3 @@ export const AdminOverviewPage = () => {
     </div>
   );
 };
-

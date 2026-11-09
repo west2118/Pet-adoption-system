@@ -1,29 +1,26 @@
-import {
-  Building2,
-  Eye,
-  Pencil,
-  Plus,
-  Trash2,
-} from 'lucide-react';
-import { useCallback, useEffect, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { Building2, Eye, Pencil, Plus, Trash2 } from 'lucide-react';
+import { useState } from 'react';
 import type { FormEvent } from 'react';
 import { toast } from 'react-toastify';
 import {
+  AdminShelterDetailsModal,
+  AdminShelterFormSlideOver,
+  AdminShelterMobileCard,
+} from '@/components/admin';
+import {
   DebouncedSearchInput,
-  DetailsModal,
-  RecordCard,
   RecordCardSkeleton,
   RefreshButton,
   SectionHeader,
-  SlideOver,
   TableCard,
   TablePagination,
   TableSkeletonRows,
+  focusFirstError,
 } from '@/components/shared';
 import { ConfirmDeleteModal } from '@/components/shared/ConfirmDeleteModal';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/button';
-import { Input, Label, Textarea } from '@/components/ui/Form';
 import {
   Table,
   TableBody,
@@ -32,7 +29,17 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/Table';
+import {
+  EMPTY_ADMIN_SHELTER_FORM,
+  type AdminShelterFormValues,
+} from '@/data/adminPresets';
 import { useShelters } from '@/hooks/useData';
+import { useRefresh } from '@/hooks/useRefresh';
+import {
+  ADMIN_SHELTERS_QUERY_KEY,
+  useAdminShelterMutations,
+} from '@/hooks/useAdminShelterMutations';
+import { adminShelterSchema, toFieldErrors } from '@/lib/validators';
 import {
   getAdminShelter,
   listAdminSheltersPaginated,
@@ -40,14 +47,10 @@ import {
 } from '@/services/api';
 import type { AdminShelterDetails, ShelterSummaryRow } from '@/services/api';
 import type { Shelter } from '@/types';
-import { ApiError } from '@/lib/apiClient';
-import { describeApiError } from '@/utils/errors';
 
 export const AdminSheltersPage = () => {
   const { setShelters } = useShelters();
 
-  const [shelterRows, setShelterRows] = useState<ShelterSummaryRow[]>([]);
-  const [totalShelterRows, setTotalShelterRows] = useState(0);
   const [shelterPageSize, setShelterPageSize] = useState(10);
   const [shelterQuery, setShelterQuery] = useState('');
   const [shelterPage, setShelterPage] = useState(1);
@@ -56,82 +59,84 @@ export const AdminSheltersPage = () => {
   const [detailsShelter, setDetailsShelter] = useState<AdminShelterDetails | null>(null);
   const [loadingDetailsShelter, setLoadingDetailsShelter] = useState(false);
   const [pendingDeleteShelter, setPendingDeleteShelter] = useState<ShelterSummaryRow | null>(null);
-  const [isDeletingShelter, setIsDeletingShelter] = useState(false);
 
-  const [loadingShelters, setLoadingShelters] = useState(true);
-  const [sheltersError, setSheltersError] = useState<string | null>(null);
+  const [shelterForm, setShelterForm] = useState<AdminShelterFormValues>(EMPTY_ADMIN_SHELTER_FORM);
+  const [formErrors, setFormErrors] = useState<Partial<Record<keyof AdminShelterFormValues, string>>>({});
 
-  const [shelterForm, setShelterForm] = useState({
-    name: '',
-    location: '',
-    address: '',
-    email: '',
-    phone: '',
-    operatingHours: '',
-    description: '',
-    imageUrl: '',
-  });
-
-  const resetShelterForm = () =>
-    setShelterForm({
-      name: '',
-      location: '',
-      address: '',
-      email: '',
-      phone: '',
-      operatingHours: '',
-      description: '',
-      imageUrl: '',
-    });
-
-  const fetchShelters = useCallback(async () => {
-    setLoadingShelters(true);
-    setSheltersError(null);
-    try {
-      const res = await listAdminSheltersPaginated({
+  const {
+    data: sheltersData,
+    isLoading,
+    isFetching,
+    refetch,
+  } = useQuery({
+    queryKey: [
+      ...ADMIN_SHELTERS_QUERY_KEY,
+      {
         page: shelterPage,
         limit: shelterPageSize,
         search: shelterQuery.trim(),
-      });
-      setShelterRows(res.items);
-      setTotalShelterRows(res.total);
-    } catch (err) {
-      setSheltersError(describeApiError(err, 'Failed to load shelters. Please try again.'));
-    } finally {
-      setLoadingShelters(false);
-    }
-  }, [shelterPage, shelterPageSize, shelterQuery]);
+      },
+    ],
+    queryFn: () =>
+      listAdminSheltersPaginated({
+        page: shelterPage,
+        limit: shelterPageSize,
+        search: shelterQuery.trim(),
+      }),
+  });
 
-  useEffect(() => {
-    // Initial fetch and dependency-driven updates
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    fetchShelters();
-  }, [fetchShelters]);
-
-  const refreshShelterDirectory = useCallback(async () => {
+  const { isRefreshing, refresh } = useRefresh(async () => {
+    await refetch();
     try {
       setShelters(await shelterService.list());
     } catch {
-      // Keep previous values on error
+      // Keep previous cached shelters
     }
-  }, [setShelters]);
+  });
+  const showLoading = isLoading || isFetching || isRefreshing;
 
-  const openDetailsShelter = (row: ShelterSummaryRow) => {
-    setDetailsShelter({ ...row, staffList: [] });
-    setLoadingDetailsShelter(true);
-    getAdminShelter(row.shelter.id)
-      .then((details) => setDetailsShelter(details))
-      .catch(() => toast.error('Failed to load shelter details.'))
-      .finally(() => setLoadingDetailsShelter(false));
+  const shelterRows = sheltersData?.items ?? [];
+  const totalShelterRows = sheltersData?.total ?? 0;
+
+  const handleFormSaved = async () => {
+    setShelterSlideOpen(false);
+    setEditingShelter(null);
+    setShelterForm(EMPTY_ADMIN_SHELTER_FORM);
+    setFormErrors({});
+    try {
+      setShelters(await shelterService.list());
+    } catch {
+      // Keep previous values
+    }
   };
 
-  const openAddShelter = () => {
+  const {
+    createMutation,
+    updateMutation,
+    deleteMutation,
+    isSaving,
+    isDeleting,
+  } = useAdminShelterMutations({
+    onCreated: handleFormSaved,
+    onUpdated: handleFormSaved,
+    onDeleted: async () => {
+      setPendingDeleteShelter(null);
+      try {
+        setShelters(await shelterService.list());
+      } catch {
+        // Keep previous values
+      }
+    },
+  });
+
+  const handleOpenAdd = () => {
     setEditingShelter(null);
-    resetShelterForm();
+    setShelterForm(EMPTY_ADMIN_SHELTER_FORM);
+    setFormErrors({});
     setShelterSlideOpen(true);
   };
 
-  const openEditShelter = (shelter: Shelter) => {
+  const handleOpenEdit = (shelter: Shelter) => {
     setEditingShelter(shelter);
     setDetailsShelter(null);
     setShelterForm({
@@ -144,132 +149,102 @@ export const AdminSheltersPage = () => {
       description: shelter.description,
       imageUrl: shelter.imageUrl,
     });
+    setFormErrors({});
     setShelterSlideOpen(true);
   };
 
-  const closeShelterSlide = () => {
-    setShelterSlideOpen(false);
-    setEditingShelter(null);
+  const handleOpenDetails = (row: ShelterSummaryRow) => {
+    setDetailsShelter({ ...row, staffList: [] });
+    setLoadingDetailsShelter(true);
+    getAdminShelter(row.shelter.id)
+      .then((details) => setDetailsShelter(details))
+      .catch(() => toast.error('Failed to load shelter details.'))
+      .finally(() => setLoadingDetailsShelter(false));
   };
 
-  const handleShelterSubmit = async (e: FormEvent) => {
+  const handleShelterSubmit = (e: FormEvent) => {
     e.preventDefault();
+    const parsed = adminShelterSchema.safeParse(shelterForm);
+    if (!parsed.success) {
+      const fieldErrors = toFieldErrors<keyof AdminShelterFormValues>(parsed.error.issues);
+      setFormErrors(fieldErrors);
+      focusFirstError();
+      return;
+    }
+
+    setFormErrors({});
     const input = {
-      name: shelterForm.name,
-      location: shelterForm.location,
-      address: shelterForm.address,
-      email: shelterForm.email,
-      phone: shelterForm.phone,
-      operatingHours: shelterForm.operatingHours,
-      description: shelterForm.description || 'Partner rescue shelter.',
+      name: shelterForm.name.trim(),
+      location: shelterForm.location.trim(),
+      address: shelterForm.address.trim(),
+      email: shelterForm.email.trim(),
+      phone: shelterForm.phone.trim(),
+      operatingHours: shelterForm.operatingHours.trim(),
+      description: shelterForm.description.trim() || 'Partner rescue shelter.',
       imageUrl:
-        shelterForm.imageUrl ||
+        shelterForm.imageUrl.trim() ||
         'https://images.unsplash.com/photo-1548199973-03cce0bbc87b?auto=format&fit=crop&w=800&q=80',
     };
-    try {
-      if (editingShelter) {
-        const updated = await shelterService.update(editingShelter.id, input);
-        toast.success(`${updated?.name ?? input.name} updated successfully!`);
-      } else {
-        const created = await shelterService.create(input);
-        toast.success(`${created.name} added successfully!`);
-        resetShelterForm();
-      }
-      closeShelterSlide();
-      await fetchShelters();
-      await refreshShelterDirectory();
-    } catch (err) {
-      toast.error(
-        err instanceof ApiError ? err.message : 'Failed to save shelter. Please try again.',
-      );
+
+    if (editingShelter) {
+      updateMutation.mutate({ id: editingShelter.id, input });
+    } else {
+      createMutation.mutate(input);
     }
   };
-
-  const removeShelter = async (id: string) => {
-    const target = shelterRows.find((r) => r.shelter.id === id);
-    setIsDeletingShelter(true);
-    try {
-      await shelterService.remove(id);
-      toast.success(target ? `${target.shelter.name} removed.` : 'Shelter removed.');
-      setPendingDeleteShelter(null);
-      await fetchShelters();
-      await refreshShelterDirectory();
-    } catch (err) {
-      toast.error(
-        err instanceof ApiError ? err.message : 'Failed to remove shelter. Please try again.',
-      );
-    } finally {
-      setIsDeletingShelter(false);
-    }
-  };
-
-  const setShelterField = (key: keyof typeof shelterForm, value: string) =>
-    setShelterForm((prev) => ({ ...prev, [key]: value }));
-
-  const addShelterButton = (
-    <Button size="sm" onClick={openAddShelter}>
-      <Plus className="size-4" /> Add shelter
-    </Button>
-  );
-
-  const shelterSearchFilter = (
-    <DebouncedSearchInput
-      value={shelterQuery}
-      onDebouncedChange={(val) => {
-        setShelterQuery(val);
-        setShelterPage(1);
-      }}
-      placeholder="Search shelters by name, location..."
-      className="w-full sm:w-[260px]"
-      wrapperClassName="sm:w-[260px]"
-    />
-  );
-
-  const shelterPagination =
-    totalShelterRows > 0 ? (
-      <TablePagination
-        currentPage={shelterPage}
-        totalItems={totalShelterRows}
-        pageSize={shelterPageSize}
-        onPageChange={(next) => {
-          setLoadingShelters(true);
-          setShelterPage(next);
-        }}
-        onPageSizeChange={(newSize) => {
-          setLoadingShelters(true);
-          setShelterPageSize(newSize);
-          setShelterPage(1);
-        }}
-        label="shelters"
-      />
-    ) : undefined;
 
   return (
     <div className="w-full px-4 py-6 sm:px-6">
       <SectionHeader
         title="Partner shelters"
-        subtitle="Manage verified shelter facilities and rescue organizations."
-        actions={<RefreshButton onRefresh={fetchShelters} />}
+        subtitle="Manage registered rescue organizations, staff assignments, and locations."
+        actions={<RefreshButton onRefresh={refresh} />}
       />
 
       <div className="mt-6 space-y-4">
         <TableCard
-          title="Shelters"
-          description={
-            totalShelterRows === 0
-              ? 'Registered partner shelters'
-              : `${shelterRows.length} of ${totalShelterRows} registered shelters`
-          }
+          title="Shelters directory"
+          description="All active rescue organizations on the platform."
           icon={Building2}
-          action={addShelterButton}
-          toolbar={shelterSearchFilter}
-          error={sheltersError}
-          errorTitle="Could not load shelters"
-          onRetry={fetchShelters}
-          isEmpty={!loadingShelters && !sheltersError && shelterRows.length === 0}
+          action={
+            <Button size="sm" onClick={handleOpenAdd}>
+              <Plus className="size-4" /> Add shelter
+            </Button>
+          }
+          toolbar={
+            <DebouncedSearchInput
+              value={shelterQuery}
+              onDebouncedChange={(val) => {
+                setShelterQuery(val);
+                setShelterPage(1);
+              }}
+              placeholder="Search shelters by name, location..."
+              className="w-full sm:w-[260px]"
+              wrapperClassName="sm:w-[260px]"
+            />
+          }
+          isEmpty={!showLoading && shelterRows.length === 0}
           emptyTitle="No shelters found"
-          emptyDescription="Try a different search, or register a new shelter."
-          footer={shelterPagination}
+          emptyDescription={
+            shelterQuery
+              ? 'Try adjusting your search query.'
+              : 'Add your first partner shelter to get started.'
+          }
+          footer={
+            totalShelterRows > 0 ? (
+              <TablePagination
+                currentPage={shelterPage}
+                totalItems={totalShelterRows}
+                pageSize={shelterPageSize}
+                onPageChange={(next) => setShelterPage(next)}
+                onPageSizeChange={(newSize) => {
+                  setShelterPageSize(newSize);
+                  setShelterPage(1);
+                }}
+                label="shelters"
+              />
+            ) : undefined
+          }
           contentClassName="px-0"
         >
           {/* Desktop Table */}
@@ -279,48 +254,44 @@ export const AdminSheltersPage = () => {
                 <TableRow>
                   <TableHead>Shelter</TableHead>
                   <TableHead>Location</TableHead>
-                  <TableHead>Contact</TableHead>
-                  <TableHead>Pets</TableHead>
-                  <TableHead>Pending</TableHead>
+                  <TableHead className="text-center">Pets</TableHead>
+                  <TableHead className="text-center">Staff</TableHead>
+                  <TableHead className="text-center">Pending Apps</TableHead>
                   <TableHead className="text-center">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {loadingShelters ? (
+                {showLoading ? (
                   <TableSkeletonRows columns={6} rows={6} avatar />
-                ) : sheltersError ? (
-                  <TableRow>
-                    <TableCell colSpan={6}>
-                      <p className="py-6 text-center text-sm text-destructive">{sheltersError}</p>
-                    </TableCell>
-                  </TableRow>
                 ) : (
-                  shelterRows.map(({ shelter, petCount, publicPets, pendingApplications }) => (
-                    <TableRow key={shelter.id}>
+                  shelterRows.map((row) => (
+                    <TableRow key={row.shelter.id}>
                       <TableCell>
                         <div className="flex items-center gap-3">
                           <img
-                            src={shelter.imageUrl}
-                            alt={shelter.name}
+                            src={row.shelter.imageUrl}
+                            alt={row.shelter.name}
                             className="size-10 shrink-0 rounded-lg object-cover"
                           />
                           <div className="min-w-0">
-                            <p className="font-medium">{shelter.name}</p>
-                            <p className="truncate text-xs text-muted-foreground">{shelter.email}</p>
+                            <p className="font-medium">{row.shelter.name}</p>
+                            <p className="truncate text-xs text-muted-foreground">
+                              {row.shelter.email}
+                            </p>
                           </div>
                         </div>
                       </TableCell>
-                      <TableCell className="whitespace-nowrap text-muted-foreground">
-                        {shelter.location}
+                      <TableCell className="text-muted-foreground">{row.shelter.location}</TableCell>
+                      <TableCell className="text-center">
+                        <Badge variant="muted">{row.petCount}</Badge>
                       </TableCell>
-                      <TableCell className="whitespace-nowrap text-muted-foreground">
-                        {shelter.phone}
+                      <TableCell className="text-center">
+                        <Badge variant="info">{row.staff}</Badge>
                       </TableCell>
-                      <TableCell className="whitespace-nowrap text-muted-foreground">
-                        {petCount} total · {publicPets} public
-                      </TableCell>
-                      <TableCell className="text-muted-foreground">
-                        {pendingApplications}
+                      <TableCell className="text-center">
+                        <Badge variant={row.pendingApplications > 0 ? 'warning' : 'muted'}>
+                          {row.pendingApplications}
+                        </Badge>
                       </TableCell>
                       <TableCell className="text-center">
                         <div className="flex justify-center gap-1">
@@ -328,16 +299,8 @@ export const AdminSheltersPage = () => {
                             variant="ghost"
                             size="icon-sm"
                             className="text-muted-foreground"
-                            aria-label={`View ${shelter.name} details`}
-                            onClick={() =>
-                              openDetailsShelter({
-                                shelter,
-                                petCount,
-                                publicPets,
-                                pendingApplications,
-                                staff: 0,
-                              })
-                            }
+                            aria-label={`View ${row.shelter.name} details`}
+                            onClick={() => handleOpenDetails(row)}
                           >
                             <Eye className="size-4" />
                           </Button>
@@ -345,25 +308,17 @@ export const AdminSheltersPage = () => {
                             variant="ghost"
                             size="icon-sm"
                             className="text-muted-foreground"
-                            aria-label={`Edit ${shelter.name}`}
-                            onClick={() => openEditShelter(shelter)}
+                            aria-label={`Edit ${row.shelter.name}`}
+                            onClick={() => handleOpenEdit(row.shelter)}
                           >
                             <Pencil className="size-4" />
                           </Button>
                           <Button
                             variant="ghost"
                             size="icon-sm"
-                            className="text-muted-foreground"
-                            aria-label={`Remove ${shelter.name}`}
-                            onClick={() =>
-                              setPendingDeleteShelter({
-                                shelter,
-                                petCount,
-                                publicPets,
-                                pendingApplications,
-                                staff: 0,
-                              })
-                            }
+                            className="text-muted-foreground hover:text-destructive"
+                            aria-label={`Remove ${row.shelter.name}`}
+                            onClick={() => setPendingDeleteShelter(row)}
                           >
                             <Trash2 className="size-4" />
                           </Button>
@@ -378,259 +333,61 @@ export const AdminSheltersPage = () => {
 
           {/* Mobile Cards */}
           <div className="grid gap-3 p-4 md:hidden">
-            {loadingShelters ? (
+            {showLoading ? (
               <RecordCardSkeleton count={3} />
-            ) : sheltersError ? (
-              <p className="py-6 text-center text-sm text-destructive">{sheltersError}</p>
             ) : (
-              shelterRows.map(({ shelter, petCount, publicPets, pendingApplications }) => (
-                <RecordCard
-                  key={shelter.id}
-                  imageUrl={shelter.imageUrl}
-                  imageAlt={shelter.name}
-                  title={shelter.name}
-                  subtitle={`${shelter.location} · ${shelter.email}`}
-                  badges={
-                    <>
-                      <Badge variant="muted">{petCount} pets</Badge>
-                      <Badge variant="success">{publicPets} public</Badge>
-                      <Badge variant="warning">{pendingApplications} pending</Badge>
-                    </>
-                  }
-                  actions={
-                    <>
-                      <Button
-                        variant="ghost"
-                        size="icon-sm"
-                        className="text-muted-foreground"
-                        aria-label={`View ${shelter.name} details`}
-                        onClick={() =>
-                          openDetailsShelter({
-                            shelter,
-                            petCount,
-                            publicPets,
-                            pendingApplications,
-                            staff: 0,
-                          })
-                        }
-                      >
-                        <Eye className="size-4" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon-sm"
-                        className="text-muted-foreground"
-                        aria-label={`Edit ${shelter.name}`}
-                        onClick={() => openEditShelter(shelter)}
-                      >
-                        <Pencil className="size-4" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon-sm"
-                        className="text-muted-foreground"
-                        aria-label={`Remove ${shelter.name}`}
-                        onClick={() =>
-                          setPendingDeleteShelter({
-                            shelter,
-                            petCount,
-                            publicPets,
-                            pendingApplications,
-                            staff: 0,
-                          })
-                        }
-                      >
-                        <Trash2 className="size-4" />
-                      </Button>
-                    </>
-                  }
-                >
-                  <p className="text-xs text-muted-foreground">
-                    {shelter.phone} · {shelter.operatingHours}
-                  </p>
-                </RecordCard>
+              shelterRows.map((row) => (
+                <AdminShelterMobileCard
+                  key={row.shelter.id}
+                  row={row}
+                  onView={handleOpenDetails}
+                  onEdit={(r) => handleOpenEdit(r.shelter)}
+                  onDelete={setPendingDeleteShelter}
+                />
               ))
             )}
           </div>
         </TableCard>
       </div>
 
-      <SlideOver
+      <AdminShelterFormSlideOver
         open={shelterSlideOpen}
-        onClose={closeShelterSlide}
-        size="lg"
-        title={editingShelter ? `Edit ${editingShelter.name}` : 'Register new shelter'}
-        description={
-          editingShelter
-            ? 'Update the shelter record below.'
-            : 'Add a partner shelter to the platform.'
-        }
-        icon={editingShelter ? Pencil : Plus}
-        footer={
-          <div className="grid grid-cols-2 gap-3">
-            <Button type="button" variant="outline" size="lg" className="w-full" onClick={closeShelterSlide}>
-              Cancel
-            </Button>
-            <Button type="submit" form="shelter-form" size="lg" className="w-full">
-              {editingShelter ? 'Save changes' : 'Register shelter'}
-            </Button>
-          </div>
-        }
-      >
-        <form id="shelter-form" onSubmit={handleShelterSubmit} className="grid gap-3">
-          <div>
-            <Label>Shelter name</Label>
-            <Input
-              value={shelterForm.name}
-              onChange={(e) => setShelterField('name', e.target.value)}
-              required
-            />
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <Label>City / location</Label>
-              <Input
-                value={shelterForm.location}
-                onChange={(e) => setShelterField('location', e.target.value)}
-                required
-              />
-            </div>
-            <div>
-              <Label>Phone</Label>
-              <Input
-                value={shelterForm.phone}
-                onChange={(e) => setShelterField('phone', e.target.value)}
-                required
-              />
-            </div>
-          </div>
-          <div>
-            <Label>Street address</Label>
-            <Input
-              value={shelterForm.address}
-              onChange={(e) => setShelterField('address', e.target.value)}
-            />
-          </div>
-          <div>
-            <Label>Contact email</Label>
-            <Input
-              type="email"
-              value={shelterForm.email}
-              onChange={(e) => setShelterField('email', e.target.value)}
-              required
-            />
-          </div>
-          <div>
-            <Label>Operating hours</Label>
-            <Input
-              value={shelterForm.operatingHours}
-              onChange={(e) => setShelterField('operatingHours', e.target.value)}
-              placeholder="Mon–Sat, 9:00 AM – 6:00 PM"
-            />
-          </div>
-          <div>
-            <Label>Photo URL</Label>
-            <Input
-              value={shelterForm.imageUrl}
-              onChange={(e) => setShelterField('imageUrl', e.target.value)}
-              placeholder="https://…"
-            />
-          </div>
-          <div>
-            <Label>Description</Label>
-            <Textarea
-              value={shelterForm.description}
-              onChange={(e) => setShelterField('description', e.target.value)}
-            />
-          </div>
-        </form>
-      </SlideOver>
+        editingShelter={editingShelter}
+        form={shelterForm}
+        formErrors={formErrors}
+        isSaving={isSaving}
+        onClose={() => {
+          setShelterSlideOpen(false);
+          setEditingShelter(null);
+        }}
+        onChange={(field, val) => {
+          setShelterForm((prev) => ({ ...prev, [field]: val }));
+          if (formErrors[field]) setFormErrors((prev) => ({ ...prev, [field]: undefined }));
+        }}
+        onSubmit={handleShelterSubmit}
+      />
 
-      <DetailsModal
-        open={detailsShelter !== null}
+      <AdminShelterDetailsModal
+        details={detailsShelter}
+        loadingDetails={loadingDetailsShelter}
         onClose={() => setDetailsShelter(null)}
-        title={detailsShelter?.shelter.name ?? 'Shelter details'}
-        description={detailsShelter?.shelter.location}
-        icon={Building2}
-        footer={
-          detailsShelter ? (
-            <div className="grid grid-cols-2 gap-3">
-              <Button type="button" variant="outline" size="lg" className="w-full" onClick={() => setDetailsShelter(null)}>
-                Close
-              </Button>
-              <Button
-                type="button"
-                size="lg"
-                className="w-full"
-                onClick={() => detailsShelter && openEditShelter(detailsShelter.shelter)}
-              >
-                <Pencil className="size-4" /> Edit in slider
-              </Button>
-            </div>
-          ) : undefined
-        }
-      >
-        {detailsShelter && (
-          <div className="space-y-4">
-            <img
-              src={detailsShelter.shelter.imageUrl}
-              alt={detailsShelter.shelter.name}
-              className="h-48 w-full rounded-lg border object-cover"
-            />
-            <div className="flex flex-wrap gap-1.5">
-              <Badge variant="muted">{detailsShelter.petCount} pets</Badge>
-              <Badge variant="success">{detailsShelter.publicPets} public</Badge>
-              <Badge variant="warning">{detailsShelter.pendingApplications} pending</Badge>
-              <Badge variant="info">{detailsShelter.staff} staff</Badge>
-            </div>
-            <dl className="grid grid-cols-2 gap-2 text-sm">
-              <div className="rounded-lg border p-2.5">
-                <dt className="text-xs text-muted-foreground">Email</dt>
-                <dd className="break-all font-medium">{detailsShelter.shelter.email}</dd>
-              </div>
-              <div className="rounded-lg border p-2.5">
-                <dt className="text-xs text-muted-foreground">Phone</dt>
-                <dd className="font-medium">{detailsShelter.shelter.phone}</dd>
-              </div>
-              <div className="rounded-lg border p-2.5">
-                <dt className="text-xs text-muted-foreground">Address</dt>
-                <dd className="font-medium">{detailsShelter.shelter.address}</dd>
-              </div>
-              <div className="rounded-lg border p-2.5">
-                <dt className="text-xs text-muted-foreground">Hours</dt>
-                <dd className="font-medium">{detailsShelter.shelter.operatingHours}</dd>
-              </div>
-            </dl>
-            <div>
-              <h3 className="text-sm font-semibold">About</h3>
-              <p className="mt-1 text-sm leading-relaxed text-muted-foreground">
-                {detailsShelter.shelter.description}
-              </p>
-            </div>
-            <div>
-              <h3 className="text-sm font-semibold">Assigned staff</h3>
-              {loadingDetailsShelter ? (
-                <p className="mt-1 text-sm text-muted-foreground">Loading staff…</p>
-              ) : detailsShelter.staffList.length === 0 ? (
-                <p className="mt-1 text-sm text-muted-foreground">No staff assigned.</p>
-              ) : (
-                <ul className="mt-1 space-y-1 text-sm text-muted-foreground">
-                  {detailsShelter.staffList.map((u) => (
-                    <li key={u.id}>
-                      {u.name} · {u.email}
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
-          </div>
-        )}
-      </DetailsModal>
+        onEdit={(d) => {
+          const shelter = d.shelter;
+          setDetailsShelter(null);
+          handleOpenEdit(shelter);
+        }}
+      />
 
       <ConfirmDeleteModal
         open={pendingDeleteShelter !== null}
         onClose={() => setPendingDeleteShelter(null)}
-        onConfirm={() => pendingDeleteShelter && removeShelter(pendingDeleteShelter.shelter.id)}
+        onConfirm={() => {
+          if (!pendingDeleteShelter) return;
+          deleteMutation.mutate({
+            id: pendingDeleteShelter.shelter.id,
+            name: pendingDeleteShelter.shelter.name,
+          });
+        }}
         title={`Remove ${pendingDeleteShelter?.shelter.name ?? 'shelter'}?`}
         description={
           pendingDeleteShelter
@@ -638,9 +395,8 @@ export const AdminSheltersPage = () => {
             : ''
         }
         confirmLabel="Remove shelter"
-        isDeleting={isDeletingShelter}
+        isDeleting={isDeleting}
       />
     </div>
   );
 };
-

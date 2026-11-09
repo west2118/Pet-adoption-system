@@ -59,3 +59,17 @@ export const VisitStatusBadge = ({ status }: { status: VisitStatus }) => {
         : 'muted';
   return <Badge variant={variant} className="capitalize">{status}</Badge>;
 };
+
+export const UserRoleBadge = ({ role }: { role: import('@/types').UserRole }) => {
+  const variant =
+    role === 'platform_admin'
+      ? 'destructive'
+      : role === 'shelter_staff'
+        ? 'info'
+        : 'muted';
+  return (
+    <Badge variant={variant}>
+      {role.replace('_', ' ')}
+    </Badge>
+  );
+};

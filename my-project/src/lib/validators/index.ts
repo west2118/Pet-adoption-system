@@ -21,5 +21,15 @@ export type {
   VisitEmailValues,
   WaiverTemplateValues,
 } from './shelter';
+export {
+  adminShelterSchema,
+  adminUserRoleSchema,
+  shelterApplicationReviewSchema,
+} from './admin';
+export type {
+  AdminShelterFormSchemaValues,
+  AdminUserRoleSchemaValues,
+  ShelterApplicationReviewValues,
+} from './admin';
 export { toFieldErrors } from './fieldErrors';
 export type { FieldErrors, FieldIssue } from './fieldErrors';
