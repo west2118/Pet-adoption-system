@@ -1,5 +1,4 @@
 import { Clock, Mail, MapPin, Phone } from 'lucide-react';
-import { Link } from 'react-router-dom';
 import type { Shelter } from '@/types';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -18,7 +17,7 @@ interface ShelterContactCardProps {
 export const ShelterContactCard = ({
   shelter,
   className,
-  showBrowseButton = true,
+  showBrowseButton: _showBrowseButton,
 }: ShelterContactCardProps) => {
   const rows = [
     { icon: MapPin, label: 'Address', value: shelter.address },

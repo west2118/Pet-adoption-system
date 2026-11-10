@@ -19,6 +19,7 @@ export const createApp = () => {
   app.use(express.json({ limit: '10mb' }));
 
   app.get('/health', (_req, res) => res.json({ success: true, data: { status: 'ok' } }));
+  app.get('/healthz', (_req, res) => res.json({ success: true, data: { status: 'ok' } }));
 
   app.use('/api/v1', apiRouter);
 

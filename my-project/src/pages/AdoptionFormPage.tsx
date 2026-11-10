@@ -132,7 +132,7 @@ export const AdoptionFormPage = () => {
     } catch (err) {
       const message =
         err instanceof ApiError
-          ? err.details?.map((d) => d.message).join(' ') ?? err.message
+          ? err.details?.map((d: any) => d.message).join(' ') ?? err.message
           : 'Could not submit your application. Please try again.';
       setSubmitError(message);
       toast.error(message);

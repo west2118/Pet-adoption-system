@@ -1,15 +1,30 @@
 import { fileURLToPath } from 'node:url';
-import dotenv from 'dotenv';
 import pg from 'pg';
 import bcrypt from 'bcryptjs';
+import { loadEnv } from '../src/config/loadEnv.js';
+import { buildPgConfig } from '../src/config/pgOptions.js';
 
-dotenv.config();
+loadEnv();
 
 export const ensurePlatformAdmin = async (existingPool) => {
-  const pool = existingPool || new pg.Pool({ connectionString: process.env.DATABASE_URL });
-  
+  const isProduction = process.env.NODE_ENV === 'production';
+  // The server seeds this account on every boot. Never fall back to a known
+  // default password in production — an unset ADMIN_PASSWORD skips the seed.
+  const adminPassword =
+    process.env.ADMIN_PASSWORD || (isProduction ? '' : 'password123');
+
+  if (!adminPassword) {
+    // eslint-disable-next-line no-console
+    console.warn(
+      '[Seed] ADMIN_PASSWORD is not set; skipping platform admin creation in production.',
+    );
+    return;
+  }
+
+  const pool =
+    existingPool || new pg.Pool(buildPgConfig(process.env.DATABASE_URL));
+
   const adminEmail = process.env.ADMIN_EMAIL || 'admin@pawsandhomes.ph';
-  const adminPassword = process.env.ADMIN_PASSWORD || 'password123';
   const adminName = process.env.ADMIN_NAME || 'Platform Admin';
 
   try {
@@ -26,7 +41,11 @@ export const ensurePlatformAdmin = async (existingPool) => {
         [adminName, adminEmail, passwordHash]
       );
       // eslint-disable-next-line no-console
-      console.log(`[Seed] Developer Platform Admin created: ${adminEmail} / ${adminPassword}`);
+      console.log(
+        isProduction
+          ? `[Seed] Platform Admin created: ${adminEmail}`
+          : `[Seed] Developer Platform Admin created: ${adminEmail} / ${adminPassword}`,
+      );
     } else {
       // eslint-disable-next-line no-console
       console.log(`[Seed] Developer Platform Admin already exists (${adminEmail}).`);

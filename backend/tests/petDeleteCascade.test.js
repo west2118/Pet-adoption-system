@@ -1,13 +1,14 @@
 import { after, before, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
-import dotenv from 'dotenv';
+import { loadEnv } from '../src/config/loadEnv.js';
+import { isManagedDatabase } from '../src/config/pgOptions.js';
 
 process.env.NODE_ENV = 'test';
 process.env.JWT_SECRET ||= 'test-secret-at-least-16-chars';
 process.env.ALLOWED_ORIGINS ||= 'http://localhost:5173';
 
-dotenv.config();
+loadEnv();
 
 // The cascade test needs a real Postgres database: the behavior under test is
 // enforced by the schema's ON DELETE CASCADE constraints. It runs in its own
@@ -19,6 +20,9 @@ const buildTestDatabaseUrl = () => {
     return process.env.CASCADE_TEST_DATABASE_URL;
   }
   if (!process.env.DATABASE_URL) return null;
+  // Never provision test fixtures on a hosted database: the derived URL would
+  // point at the production server. Use CASCADE_TEST_DATABASE_URL explicitly.
+  if (isManagedDatabase(process.env.DATABASE_URL)) return null;
   const url = new URL(process.env.DATABASE_URL);
   url.pathname = `/${TEST_DATABASE_NAME}`;
   return url.toString();
@@ -37,7 +41,9 @@ const fixtures = [];
 
 before(async () => {
   if (!testDatabaseUrl) {
-    skipReason = 'DATABASE_URL is not configured';
+    skipReason = isManagedDatabase(process.env.DATABASE_URL)
+      ? 'refusing to create a test database on a managed/remote server (set CASCADE_TEST_DATABASE_URL to a disposable local database)'
+      : 'DATABASE_URL is not configured';
     return;
   }
 

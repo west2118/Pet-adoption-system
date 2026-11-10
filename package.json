@@ -5,6 +5,10 @@
   "description": "Pet Adoption & Rescue Management System root orchestrator",
   "type": "module",
   "scripts": {
+    "start": "npm --prefix backend start",
+    "build:backend": "npm --prefix backend run build",
+    "lint": "npm --prefix my-project run lint",
+    "verify": "npm --prefix backend run build && npm --prefix my-project run build",
     "dev": "node dev.js",
     "dev:backend": "npm --prefix backend run dev",
     "dev:frontend": "npm --prefix my-project run dev",

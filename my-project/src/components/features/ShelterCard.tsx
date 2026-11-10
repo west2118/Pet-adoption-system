@@ -60,7 +60,7 @@ export const ShelterCard = ({
             <span className="text-xs font-medium text-muted-foreground">
               {shelter.totalPets} pets in care
             </span>
-            <Button variant="outline" size="sm" asChild>
+            <Button variant="outline" size="sm">
               <span>View shelter</span>
             </Button>
           </div>
