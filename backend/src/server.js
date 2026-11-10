@@ -15,13 +15,23 @@ const start = async () => {
   logger.info('Database connection verified.');
 
   const app = createApp();
-  app.listen(env.PORT, () => {
-    logger.info(`API listening on http://localhost:${env.PORT} (${env.NODE_ENV})`);
+
+  // Render (and most PaaS hosts) only detect an open port when the server
+  // listens on 0.0.0.0, not on the localhost interface.
+  const server = app.listen(env.PORT, '0.0.0.0', () => {
+    logger.info(`API listening on 0.0.0.0:${env.PORT} (${env.NODE_ENV})`);
   });
+
+  const shutdown = (signal) => {
+    logger.info(`${signal} received, shutting down.`);
+    server.close(() => pool.end().finally(() => process.exit(0)));
+  };
+
+  process.on('SIGTERM', () => shutdown('SIGTERM'));
+  process.on('SIGINT', () => shutdown('SIGINT'));
 };
 
 start().catch((err) => {
   logger.error('Failed to start server:', err);
   process.exit(1);
 });
-

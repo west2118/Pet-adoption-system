@@ -3,6 +3,7 @@ import { ArrowRight, MapPin } from 'lucide-react';
 import { Link, useParams } from 'react-router-dom';
 import type { Pet, Shelter } from '@/types';
 import { Reveal, TablePagination } from '@/components/shared';
+import { Seo } from '@/components/seo/Seo';
 import { Container } from '@/components/layout/Container';
 import { ShelterContactCard } from '@/components/features/ShelterContactCard';
 import { ShelterProfileHero } from '@/components/features/ShelterProfileHero';
@@ -155,6 +156,15 @@ export const ShelterPublicProfilePage = () => {
 
   return (
     <div className="landing-theme">
+      <Seo
+        title={`${shelter.name} — Animal Shelter in ${shelter.location}`}
+        description={`Adopt from ${shelter.name} in ${shelter.location}. ${
+          availableCount > 0
+            ? `${availableCount} pets available now`
+            : 'New listings arrive every week'
+        }, with health records, visiting hours and direct contact details.`}
+        path={`/shelters/${shelter.id}`}
+      />
       <ShelterProfileHero
         shelter={shelter}
         availableCount={availableCount}

@@ -4,6 +4,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import type { Pet, Shelter } from '@/types';
 import { ErrorState, Reveal } from '@/components/shared';
+import { Seo } from '@/components/seo/Seo';
 import { Container } from '@/components/layout/Container';
 import { InquiryForm } from '@/components/features/InquiryForm';
 import { VisitRequestCard } from '@/components/features/VisitRequestCard';
@@ -177,6 +178,14 @@ export const PetDetailsPage = () => {
 
   return (
     <div className="landing-theme">
+      <Seo
+        title={`Adopt ${pet.name} — ${pet.breed}`}
+        description={`${pet.name} is an adoptable ${pet.breed}${
+          shelter ? ` at ${shelter.name} in ${shelter.location}` : ''
+        }. See photos, health and behaviour records, then apply to adopt online.`}
+        path={`/pets/${pet.id}`}
+        image={pet.imageUrl}
+      />
       <PetHero
         pet={pet}
         shelter={shelter ?? undefined}

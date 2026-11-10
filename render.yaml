@@ -1,0 +1,48 @@
+# Render Blueprint — one Web Service that serves both the Express API and the
+# built React SPA from the same origin (see backend/src/app.js).
+#
+# Why one service: Render scans for an open port after the start command runs.
+# Starting `npm run dev` (Vite dev server + `node --watch`) binds only to
+# 127.0.0.1, so the scan reports "No open ports detected" and the two Node
+# processes eventually abort with exit status 134 (V8 out of memory).
+#
+# `npm start` runs the API only, on 0.0.0.0:$PORT, and serves my-project/dist.
+#
+# Secrets: DATABASE_URL / ADMIN_PASSWORD / SMTP_* are not in the repo, so they
+# are marked `sync: false` and must be entered once in the Render dashboard.
+services:
+  - type: web
+    name: pawsandhomes
+    runtime: node
+    plan: free
+    buildCommand: npm run build
+    startCommand: npm start
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        sync: false
+      - key: JWT_SECRET
+        generateValue: true
+      - key: ALLOWED_ORIGINS
+        value: https://pawsandhomes-hfkn.onrender.com
+      - key: APP_URL
+        value: https://pawsandhomes-hfkn.onrender.com
+      - key: ADMIN_EMAIL
+        sync: false
+      - key: ADMIN_PASSWORD
+        sync: false
+      - key: SMTP_HOST
+        value: smtp.gmail.com
+      - key: SMTP_PORT
+        value: "587"
+      - key: SMTP_SECURE
+        value: "false"
+      - key: SMTP_USER
+        sync: false
+      - key: SMTP_PASS
+        sync: false
+      - key: MAIL_FROM
+        sync: false
