@@ -12,7 +12,7 @@
     "dev": "node dev.js",
     "dev:backend": "npm --prefix backend run dev",
     "dev:frontend": "npm --prefix my-project run dev",
-    "build": "npm --prefix my-project run build",
+    "build": "npm --prefix my-project install --include=dev --no-audit --no-fund && npm --prefix my-project run build",
     "migrate": "npm --prefix backend run migrate",
     "seed": "npm --prefix backend run seed",
     "seed:admin": "npm --prefix backend run seed:admin",
