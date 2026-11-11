@@ -1,5 +1,6 @@
 import dotenv from 'dotenv';
 import pg from 'pg';
+import { buildPgConfig } from '../src/config/pgOptions.js';
 
 dotenv.config();
 
@@ -324,7 +325,7 @@ const newPets = [
 ];
 
 const seedPets = async () => {
-  const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
+  const pool = new pg.Pool(buildPgConfig(process.env.DATABASE_URL));
   try {
     const shelterRes = await pool.query(
       "SELECT id, name FROM shelters WHERE name ILIKE '%Happy Rescue Shelter%'"

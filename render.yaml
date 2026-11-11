@@ -8,6 +8,11 @@
 #
 # `npm start` runs the API only, on 0.0.0.0:$PORT, and serves my-project/dist.
 #
+# Database: there is no Render Postgres. DATABASE_URL must be the Supabase
+# "Session pooler" URI (aws-0-<region>.pooler.supabase.com:5432) — Supabase's
+# direct host is IPv6-only, which Render cannot reach. Port 6543 (transaction
+# mode) also works. The API refuses to boot with a local or direct-host URL.
+#
 # Secrets: DATABASE_URL / ADMIN_PASSWORD / SMTP_* are not in the repo, so they
 # are marked `sync: false` and must be entered once in the Render dashboard.
 services:

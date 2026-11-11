@@ -2,7 +2,6 @@ import { after, before, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { loadEnv } from '../src/config/loadEnv.js';
-import { isManagedDatabase } from '../src/config/pgOptions.js';
 
 process.env.NODE_ENV = 'test';
 process.env.JWT_SECRET ||= 'test-secret-at-least-16-chars';
@@ -11,51 +10,27 @@ process.env.ALLOWED_ORIGINS ||= 'http://localhost:5173';
 loadEnv();
 
 // The cascade test needs a real Postgres database: the behavior under test is
-// enforced by the schema's ON DELETE CASCADE constraints. It runs in its own
-// database (created and migrated on demand) so the dev database is untouched.
-const TEST_DATABASE_NAME = 'pet_adoption_cascade_test';
-
-const buildTestDatabaseUrl = () => {
-  if (process.env.CASCADE_TEST_DATABASE_URL) {
-    return process.env.CASCADE_TEST_DATABASE_URL;
-  }
-  if (!process.env.DATABASE_URL) return null;
-  // Never provision test fixtures on a hosted database: the derived URL would
-  // point at the production server. Use CASCADE_TEST_DATABASE_URL explicitly.
-  if (isManagedDatabase(process.env.DATABASE_URL)) return null;
-  const url = new URL(process.env.DATABASE_URL);
-  url.pathname = `/${TEST_DATABASE_NAME}`;
-  return url.toString();
-};
-
-let testDatabaseUrl = null;
-try {
-  testDatabaseUrl = buildTestDatabaseUrl();
-} catch {
-  testDatabaseUrl = null;
-}
+// enforced by the schema's ON DELETE CASCADE constraints. Supabase is the only
+// database this project creates now, so the test uses a dedicated Supabase
+// project (or branch) supplied via CASCADE_TEST_DATABASE_URL — it never creates
+// or derives a database of its own.
+let testDatabaseUrl = process.env.CASCADE_TEST_DATABASE_URL || null;
 
 let pool = null;
-let skipReason = 'database unavailable';
+let skipReason = 'CASCADE_TEST_DATABASE_URL is not set';
 const fixtures = [];
 
 before(async () => {
-  if (!testDatabaseUrl) {
-    skipReason = isManagedDatabase(process.env.DATABASE_URL)
-      ? 'refusing to create a test database on a managed/remote server (set CASCADE_TEST_DATABASE_URL to a disposable local database)'
-      : 'DATABASE_URL is not configured';
-    return;
-  }
+  if (!testDatabaseUrl) return;
 
   process.env.DATABASE_URL = testDatabaseUrl;
 
   try {
-    const { ensureDatabaseExists, runMigrations } = await import('../scripts/migrate.js');
-    await ensureDatabaseExists(testDatabaseUrl);
+    const { runMigrations } = await import('../scripts/migrate.js');
     ({ pool } = await import('../src/config/database.js'));
     await runMigrations(pool);
   } catch (error) {
-    skipReason = `could not prepare ${TEST_DATABASE_NAME}: ${error.message}`;
+    skipReason = `could not prepare ${testDatabaseUrl}: ${error.message}`;
     if (pool) {
       await pool.end().catch(() => {});
       pool = null;

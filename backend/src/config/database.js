@@ -4,7 +4,8 @@ import { buildPgConfig } from './pgOptions.js';
 
 const { Pool } = pg;
 
-// Adds TLS automatically for managed hosts (Supabase), plain TCP for local Postgres.
+// Supabase is the only database. TLS, pooler limits and connection timeouts
+// come from pgOptions.js so the API, migrations and seeds behave identically.
 export const pool = new Pool(buildPgConfig(env.DATABASE_URL));
 
 pool.on('error', (err) => {

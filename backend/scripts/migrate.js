@@ -3,7 +3,11 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import pg from 'pg';
 import { loadEnv } from '../src/config/loadEnv.js';
-import { buildPgConfig, isManagedDatabase } from '../src/config/pgOptions.js';
+import {
+  assertSupabaseDatabaseUrl,
+  buildPgConfig,
+  isSupabaseDatabase,
+} from '../src/config/pgOptions.js';
 
 loadEnv();
 
@@ -21,62 +25,24 @@ const describeDatabase = (dbUrl) => {
 };
 
 /**
- * Creates a local database when it does not exist yet. Managed providers
- * (Supabase, Neon, …) hand you exactly one database and do not let the app
- * role create more, so this is a no-op there.
- */
-export const ensureDatabaseExists = async (dbUrl) => {
-  if (isManagedDatabase(dbUrl)) return;
-
-  try {
-    const url = new URL(dbUrl);
-    const dbName = url.pathname.slice(1);
-    if (!dbName) return;
-
-    const systemUrl = new URL(dbUrl);
-    systemUrl.pathname = '/postgres';
-
-    const client = new pg.Client(buildPgConfig(systemUrl.toString()));
-    await client.connect();
-    const res = await client.query('SELECT 1 FROM pg_database WHERE datname = $1', [dbName]);
-    if (res.rowCount === 0) {
-      await client.query(`CREATE DATABASE "${dbName}"`);
-      // eslint-disable-next-line no-console
-      console.log(`Database "${dbName}" created successfully.`);
-    }
-    await client.end();
-  } catch (err) {
-    // eslint-disable-next-line no-console
-    console.warn(`Database check/creation warning: ${err.message}`);
-  }
-};
-
-/**
  * Applies every SQL file in `migrations/` in filename order.
  *
- * The files are idempotent by design (the migrator keeps no tracking table), and
- * each one runs inside its own transaction so a failed or interrupted run never
- * leaves a half-applied migration behind.
+ * The database itself is provisioned by Supabase, so there is no CREATE DATABASE
+ * step: the app only applies schema changes. The files are idempotent by design
+ * (the migrator keeps no tracking table), and each one runs inside its own
+ * transaction so a failed or interrupted run never leaves a half-applied
+ * migration behind.
  */
 export const runMigrations = async (existingPool) => {
   const dbUrl = process.env.DATABASE_URL;
   if (!dbUrl) {
     throw new Error('DATABASE_URL is required to run migrations.');
   }
-  try {
-    new URL(dbUrl);
-  } catch {
-    throw new Error(
-      'DATABASE_URL is not a valid connection string. Fill in the Supabase session pooler URI (database password and region, no square brackets) in backend/.env.production.',
-    );
-  }
 
-  if (!existingPool) {
-    await ensureDatabaseExists(dbUrl);
-  }
+  assertSupabaseDatabaseUrl(dbUrl);
 
   const pool = existingPool || new pg.Pool(buildPgConfig(dbUrl));
-  const managed = isManagedDatabase(dbUrl);
+  const supabase = isSupabaseDatabase(dbUrl);
   const files = fs
     .readdirSync(migrationsDir)
     .filter((f) => f.endsWith('.sql'))
@@ -84,7 +50,7 @@ export const runMigrations = async (existingPool) => {
 
   // eslint-disable-next-line no-console
   console.log(
-    `Migrating ${describeDatabase(dbUrl)}${managed ? ' (managed Postgres, TLS)' : ''}...`,
+    `Migrating ${describeDatabase(dbUrl)}${supabase ? ' (Supabase, TLS)' : ''}...`,
   );
 
   for (const file of files) {
@@ -118,7 +84,7 @@ const isMain = process.argv[1] === fileURLToPath(import.meta.url);
 if (isMain) {
   runMigrations().catch((err) => {
     // eslint-disable-next-line no-console
-    console.error(err);
+    console.error(err.message || err);
     process.exit(1);
   });
 }

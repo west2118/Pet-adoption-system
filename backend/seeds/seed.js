@@ -1,5 +1,6 @@
 import dotenv from 'dotenv';
 import pg from 'pg';
+import { buildPgConfig } from '../src/config/pgOptions.js';
 import bcrypt from 'bcryptjs';
 
 dotenv.config();
@@ -34,7 +35,7 @@ const shelters = [
 ];
 
 const seed = async () => {
-  const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
+  const pool = new pg.Pool(buildPgConfig(process.env.DATABASE_URL));
   try {
     await pool.query('BEGIN');
 

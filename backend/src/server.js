@@ -1,11 +1,16 @@
 import { createApp } from './app.js';
 import { env } from './config/env.js';
 import { pool } from './config/database.js';
+import { assertSupabaseDatabaseUrl } from './config/pgOptions.js';
 import { logger } from './utils/logger.js';
 import { runMigrations } from '../scripts/migrate.js';
 import { ensurePlatformAdmin } from '../scripts/seedAdmin.js';
 
 const start = async () => {
+  // Fails fast with a clear message when DATABASE_URL still points at a local
+  // PostgreSQL server or Supabase's IPv6-only direct host.
+  assertSupabaseDatabaseUrl(env.DATABASE_URL);
+
   logger.info('Ensuring database schema and migrations...');
   await runMigrations(pool);
 
