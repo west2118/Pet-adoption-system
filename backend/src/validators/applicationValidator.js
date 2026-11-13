@@ -1,5 +1,9 @@
 import { z } from 'zod';
 
+export const applicationPetParam = z.object({
+  petId: z.string().uuid('Invalid pet ID format'),
+});
+
 export const createApplicationSchema = z.object({
   petId: z.string().uuid('Invalid pet ID format'),
   applicantName: z.string().min(1, 'Applicant name is required').max(255),

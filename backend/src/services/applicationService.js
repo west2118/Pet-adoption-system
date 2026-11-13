@@ -3,6 +3,7 @@ import { AppError } from '../utils/AppError.js';
 import { mapApplication } from '../utils/mappers.js';
 import {
   createApplication,
+  findActiveApplicationByApplicantAndPet,
   findApplicationById,
   getApplicationHistory,
   getApplicationSummaryByApplicant,
@@ -17,6 +18,13 @@ import {
   sendApplicationAutoRejectedEmail,
 } from './mailerService.js';
 
+export const getActiveApplicationForPet = async (applicantId, petId) => {
+  const row = await findActiveApplicationByApplicantAndPet(applicantId, petId);
+  if (!row) return null;
+  const history = await getApplicationHistory(row.id);
+  return mapApplication(row, history);
+};
+
 export const submitApplication = async (input, applicantId) => {
   const pet = await findPetById(input.petId);
   if (!pet || pet.visibility !== 'public') {
@@ -24,6 +32,13 @@ export const submitApplication = async (input, applicantId) => {
   }
   if (pet.status !== 'Available') {
     throw new AppError(`Applications are closed for pets with status '${pet.status}'.`, 400);
+  }
+  const existing = await findActiveApplicationByApplicantAndPet(applicantId, input.petId);
+  if (existing) {
+    throw new AppError(
+      'You already have an active application submitted for this pet.',
+      409,
+    );
   }
   const row = await createApplication(input, applicantId);
 

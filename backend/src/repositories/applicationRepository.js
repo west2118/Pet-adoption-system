@@ -19,6 +19,24 @@ export const createApplication = async (input, applicantId) => {
   return app;
 };
 
+export const findActiveApplicationByApplicantAndPet = async (applicantId, petId) => {
+  const { rows } = await pool.query(
+    `SELECT a.*, p.name AS pet_name, p.image_url AS pet_image, p.breed AS pet_breed,
+            w.status AS waiver_status, w.version AS waiver_version,
+            w.signed_at AS waiver_signed_at
+       FROM adoption_applications a
+       JOIN pets p ON p.id = a.pet_id
+       LEFT JOIN waivers w ON w.application_id = a.id
+      WHERE a.applicant_id = $1
+        AND a.pet_id = $2
+        AND a.status IN ('Submitted', 'Under Review', 'Approved', 'Adopted')
+      ORDER BY a.submitted_at DESC
+      LIMIT 1`,
+    [applicantId, petId],
+  );
+  return rows[0] ?? null;
+};
+
 export const findApplicationById = async (id) => {
   const { rows } = await pool.query(
     `SELECT a.*, p.name AS pet_name, p.image_url AS pet_image, p.breed AS pet_breed,

@@ -3,8 +3,11 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import {
   ArrowRight,
   BadgeCheck,
+  CheckCircle2,
+  Clock,
   FileCheck2,
   HeartHandshake,
+  Loader2,
   MapPin,
   PawPrint,
 } from 'lucide-react';
@@ -17,7 +20,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { usePets, useShelters } from '@/hooks/useData';
 import { adoptionApplicationService } from '@/services/adoptionApplicationService';
 import { ApiError } from '@/lib/apiClient';
-import type { Pet } from '@/types';
+import type { AdoptionApplication, Pet } from '@/types';
 
 const frame = 'mx-auto w-full max-w-[1400px] px-6 lg:px-12';
 
@@ -54,6 +57,8 @@ export const AdoptionFormPage = () => {
   const { shelters } = useShelters();
 
   const [pet, setPet] = useState<Pet | null>(null);
+  const [existingApplication, setExistingApplication] = useState<AdoptionApplication | null>(null);
+  const [checkingExisting, setCheckingExisting] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [form, setForm] = useState({
@@ -82,6 +87,31 @@ export const AdoptionFormPage = () => {
     setPet(found);
   }, [petId, pets]);
 
+  useEffect(() => {
+    let mounted = true;
+    if (!petId || !user) {
+      setCheckingExisting(false);
+      return;
+    }
+
+    setCheckingExisting(true);
+    adoptionApplicationService
+      .getByPet(petId)
+      .then((existing) => {
+        if (mounted) setExistingApplication(existing);
+      })
+      .catch(() => {
+        // Fallback: silence check error, let server enforce on submit
+      })
+      .finally(() => {
+        if (mounted) setCheckingExisting(false);
+      });
+
+    return () => {
+      mounted = false;
+    };
+  }, [petId, user]);
+
   const shelter = useMemo(
     () => shelters.find((s) => s.id === pet?.shelterId),
     [shelters, pet],
@@ -102,6 +132,14 @@ export const AdoptionFormPage = () => {
       !form.reason.trim()
     ) {
       setSubmitError('All fields are required. Please complete every field before submitting.');
+      return;
+    }
+    if (!/^\d+$/.test(form.phone.trim())) {
+      setSubmitError('Phone number must contain numbers only.');
+      return;
+    }
+    if (form.phone.trim().length < 11) {
+      setSubmitError('Phone number must be at least 11 digits.');
       return;
     }
     if (form.reason.trim().length < 10) {
@@ -130,6 +168,15 @@ export const AdoptionFormPage = () => {
       toast.success(`Application sent for ${pet?.name ?? 'your pet'}!`);
       navigate('/applications', { replace: true });
     } catch (err) {
+      if (err instanceof ApiError && err.status === 409) {
+        // Refresh existing application state if duplicate conflict hit
+        try {
+          const existing = await adoptionApplicationService.getByPet(petId);
+          if (existing) setExistingApplication(existing);
+        } catch {
+          // Keep submit error
+        }
+      }
       const message =
         err instanceof ApiError
           ? err.details?.map((d: any) => d.message).join(' ') ?? err.message
@@ -333,12 +380,86 @@ export const AdoptionFormPage = () => {
               </Reveal>
             </div>
 
-            {/* Right: the form */}
+            {/* Right: the form or already submitted card */}
             <Reveal delay={100} className="lg:col-span-7">
-              <form
-                onSubmit={handleSubmit}
-                className="border border-border bg-card p-6 md:p-10"
-              >
+              {checkingExisting ? (
+                <div className="flex h-96 flex-col items-center justify-center border border-border bg-card p-10 text-center">
+                  <Loader2 className="size-8 animate-spin text-primary" />
+                  <p className="mt-4 text-sm text-muted-foreground">Checking application status…</p>
+                </div>
+              ) : existingApplication ? (
+                <div className="border border-border bg-card p-6 md:p-10">
+                  <div className="flex items-center gap-3">
+                    <span className="flex size-10 items-center justify-center rounded-full bg-emerald-500/10 text-emerald-600 dark:bg-emerald-500/20 dark:text-emerald-400">
+                      <CheckCircle2 className="size-5" />
+                    </span>
+                    <div>
+                      <span className="inline-flex items-center gap-3 font-mono text-sm text-muted-foreground">
+                        <span className="h-px w-8 bg-[var(--brand)]" />
+                        Application status
+                      </span>
+                      <h2 className="mt-1 font-display text-2xl tracking-tight md:text-3xl">
+                        Application already submitted
+                      </h2>
+                    </div>
+                  </div>
+
+                  <p className="mt-4 text-sm leading-relaxed text-muted-foreground">
+                    You have an active application for <strong className="text-foreground">{pet?.name ?? 'this pet'}</strong>.
+                    To prevent duplicate requests, each account can only have one active application per pet at a time.
+                  </p>
+
+                  <div className="mt-6 rounded-xl border border-border bg-background/60 p-5">
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <div>
+                        <p className="font-mono text-[11px] uppercase tracking-[0.2em] text-muted-foreground">
+                          Current status
+                        </p>
+                        <div className="mt-2">
+                          <ApplicationStatusBadge status={existingApplication.status} />
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <p className="font-mono text-[11px] uppercase tracking-[0.2em] text-muted-foreground">
+                          Submitted on
+                        </p>
+                        <p className="mt-2 inline-flex items-center gap-1.5 text-xs text-muted-foreground">
+                          <Clock className="size-3.5" />
+                          {new Date(existingApplication.submittedAt).toLocaleDateString(undefined, {
+                            month: 'short',
+                            day: 'numeric',
+                            year: 'numeric',
+                          })}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="mt-4 border-t border-border pt-4 text-xs text-muted-foreground">
+                      <p>
+                        <strong>Applicant:</strong> {existingApplication.applicantName} ({existingApplication.email})
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="mt-8 flex flex-col gap-3 sm:flex-row">
+                    <Link to="/applications" className="flex-1">
+                      <Button className="h-11 w-full rounded-full">
+                        View in your applications
+                        <ArrowRight className="size-4" />
+                      </Button>
+                    </Link>
+                    <Link to="/pets">
+                      <Button variant="outline" className="h-11 w-full rounded-full px-6">
+                        Browse other pets
+                      </Button>
+                    </Link>
+                  </div>
+                </div>
+              ) : (
+                <form
+                  onSubmit={handleSubmit}
+                  className="border border-border bg-card p-6 md:p-10"
+                >
                 <span className="inline-flex items-center gap-3 font-mono text-sm text-muted-foreground">
                   <span className="h-px w-12 bg-[var(--brand)]" />
                   Your application
@@ -397,12 +518,20 @@ export const AdoptionFormPage = () => {
                         </Label>
                         <Input
                           id="app-phone"
+                          type="tel"
+                          inputMode="numeric"
+                          pattern="[0-9]{11,}"
+                          minLength={11}
                           value={form.phone}
-                          onChange={(e) => set('phone', e.target.value)}
-                          placeholder="+63 …"
+                          onChange={(e) => {
+                            const digitsOnly = e.target.value.replace(/\D/g, '');
+                            set('phone', digitsOnly);
+                          }}
+                          placeholder="e.g. 09123456789"
                           required
                           autoComplete="tel"
                         />
+
                       </div>
                       <div>
                         <Label htmlFor="app-address">
@@ -511,6 +640,7 @@ export const AdoptionFormPage = () => {
                   </p>
                 </div>
               </form>
+              )}
             </Reveal>
           </div>
         </div>

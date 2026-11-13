@@ -2,6 +2,7 @@ import { Router } from 'express';
 import {
   cancelMyApplication,
   createApplication,
+  getMyApplicationForPet,
   getMyApplications,
   getMyApplicationSummary,
 } from '../controllers/applicationController.js';
@@ -14,6 +15,7 @@ import { authorize } from '../middlewares/authorize.js';
 import { validate } from '../middlewares/validate.js';
 import { uuidParam } from '../validators/commonValidator.js';
 import {
+  applicationPetParam,
   cancelApplicationSchema,
   createApplicationSchema,
 } from '../validators/applicationValidator.js';
@@ -33,6 +35,13 @@ applicationRoutes.get(
   authenticate,
   authorize('adopter'),
   getMyApplications,
+);
+applicationRoutes.get(
+  '/my/pet/:petId',
+  authenticate,
+  authorize('adopter'),
+  validate(applicationPetParam, 'params'),
+  getMyApplicationForPet,
 );
 // Summary counters for the same adopter — registered alongside /my so the
 // paged list and the stats bar can be fetched independently.
