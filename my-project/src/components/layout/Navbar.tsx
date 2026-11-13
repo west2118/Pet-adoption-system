@@ -1,4 +1,4 @@
-import { Heart, LogOut, Menu, PawPrint, X } from 'lucide-react';
+import { Heart, LayoutDashboard, LogOut, Menu, PawPrint, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
@@ -134,6 +134,22 @@ export const Navbar = () => {
                   </span>
                 )}
               </Link>
+              {user.role === 'platform_admin' && (
+                <Button
+                  onClick={() => navigate('/admin')}
+                  className="h-9 rounded-full px-4"
+                >
+                  <LayoutDashboard className="size-3.5" /> Dashboard
+                </Button>
+              )}
+              {user.role === 'shelter_staff' && (
+                <Button
+                  onClick={() => navigate('/shelter')}
+                  className="h-9 rounded-full px-4"
+                >
+                  <LayoutDashboard className="size-3.5" /> Dashboard
+                </Button>
+              )}
               <Button
                 variant="outline"
                 onClick={handleLogout}
@@ -224,6 +240,28 @@ export const Navbar = () => {
                   >
                     Profile
                   </Button>
+                  {user.role === 'platform_admin' && (
+                    <Button
+                      onClick={() => {
+                        navigate('/admin');
+                        setOpen(false);
+                      }}
+                      className="h-11 flex-1 rounded-full"
+                    >
+                      <LayoutDashboard className="size-4" /> Dashboard
+                    </Button>
+                  )}
+                  {user.role === 'shelter_staff' && (
+                    <Button
+                      onClick={() => {
+                        navigate('/shelter');
+                        setOpen(false);
+                      }}
+                      className="h-11 flex-1 rounded-full"
+                    >
+                      <LayoutDashboard className="size-4" /> Dashboard
+                    </Button>
+                  )}
                   <Button
                     variant="outline"
                     onClick={handleLogout}

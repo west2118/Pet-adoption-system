@@ -34,6 +34,16 @@ export const createAdoptionApplication = async (
   return application;
 };
 
+export const getMyApplicationForPet = async (
+  petId: string,
+): Promise<AdoptionApplication | null> => {
+  const { application } = await apiRequest<{ application: AdoptionApplication | null }>(
+    `/applications/my/pet/${encodeURIComponent(petId)}`,
+    { auth: 'full' },
+  );
+  return application;
+};
+
 export const listMyApplications = async (): Promise<AdoptionApplication[]> => {
   // Callers that want the whole list (profile summaries) opt in explicitly —
   // the default page size for GET /applications/my is 5.
@@ -167,6 +177,7 @@ export const updateShelterApplicationStatus = async (
 
 export const adoptionApplicationService = {
   create: createAdoptionApplication,
+  getByPet: getMyApplicationForPet,
   listMine: listMyApplications,
   listMinePaginated: listMyApplicationsPaginated,
   summaryMine: getMyApplicationSummary,

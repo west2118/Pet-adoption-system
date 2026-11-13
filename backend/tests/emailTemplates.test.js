@@ -71,7 +71,7 @@ describe('emailTemplates (styled HTML)', () => {
   it('rejected email renders the reason callout only when a reason exists', () => {
     const withReason = shelterRejectedHtml({ name: 'Maria', reason: 'Missing documents' });
     assertStyledShell(withReason);
-    assert.match(withReason, /<strong>Reason:<\/strong> Missing documents/);
+    assert.match(withReason, /<strong>Message from platform admin:<\/strong><br\/>Missing documents/);
     assert.match(withReason, /background-color:#fff7ed/); // callout box
 
     const withoutReason = shelterRejectedHtml({ name: 'Maria', reason: undefined });

@@ -1,5 +1,6 @@
 import {
   cancelApplication,
+  getActiveApplicationForPet,
   getApplicationSummary,
   listMyApplications,
   listShelterApplications,
@@ -20,6 +21,11 @@ export const getMyApplications = async (req, res) => {
   const { page, limit, offset } = parsePagination(req.query, 5);
   const { applications, total } = await listMyApplications(req.user.id, { limit, offset });
   return sendSuccess(res, { applications }, undefined, buildMeta(page, limit, total));
+};
+
+export const getMyApplicationForPet = async (req, res) => {
+  const application = await getActiveApplicationForPet(req.user.id, req.params.petId);
+  return sendSuccess(res, { application });
 };
 
 export const cancelMyApplication = async (req, res) => {
