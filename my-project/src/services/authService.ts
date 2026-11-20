@@ -8,13 +8,40 @@ export interface SignupInput {
   role: UserRole;
 }
 
-export interface SignupResult {
+export interface SignupInitiateResult {
+  otpRequired: true;
+  verificationId: string;
+  email: string;
+}
+
+export interface SignupFinalResult {
   user: User;
   requiresOnboarding?: boolean;
 }
 
-export interface LoginResult {
+export type SignupResult = SignupInitiateResult;
+
+export interface LoginSuccessResult {
+  mfaRequired?: false;
   user: User;
+}
+
+export interface LoginMfaChallengeResult {
+  mfaRequired: true;
+  challengeId: string;
+  email: string;
+  location?: string;
+}
+
+export type LoginResult = LoginSuccessResult | LoginMfaChallengeResult;
+
+export interface VerifyOtpResult {
+  user: User;
+}
+
+export interface ResendOtpResult {
+  challengeId: string;
+  message: string;
 }
 
 export interface ShelterApplicationInput {
@@ -40,10 +67,47 @@ export const signup = async (input: SignupInput): Promise<SignupResult> => {
   });
 };
 
-export const login = async (email: string, password: string): Promise<LoginResult> => {
+export const verifySignupOtp = async (
+  verificationId: string,
+  code: string,
+): Promise<SignupFinalResult> => {
+  return apiRequest<SignupFinalResult>('/auth/verify-signup-otp', {
+    method: 'POST',
+    body: { verificationId, code },
+  });
+};
+
+export const resendSignupOtp = async (
+  verificationId: string,
+): Promise<{ verificationId: string; message: string }> => {
+  return apiRequest<{ verificationId: string; message: string }>('/auth/resend-signup-otp', {
+    method: 'POST',
+    body: { verificationId },
+  });
+};
+
+export const login = async (
+  email: string,
+  password: string,
+  clientLocation?: string,
+): Promise<LoginResult> => {
   return apiRequest<LoginResult>('/auth/login', {
     method: 'POST',
-    body: { email, password },
+    body: { email, password, clientLocation },
+  });
+};
+
+export const verifyOtp = async (challengeId: string, code: string): Promise<VerifyOtpResult> => {
+  return apiRequest<VerifyOtpResult>('/auth/verify-otp', {
+    method: 'POST',
+    body: { challengeId, code },
+  });
+};
+
+export const resendOtp = async (challengeId: string): Promise<ResendOtpResult> => {
+  return apiRequest<ResendOtpResult>('/auth/resend-otp', {
+    method: 'POST',
+    body: { challengeId },
   });
 };
 
@@ -92,7 +156,11 @@ export const getMyShelterApplication = async (): Promise<ShelterApplication | nu
 
 export const authService = {
   signup,
+  verifySignupOtp,
+  resendSignupOtp,
   login,
+  verifyOtp,
+  resendOtp,
   me,
   logoutSession,
   updateMe,

@@ -33,6 +33,7 @@ export const createApp = () => {
           'connect-src': ["'self'", 'https:'],
           'font-src': ["'self'", 'data:', 'https:'],
           'style-src': ["'self'", "'unsafe-inline'", 'https:'],
+          'frame-src': ["'self'", 'https://www.openstreetmap.org', 'https://maps.google.com', 'https://*.google.com'],
         },
       },
     }),

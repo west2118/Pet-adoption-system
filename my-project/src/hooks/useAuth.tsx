@@ -2,15 +2,17 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState } 
 import type { ReactNode } from 'react';
 import { ApiError } from '@/lib/apiClient';
 import { authService } from '@/services/authService';
-import type { SignupInput, SignupResult } from '@/services/authService';
+import type { LoginResult, SignupFinalResult, SignupInput, SignupResult } from '@/services/authService';
 import type { User } from '@/types';
 
 interface AuthContextValue {
   user: User | null;
   /** True while the initial `/auth/me` session check is in flight. */
   initializing: boolean;
-  login: (email: string, password: string) => Promise<User>;
+  login: (email: string, password: string, clientLocation?: string) => Promise<LoginResult>;
+  verifyOtp: (challengeId: string, code: string) => Promise<User>;
   signup: (input: SignupInput) => Promise<SignupResult>;
+  verifySignupOtp: (verificationId: string, code: string) => Promise<SignupFinalResult>;
   logout: () => void;
   /** Re-fetch the current session user. */
   refresh: () => Promise<void>;
@@ -47,17 +49,35 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     };
   }, []);
 
-  const login = useCallback(async (email: string, password: string) => {
-    const { user: authed } = await authService.login(email, password);
+  const login = useCallback(
+    async (email: string, password: string, clientLocation?: string): Promise<LoginResult> => {
+      const result = await authService.login(email, password, clientLocation);
+      if (!result.mfaRequired && 'user' in result) {
+        setUser(result.user);
+      }
+      return result;
+    },
+    [],
+  );
+
+  const verifyOtp = useCallback(async (challengeId: string, code: string): Promise<User> => {
+    const { user: authed } = await authService.verifyOtp(challengeId, code);
     setUser(authed);
     return authed;
   }, []);
 
   const signup = useCallback(async (input: SignupInput) => {
-    const result = await authService.signup(input);
-    if (!result.requiresOnboarding) setUser(result.user);
-    return result;
+    return authService.signup(input);
   }, []);
+
+  const verifySignupOtp = useCallback(
+    async (verificationId: string, code: string): Promise<SignupFinalResult> => {
+      const result = await authService.verifySignupOtp(verificationId, code);
+      if (!result.requiresOnboarding) setUser(result.user);
+      return result;
+    },
+    [],
+  );
 
   const logout = useCallback(async () => {
     // Revoke server-side best-effort; local state always clears so a dead
@@ -88,8 +108,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   );
 
   const value = useMemo(
-    () => ({ user, initializing, login, signup, logout, refresh, updateProfile }),
-    [user, initializing, login, signup, logout, refresh, updateProfile],
+    () => ({ user, initializing, login, verifyOtp, signup, verifySignupOtp, logout, refresh, updateProfile }),
+    [user, initializing, login, verifyOtp, signup, verifySignupOtp, logout, refresh, updateProfile],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
