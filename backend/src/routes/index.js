@@ -15,6 +15,7 @@ import { shelterOverviewRoutes } from './shelterOverviewRoutes.js';
 import { shelterUserRoutes } from './shelterUserRoutes.js';
 import { waiverRoutes } from './waiverRoutes.js';
 import { adminRoutes } from './adminRoutes.js';
+import { uploadRoutes } from './uploadRoutes.js';
 
 export const apiRouter = Router();
 
@@ -39,3 +40,4 @@ apiRouter.use('/shelter/overview', shelterOverviewRoutes);
 apiRouter.use('/shelter/users', shelterUserRoutes);
 apiRouter.use('/shelter', waiverRoutes);
 apiRouter.use('/admin', adminRoutes);
+apiRouter.use('/uploads', uploadRoutes);

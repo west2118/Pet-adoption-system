@@ -9,6 +9,7 @@
  * - `adminService` — platform admin tables + stats
  * - `overviewService` — shelter dashboard aggregates
  * - `inquiryService` — public inquiries + shelter inbox
+ * - `uploadService` — image uploads to Supabase Storage
  *
  * Keeping this barrel preserves the existing `@/services/api` import path.
  */
@@ -20,4 +21,5 @@ export * from './shelterUserService';
 export * from './adminService';
 export * from './overviewService';
 export * from './inquiryService';
+export * from './uploadService';
 export type { Inquiry } from '@/types';

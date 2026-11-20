@@ -39,11 +39,19 @@ import {
   ADMIN_SHELTERS_QUERY_KEY,
   useAdminShelterMutations,
 } from '@/hooks/useAdminShelterMutations';
+import { apiErrorMessage } from '@/lib/apiClient';
+import {
+  IMAGE_SIZE_MESSAGE,
+  IMAGE_TYPE_MESSAGE,
+  MAX_IMAGE_BYTES,
+  isAllowedImageFile,
+} from '@/lib/imageFiles';
 import { adminShelterSchema, toFieldErrors } from '@/lib/validators';
 import {
   getAdminShelter,
   listAdminSheltersPaginated,
   shelterService,
+  uploadImage,
 } from '@/services/api';
 import type { AdminShelterDetails, ShelterSummaryRow } from '@/services/api';
 import type { Shelter } from '@/types';
@@ -62,6 +70,7 @@ export const AdminSheltersPage = () => {
 
   const [shelterForm, setShelterForm] = useState<AdminShelterFormValues>(EMPTY_ADMIN_SHELTER_FORM);
   const [formErrors, setFormErrors] = useState<Partial<Record<keyof AdminShelterFormValues, string>>>({});
+  const [uploadingImage, setUploadingImage] = useState(false);
 
   const {
     data: sheltersData,
@@ -162,8 +171,34 @@ export const AdminSheltersPage = () => {
       .finally(() => setLoadingDetailsShelter(false));
   };
 
+  const handleImageFile = async (file: File) => {
+    if (!isAllowedImageFile(file)) {
+      toast.error(IMAGE_TYPE_MESSAGE);
+      return;
+    }
+    if (file.size > MAX_IMAGE_BYTES) {
+      toast.error(IMAGE_SIZE_MESSAGE);
+      return;
+    }
+
+    setUploadingImage(true);
+    try {
+      const url = await uploadImage(file, 'shelters');
+      setShelterForm((prev) => ({ ...prev, imageUrl: url }));
+      toast.success('Image uploaded. Save to keep it.');
+    } catch (err) {
+      toast.error(apiErrorMessage(err, 'Could not upload the image. Please try again.'));
+    } finally {
+      setUploadingImage(false);
+    }
+  };
+
   const handleShelterSubmit = (e: FormEvent) => {
     e.preventDefault();
+    if (uploadingImage) {
+      toast.info('The image is still uploading. Please wait a moment.');
+      return;
+    }
     const parsed = adminShelterSchema.safeParse(shelterForm);
     if (!parsed.success) {
       const fieldErrors = toFieldErrors<keyof AdminShelterFormValues>(parsed.error.issues);
@@ -356,6 +391,7 @@ export const AdminSheltersPage = () => {
         form={shelterForm}
         formErrors={formErrors}
         isSaving={isSaving}
+        uploadingImage={uploadingImage}
         onClose={() => {
           setShelterSlideOpen(false);
           setEditingShelter(null);
@@ -364,6 +400,7 @@ export const AdminSheltersPage = () => {
           setShelterForm((prev) => ({ ...prev, [field]: val }));
           if (formErrors[field]) setFormErrors((prev) => ({ ...prev, [field]: undefined }));
         }}
+        onImageFile={handleImageFile}
         onSubmit={handleShelterSubmit}
       />
 

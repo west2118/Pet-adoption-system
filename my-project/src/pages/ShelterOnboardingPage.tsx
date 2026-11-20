@@ -6,7 +6,6 @@ import {
   Phone,
   Mail,
   Clock,
-  ImageIcon,
   ShieldCheck,
   FileCheck2,
   UploadCloud,
@@ -23,9 +22,16 @@ import {
   focusFirstError,
   isBlank,
   isEmail,
-  isUrl,
 } from '@/components/shared';
-import { ApiError } from '@/lib/apiClient';
+import { ApiError, apiErrorMessage } from '@/lib/apiClient';
+import {
+  IMAGE_ACCEPT,
+  IMAGE_SIZE_MESSAGE,
+  IMAGE_TYPE_MESSAGE,
+  MAX_IMAGE_BYTES,
+  isAllowedImageFile,
+} from '@/lib/imageFiles';
+import { uploadImage } from '@/services/api/uploadService';
 import { locateAddress, toGeolocationFailure } from '@/lib/geocode';
 import { authService } from '@/services/authService';
 
@@ -56,6 +62,7 @@ export const ShelterOnboardingPage = () => {
   const navigate = useNavigate();
   const [form, setForm] = useState(EMPTY_FORM);
   const [submitting, setSubmitting] = useState(false);
+  const [uploadingImage, setUploadingImage] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [locating, setLocating] = useState(false);
   const [coords, setCoords] = useState<{ latitude: number; longitude: number } | null>(null);
@@ -85,19 +92,30 @@ export const ShelterOnboardingPage = () => {
   const handleImageFile = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    if (!file.type.startsWith('image/')) {
-      toast.error('Please select an image file (PNG, JPG, WEBP).');
+    if (!isAllowedImageFile(file)) {
+      toast.error(IMAGE_TYPE_MESSAGE);
       return;
     }
     // Limit to 5MB before base64 encoding
-    if (file.size > 5 * 1024 * 1024) {
-      toast.error('Image file must be under 5MB.');
+    if (file.size > MAX_IMAGE_BYTES) {
+      toast.error(IMAGE_SIZE_MESSAGE);
       return;
     }
     const reader = new FileReader();
-    reader.onload = () => {
-      const base64 = String(reader.result);
-      set('imageUrl', base64);
+    reader.onload = async () => {
+      // Show the picked image immediately, then swap it for the stored URL.
+      set('imageUrl', String(reader.result));
+      setUploadingImage(true);
+      try {
+        const url = await uploadImage(file, 'shelters');
+        set('imageUrl', url);
+        setFieldErrors((prev) => ({ ...prev, imageUrl: undefined }));
+      } catch (err) {
+        set('imageUrl', '');
+        toast.error(apiErrorMessage(err, 'Could not upload the logo. Please try again.'));
+      } finally {
+        setUploadingImage(false);
+      }
     };
     reader.onerror = () => {
       toast.error('Failed to read image file.');
@@ -138,6 +156,11 @@ export const ShelterOnboardingPage = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    if (uploadingImage) {
+      toast.info('The logo is still uploading. Please wait a moment.');
+      return;
+    }
     const next: typeof fieldErrors = {};
     if (isBlank(form.name)) next.name = 'Please enter the shelter name.';
     if (isBlank(form.location)) next.location = 'Please enter the city / region.';
@@ -150,12 +173,7 @@ export const ShelterOnboardingPage = () => {
     else if (form.description.trim().length < 20)
       next.description = 'Description must be at least 20 characters.';
     if (isBlank(form.imageUrl)) {
-      next.imageUrl = 'Please upload a logo/photo or provide an image URL.';
-    } else if (
-      !form.imageUrl.startsWith('data:image/') &&
-      !isUrl(form.imageUrl)
-    ) {
-      next.imageUrl = 'Enter a valid image URL (https://…) or upload an image file.';
+      next.imageUrl = 'Please upload a shelter logo/photo.';
     }
     setFieldErrors(next);
     if (Object.keys(next).length > 0) {
@@ -430,12 +448,12 @@ export const ShelterOnboardingPage = () => {
                           Click to upload an image file
                         </span>
                         <span className="mt-1 text-xs text-muted-foreground">
-                          PNG, JPG, or WEBP (max 5MB)
+                          JPEG, PNG, WebP or GIF (max 5MB)
                         </span>
                         <input
                           id="ob-image-file"
                           type="file"
-                          accept="image/*"
+                          accept={IMAGE_ACCEPT}
                           className="sr-only"
                           onChange={handleImageFile}
                         />
@@ -455,7 +473,9 @@ export const ShelterOnboardingPage = () => {
                                 ? 'Uploaded image'
                                 : form.imageUrl}
                             </p>
-                            <span className="text-xs text-primary font-medium">Ready for approval</span>
+                            <span className="text-xs text-primary font-medium">
+                              {uploadingImage ? 'Uploading…' : 'Ready for approval'}
+                            </span>
                           </div>
                           <Button
                             type="button"
@@ -470,19 +490,11 @@ export const ShelterOnboardingPage = () => {
                         </div>
                       )}
 
-                      {/* Fallback direct URL input */}
-                      <div className="relative">
-                        <ImageIcon className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-                        <ValidatedInput
-                          id="ob-image"
-                          type="text"
-                          value={form.imageUrl}
-                          onChange={(e) => set('imageUrl', e.target.value)}
-                          placeholder="Or paste an image URL (https://…)"
-                          error={fieldErrors.imageUrl}
-                          className={`${controlClass} pl-9 text-xs`}
-                        />
-                      </div>
+                      {fieldErrors.imageUrl && (
+                        <p role="alert" className="text-[13px] text-destructive">
+                          {fieldErrors.imageUrl}
+                        </p>
+                      )}
                     </div>
                   </div>
 
@@ -498,7 +510,7 @@ export const ShelterOnboardingPage = () => {
                   <div className="border-t border-border pt-6 sm:col-span-2">
                     <Button
                       type="submit"
-                      disabled={submitting}
+                      disabled={submitting || uploadingImage}
                       className="h-12 w-full rounded-full text-[15px] sm:w-auto sm:px-10"
                     >
                       {submitting ? 'Submitting…' : 'Submit for approval'}

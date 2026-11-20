@@ -1,16 +1,19 @@
-import { Check, X } from 'lucide-react';
-import type { FormEvent } from 'react';
+import { Check, ImagePlus, X } from 'lucide-react';
+import type { ChangeEvent, FormEvent } from 'react';
 
 import { ValidatedInput, ValidatedTextarea } from '@/components/shared';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/Card';
 import { Label, Textarea } from '@/components/ui/Form';
 import { Button } from '@/components/ui/button';
 import type { ShelterProfileFormValues } from '@/data/shelterProfile';
+import { IMAGE_ACCEPT } from '@/lib/imageFiles';
 
 export interface ShelterProfileFormProps {
   form: ShelterProfileFormValues;
   errors: Partial<Record<keyof ShelterProfileFormValues, string>>;
   onChange: (key: keyof ShelterProfileFormValues, value: string) => void;
+  onLogoFile: (file: File) => void;
+  uploadingLogo: boolean;
   onSubmit: () => void;
   onCancel: () => void;
 }
@@ -20,6 +23,8 @@ export const ShelterProfileForm = ({
   form,
   errors,
   onChange,
+  onLogoFile,
+  uploadingLogo,
   onSubmit,
   onCancel,
 }: ShelterProfileFormProps) => {
@@ -28,13 +33,66 @@ export const ShelterProfileForm = ({
     onSubmit();
   };
 
+  const handleLogoChange = (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (file) onLogoFile(file);
+  };
+
   return (
     <form onSubmit={handleSubmit} noValidate className="space-y-4">
+      {/* Logo */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Shelter logo</CardTitle>
+          <CardDescription>Shown on your shelter page and listing cards.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="flex flex-wrap items-center gap-4">
+            {form.logoUrl ? (
+              <img
+                src={form.logoUrl}
+                alt="Shelter logo preview"
+                className="size-20 rounded-xl border object-cover"
+              />
+            ) : (
+              <div className="flex size-20 items-center justify-center rounded-xl border border-dashed text-muted-foreground">
+                <ImagePlus className="size-6" />
+              </div>
+            )}
+            <div className="space-y-1.5">
+              <label
+                className={`inline-flex cursor-pointer items-center gap-1.5 rounded-lg border px-3 py-2 text-sm font-medium transition-colors hover:bg-muted ${uploadingLogo ? 'cursor-wait opacity-60' : ''}`}
+              >
+                <ImagePlus className="size-4" />
+                {uploadingLogo ? 'Uploading…' : form.logoUrl ? 'Replace logo' : 'Upload logo'}
+                <input
+                  type="file"
+                  accept={IMAGE_ACCEPT}
+                  className="sr-only"
+                  disabled={uploadingLogo}
+                  aria-label="Upload shelter logo"
+                  onChange={handleLogoChange}
+                />
+              </label>
+              <p className="text-xs text-muted-foreground">
+                JPEG, PNG, WebP or GIF (max 5MB).
+              </p>
+              {errors.logoUrl && (
+                <p role="alert" className="text-[13px] text-destructive">
+                  {errors.logoUrl}
+                </p>
+              )}
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
       {/* Organization */}
       <Card>
         <CardHeader>
           <CardTitle className="text-base">Organization</CardTitle>
-          <CardDescription>Name, location, and logo shown across the platform.</CardDescription>
+          <CardDescription>Name and location shown across the platform.</CardDescription>
         </CardHeader>
         <CardContent className="grid gap-3 sm:grid-cols-2">
           <div>
@@ -62,16 +120,6 @@ export const ShelterProfileForm = ({
               value={form.address}
               onChange={(e) => onChange('address', e.target.value)}
               error={errors.address}
-            />
-          </div>
-          <div className="sm:col-span-2">
-            <Label htmlFor="profile-logo">Logo / photo URL</Label>
-            <ValidatedInput
-              id="profile-logo"
-              value={form.logoUrl}
-              onChange={(e) => onChange('logoUrl', e.target.value)}
-              placeholder="https://…"
-              error={errors.logoUrl}
             />
           </div>
         </CardContent>

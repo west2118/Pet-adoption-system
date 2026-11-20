@@ -177,9 +177,13 @@ export const AdoptionFormPage = () => {
           // Keep submit error
         }
       }
+      const fieldMessage =
+        err instanceof ApiError && Array.isArray(err.details)
+          ? err.details.map((detail) => detail.message).join(' ')
+          : '';
       const message =
         err instanceof ApiError
-          ? err.details?.map((d: any) => d.message).join(' ') ?? err.message
+          ? fieldMessage || err.message
           : 'Could not submit your application. Please try again.';
       setSubmitError(message);
       toast.error(message);

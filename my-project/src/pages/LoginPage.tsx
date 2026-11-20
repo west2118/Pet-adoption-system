@@ -107,7 +107,12 @@ export const LoginPage = () => {
     },
     // Covers network/unexpected failures, not just API error responses.
     onError: (error) => {
-      if (error instanceof ApiError && error.status === 403 && error.details) {
+      if (
+        error instanceof ApiError &&
+        error.status === 403 &&
+        error.details &&
+        !Array.isArray(error.details)
+      ) {
         // The onboarding cookie was set by the backend; only the routing hint
         // comes back in the error payload.
         const { requiresOnboarding } = error.details;

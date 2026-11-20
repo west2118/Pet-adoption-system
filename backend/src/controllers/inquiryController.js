@@ -7,6 +7,12 @@ import {
 } from '../services/inquiryService.js';
 import { sendSuccess, buildMeta } from '../utils/respond.js';
 import { parsePagination } from '../validators/commonValidator.js';
+import { hasInquiryForPet } from '../repositories/inquiryRepository.js';
+
+export const getMyInquiryForPet = async (req, res) => {
+  const submitted = await hasInquiryForPet(req.params.petId, req.user.email);
+  return sendSuccess(res, { submitted });
+};
 
 const parseResolved = (value) => {
   if (value === undefined || value === '') return undefined;
@@ -16,7 +22,10 @@ const parseResolved = (value) => {
 };
 
 export const createInquiry = async (req, res) => {
-  const inquiry = await submitInquiry(req.body);
+  const input = req.user?.role === 'adopter'
+    ? { ...req.body, fromEmail: req.user.email }
+    : req.body;
+  const inquiry = await submitInquiry(input);
   return sendSuccess(res, { inquiry }, 'Inquiry submitted successfully.', undefined, 201);
 };
 

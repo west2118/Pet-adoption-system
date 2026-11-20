@@ -17,6 +17,13 @@ interface InquiryResponse {
   inquiry: Inquiry;
 }
 
+export const hasMyInquiryForPet = async (petId: string): Promise<boolean> => {
+  const data = await apiRequest<{ submitted: boolean }>(
+    `/inquiries/my/pet/${encodeURIComponent(petId)}`, { auth: 'full' },
+  );
+  return data.submitted;
+};
+
 export interface SubmitInquiryInput {
   petId: string;
   fromName: string;

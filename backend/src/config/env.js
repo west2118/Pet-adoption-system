@@ -32,9 +32,36 @@ const envSchema = z.object({
   BREVO_API_KEY: z.string().optional(),
   SMTP_PASS: z.string().optional(),
   MAIL_FROM: z.string().optional(),
-  APP_URL: z.string().default('http://localhost:5173'),
+  APP_URL: z.string().optional(),
+  // Supabase Storage for pet photos and shelter logos. SUPABASE_URL is derived
+  // from DATABASE_URL when omitted; the service role key is required to write.
+  SUPABASE_URL: z.string().optional(),
+  SUPABASE_SERVICE_ROLE_KEY: z.string().optional(),
+  SUPABASE_STORAGE_BUCKET: z.string().default('paws-images'),
 });
 
 export const env = envSchema.parse(process.env);
 
-export const allowedOrigins = env.ALLOWED_ORIGINS.split(',').map((o) => o.trim());
+export const allowedOrigins = env.ALLOWED_ORIGINS.split(',')
+  .map((origin) => origin.trim())
+  .filter(Boolean);
+
+const isLoopbackOrigin = (origin) => /^https?:\/\/(localhost|127\.0\.0\.1)(:|\/|$)/i.test(origin);
+
+const configuredAppUrl = env.APP_URL?.trim().replace(/\/+$/, '');
+const deployedOrigin = allowedOrigins.find((origin) => !isLoopbackOrigin(origin));
+
+// A localhost APP_URL copied from .env.example can only be right on a dev
+// machine, so production ignores it rather than emailing unusable links.
+const useConfigured =
+  configuredAppUrl &&
+  !(env.NODE_ENV === 'production' && isLoopbackOrigin(configuredAppUrl));
+
+/**
+ * Origin used in emailed links (sign-in buttons, application links).
+ * APP_URL wins; otherwise the first deployed origin in ALLOWED_ORIGINS is used
+ * so production emails never point at localhost because one env var was missed.
+ */
+export const appUrl = useConfigured
+  ? configuredAppUrl
+  : deployedOrigin || 'http://localhost:5173';

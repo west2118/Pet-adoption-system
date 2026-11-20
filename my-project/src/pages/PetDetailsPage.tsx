@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { ArrowRight, HeartHandshake } from 'lucide-react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { toast } from 'react-toastify';
@@ -15,10 +15,9 @@ import { ShelterContactCard } from '@/components/features/ShelterContactCard';
 import { EmptyState } from '@/components/ui/Feedback';
 import { Button } from '@/components/ui/button';
 import { useFavorites } from '@/hooks/useFavorites';
-import { petService, shelterService } from '@/services/api';
+import { listPetsPaginated, petService, shelterService } from '@/services/api';
 import { formatDate } from '@/utils/formatters';
 import { describeApiError } from '@/utils/errors';
-import { publicPets } from '@/utils/pets';
 
 const frame = 'mx-auto w-full max-w-[1400px] px-6 lg:px-12';
 
@@ -28,6 +27,7 @@ export const PetDetailsPage = () => {
   const [pet, setPet] = useState<Pet | null>(null);
   const [shelter, setShelter] = useState<Shelter | null>(null);
   const [siblings, setSiblings] = useState<Pet[]>([]);
+  const [shelterPetCount, setShelterPetCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [reload, setReload] = useState(0);
@@ -45,16 +45,20 @@ export const PetDetailsPage = () => {
       try {
         const found = await petService.getById(id);
         const shelters = await shelterService.list();
-        // Siblings = other PUBLIC pets of the same shelter (backend already
-        // filters visibility='public' via ?shelterId=).
-        const shelterPets = found ? await petService.listByShelter(found.shelterId) : [];
+        // Pending applications leave a pet Available until one is accepted.
+        // Filter before pagination; four rows leave three after removing this pet.
+        const shelterPets = found ? await listPetsPaginated({
+          shelterId: found.shelterId,
+          status: 'Available',
+          limit: 4,
+        }) : null;
         if (!mounted) return;
         setPet(found ?? null);
         setShelter(shelters.find((s) => s.id === found?.shelterId) ?? null);
-        // Adopters only ever see other public listings from the same shelter.
+        setShelterPetCount(shelterPets?.total ?? 0);
         setSiblings(
           found
-            ? publicPets(shelterPets)
+            ? (shelterPets?.items ?? [])
                 .filter((p) => p.id !== found.id)
                 .slice(0, 3)
             : [],
@@ -92,11 +96,6 @@ export const PetDetailsPage = () => {
       toast.info(`${pet.name} removed from favorites.`);
     }
   };
-
-  const shelterPetCount = useMemo(
-    () => (siblings.length > 0 && pet ? siblings.length + 1 : pet ? 1 : 0),
-    [siblings, pet],
-  );
 
   if (loading) {
     return (
@@ -304,7 +303,7 @@ export const PetDetailsPage = () => {
               <Reveal delay={150} className="lg:col-span-5 lg:pb-2">
                 <p className="text-lg leading-relaxed text-muted-foreground">
                   {shelter.name} currently has {shelterPetCount}{' '}
-                  {shelterPetCount === 1 ? 'public listing' : 'public listings'} on
+                  {shelterPetCount === 1 ? 'available pet' : 'available pets'} on
                   PawsConnect.
                 </p>
                 <Link

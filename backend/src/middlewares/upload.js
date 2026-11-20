@@ -3,11 +3,19 @@ import { AppError } from '../utils/AppError.js';
 
 const storage = multer.memoryStorage();
 
+// Raster images only — documents (PDF, DOCX) and SVG are rejected.
+const ALLOWED_IMAGE_TYPES = new Set([
+  'image/jpeg',
+  'image/png',
+  'image/webp',
+  'image/gif',
+]);
+
 const fileFilter = (_req, file, cb) => {
-  if (file.mimetype.startsWith('image/')) {
+  if (ALLOWED_IMAGE_TYPES.has(file.mimetype)) {
     cb(null, true);
   } else {
-    cb(new AppError('Only image files (JPEG, PNG, WebP) are allowed.', 400));
+    cb(new AppError('Only JPEG, PNG, WebP or GIF images are allowed.', 400));
   }
 };
 

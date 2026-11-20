@@ -1,9 +1,11 @@
-import type { FormEvent } from 'react';
+import { ImagePlus } from 'lucide-react';
+import type { ChangeEvent, FormEvent } from 'react';
 
 import { SlideOver, ValidatedInput, ValidatedTextarea } from '@/components/shared';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/Form';
 import type { AdminShelterFormValues } from '@/data/adminPresets';
+import { IMAGE_ACCEPT } from '@/lib/imageFiles';
 import type { Shelter } from '@/types';
 
 export interface AdminShelterFormSlideOverProps {
@@ -12,8 +14,10 @@ export interface AdminShelterFormSlideOverProps {
   form: AdminShelterFormValues;
   formErrors: Partial<Record<keyof AdminShelterFormValues, string>>;
   isSaving: boolean;
+  uploadingImage: boolean;
   onClose: () => void;
   onChange: (field: keyof AdminShelterFormValues, value: string) => void;
+  onImageFile: (file: File) => void;
   onSubmit: (e: FormEvent) => void;
 }
 
@@ -23,10 +27,19 @@ export const AdminShelterFormSlideOver = ({
   form,
   formErrors,
   isSaving,
+  uploadingImage,
   onClose,
   onChange,
+  onImageFile,
   onSubmit,
-}: AdminShelterFormSlideOverProps) => (
+}: AdminShelterFormSlideOverProps) => {
+  const handleImageChange = (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (file) onImageFile(file);
+  };
+
+  return (
   <SlideOver
     open={open}
     onClose={onClose}
@@ -108,13 +121,39 @@ export const AdminShelterFormSlideOver = ({
       </div>
 
       <div>
-        <Label htmlFor="shelter-imageUrl">Cover image URL (optional)</Label>
-        <ValidatedInput
-          id="shelter-imageUrl"
-          value={form.imageUrl}
-          onChange={(e) => onChange('imageUrl', e.target.value)}
-          placeholder="https://..."
-        />
+        <Label htmlFor="shelter-image">Cover image (optional)</Label>
+        <div className="mt-1.5 flex items-center gap-3">
+          {form.imageUrl ? (
+            <img
+              src={form.imageUrl}
+              alt="Shelter cover preview"
+              className="size-16 rounded-lg border object-cover"
+            />
+          ) : (
+            <div className="flex size-16 items-center justify-center rounded-lg border border-dashed text-muted-foreground">
+              <ImagePlus className="size-5" />
+            </div>
+          )}
+          <div>
+            <label
+              className={`inline-flex cursor-pointer items-center gap-1.5 rounded-lg border px-3 py-2 text-sm font-medium transition-colors hover:bg-muted ${uploadingImage ? 'cursor-wait opacity-60' : ''}`}
+            >
+              <ImagePlus className="size-4" />
+              {uploadingImage ? 'Uploading…' : form.imageUrl ? 'Replace image' : 'Upload image'}
+              <input
+                id="shelter-image"
+                type="file"
+                accept={IMAGE_ACCEPT}
+                className="sr-only"
+                disabled={uploadingImage}
+                onChange={handleImageChange}
+              />
+            </label>
+            <p className="mt-1 text-xs text-muted-foreground">
+              JPEG, PNG, WebP or GIF (max 5MB).
+            </p>
+          </div>
+        </div>
       </div>
 
       <div>
@@ -132,11 +171,12 @@ export const AdminShelterFormSlideOver = ({
         <Button type="button" variant="outline" disabled={isSaving} onClick={onClose}>
           Cancel
         </Button>
-        <Button type="submit" disabled={isSaving}>
+        <Button type="submit" disabled={isSaving || uploadingImage}>
           {isSaving ? 'Saving…' : editingShelter ? 'Save changes' : 'Add shelter'}
         </Button>
       </div>
     </form>
   </SlideOver>
-);
+  );
+};
 

@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url';
 import express from 'express';
 import helmet from 'helmet';
 import cors from 'cors';
-import { allowedOrigins, env } from './config/env.js';
+import { allowedOrigins, appUrl } from './config/env.js';
 import { errorHandler, notFound } from './middlewares/errorHandler.js';
 import { apiRouter } from './routes/index.js';
 
@@ -40,9 +40,9 @@ export const createApp = () => {
   );
   app.use(
     cors({
-      // APP_URL is the deployed origin, so the SPA works even when
-      // ALLOWED_ORIGINS was not updated after the first deploy.
-      origin: Array.from(new Set([...allowedOrigins, env.APP_URL])),
+      // appUrl is the deployed origin used in emails, so the SPA works even
+      // when ALLOWED_ORIGINS was not updated after the first deploy.
+      origin: Array.from(new Set([...allowedOrigins, appUrl])),
       credentials: true,
     }),
   );
