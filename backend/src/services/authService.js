@@ -41,6 +41,15 @@ const signOnboardingToken = (user) =>
     { expiresIn: '2d' },
   );
 
+const requireOtpDelivery = (result, code) => {
+  if (!result.sent && !(result.stubbed && env.NODE_ENV !== 'production')) {
+    throw new AppError('Unable to send your verification email. Please try again shortly.', 503);
+  }
+  if (result.stubbed && env.NODE_ENV === 'development') {
+    console.log(`[Development verification code]: ${code}`);
+  }
+};
+
 export const signup = async (input) => {
   const existing = await findUserByEmail(input.email);
   if (existing) {
@@ -68,14 +77,7 @@ export const signup = async (input) => {
     name: input.name,
     code: otp,
   });
-  console.log(`[Signup OTP Mail Status for ${input.email}]:`, mailResult);
-
-  // For terminal convenience
-  console.log('\n========================================');
-  console.log(`[Signup OTP Verification Code for ${input.email}]`);
-  console.log(`CODE: ${otp}`);
-  console.log(`Expires in: 10 minutes`);
-  console.log('========================================\n');
+  requireOtpDelivery(mailResult, otp);
 
   return {
     otpRequired: true,
@@ -168,13 +170,7 @@ export const resendSignupOtp = async ({ verificationId }) => {
     name: record.name,
     code: otp,
   });
-  console.log(`[Resent Signup OTP Mail Status for ${record.email}]:`, mailResult);
-
-  console.log('\n========================================');
-  console.log(`[Resent Signup OTP Verification Code for ${record.email}]`);
-  console.log(`CODE: ${otp}`);
-  console.log(`Expires in: 10 minutes`);
-  console.log('========================================\n');
+  requireOtpDelivery(mailResult, otp);
 
   return {
     verificationId: verification.id,
@@ -264,21 +260,15 @@ export const login = async (input, reqContext = {}) => {
       expiresAt,
     });
 
-    // Send email with 6-digit verification code (fail-safe)
-    sendLoginOtpEmail({
+    // Confirm delivery before returning the verification challenge.
+    const mailResult = await sendLoginOtpEmail({
       to: row.email,
       name: row.name,
       code: otp,
       locationDisplay,
       ipAddress,
-    }).catch(() => {});
-
-    // For local dev convenience: log the code prominently to server console
-    console.log('\n========================================');
-    console.log(`[MFA OTP Verification Code for ${row.email}]`);
-    console.log(`CODE: ${otp}`);
-    console.log(`Expires in: 10 minutes`);
-    console.log('========================================\n');
+    });
+    requireOtpDelivery(mailResult, otp);
 
     // Obfuscate email for prompt
     const parts = row.email.split('@');
@@ -385,19 +375,14 @@ export const resendLoginOtp = async ({ challengeId }) => {
       ? `${challenge.city}, ${challenge.country}`
       : challenge.city || challenge.country || 'Unknown location');
 
-  sendLoginOtpEmail({
+  const mailResult = await sendLoginOtpEmail({
     to: challenge.email,
     name: challenge.name,
     code: otp,
     locationDisplay,
     ipAddress: challenge.ip_address,
-  }).catch(() => {});
-
-  console.log('\n========================================');
-  console.log(`[Resent MFA OTP Verification Code for ${challenge.email}]`);
-  console.log(`CODE: ${otp}`);
-  console.log(`Expires in: 10 minutes`);
-  console.log('========================================\n');
+  });
+  requireOtpDelivery(mailResult, otp);
 
   return {
     challengeId: newChallenge.id,

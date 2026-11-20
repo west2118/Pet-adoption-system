@@ -28,6 +28,8 @@ const envSchema = z.object({
     .default('false')
     .transform((val) => val === 'true' || val === '1'),
   SMTP_USER: z.string().optional(),
+  EMAIL_PROVIDER: z.enum(['auto', 'brevo', 'smtp']).default('auto'),
+  BREVO_API_KEY: z.string().optional(),
   SMTP_PASS: z.string().optional(),
   MAIL_FROM: z.string().optional(),
   APP_URL: z.string().default('http://localhost:5173'),

@@ -7,6 +7,7 @@ process.env.JWT_SECRET = 'test-secret-at-least-16-chars';
 // Force the mailer into stub mode: empty credentials survive dotenv (which
 // only fills missing vars) and are falsy, so no SMTP transport is built.
 // No network.
+process.env.EMAIL_PROVIDER = 'smtp';
 process.env.SMTP_USER = '';
 process.env.SMTP_PASS = '';
 

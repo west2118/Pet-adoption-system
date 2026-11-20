@@ -13,6 +13,7 @@ import {
 import { Link } from 'react-router-dom';
 import {
   ChartCard,
+  ChartCardSkeleton,
   ErrorState,
   RefreshButton,
   SectionHeader,
@@ -87,13 +88,19 @@ export const AdminOverviewPage = () => {
             onRetry={() => void refetch()}
           />
         ) : showLoading && !adminStats ? (
-          <SummaryStatGrid>
-            <SummaryStatCardSkeleton />
-            <SummaryStatCardSkeleton />
-            <SummaryStatCardSkeleton />
-            <SummaryStatCardSkeleton />
-            <SummaryStatCardSkeleton />
-          </SummaryStatGrid>
+          <>
+            <SummaryStatGrid>
+              <SummaryStatCardSkeleton />
+              <SummaryStatCardSkeleton />
+              <SummaryStatCardSkeleton />
+              <SummaryStatCardSkeleton />
+              <SummaryStatCardSkeleton />
+            </SummaryStatGrid>
+            <div className="grid gap-4 lg:grid-cols-2" role="status" aria-label="Loading dashboard charts">
+              <ChartCardSkeleton height="h-[280px]" />
+              <ChartCardSkeleton height="h-[280px]" />
+            </div>
+          </>
         ) : (
           <>
             <SummaryStatGrid>
