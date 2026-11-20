@@ -128,7 +128,7 @@ export const sendShelterApprovedEmail = async ({ to, name, shelterName, message 
       name,
       shelterName,
       message,
-      loginUrl: `${appUrl}/login`,
+      loginUrl: appUrl,
     }),
   });
 
@@ -231,7 +231,6 @@ export const sendInquiryReplyEmail = async ({
   to,
   name,
   petName,
-  petId,
   shelterName,
   shelterEmail,
   subject,
@@ -244,8 +243,8 @@ export const sendInquiryReplyEmail = async ({
       name,
       petName,
       shelterName,
+      shelterEmail,
       message,
-      petId,
       appUrl,
     }),
     replyTo: shelterEmail,

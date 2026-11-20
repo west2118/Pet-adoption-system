@@ -46,7 +46,7 @@ export const createApp = () => {
       credentials: true,
     }),
   );
-  // 10mb: shelter staff upload photos as base64 data URLs inside JSON.
+  // 10mb: headroom for image URLs, e-signature data and long waiver payloads.
   app.use(express.json({ limit: '10mb' }));
 
   app.get('/health', (_req, res) => res.json({ success: true, data: { status: 'ok' } }));

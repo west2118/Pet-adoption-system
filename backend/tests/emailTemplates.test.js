@@ -26,7 +26,9 @@ const {
 
 const mailer = await import('../src/services/mailerService.js');
 
-const LOGIN_URL = 'http://localhost:5173/login';
+// Email buttons open the site root, never a deep link (SPA routes can 404 on
+// static hosts, and signed-out readers would only hit the login wall).
+const LOGIN_URL = 'http://localhost:5173';
 
 const assertStyledShell = (html) => {
   // Full document + table-based shell with inline styles (Gmail-safe).
@@ -97,7 +99,7 @@ describe('emailTemplates (styled HTML)', () => {
 describe('application status emails (styled HTML)', () => {
   const APP_URL = 'http://localhost:5173';
 
-  it('submission confirmation is styled and links to the applications page', () => {
+  it('submission confirmation is styled and links to the site root', () => {
     const html = applicationSubmittedHtml({
       name: 'Maria',
       petName: 'Simba',
@@ -107,8 +109,9 @@ describe('application status emails (styled HTML)', () => {
     assert.match(html, /<h1[^>]*>We received your application<\/h1>/);
     assert.match(html, /Submitted/); // status chip
     assert.match(html, /<strong>Simba<\/strong>/);
-    assert.match(html, new RegExp(`href="${APP_URL}/applications"`));
-    assert.match(html, /Track your application/);
+    assert.match(html, new RegExp(`href="${APP_URL}"`));
+    assert.doesNotMatch(html, /href="[^"]*\/(applications|visits|pets)(\/|")/);
+    assert.match(html, /Go to Paws&amp;Homes/);
   });
 
   it('under-review email uses its own chip, title and copy', () => {
@@ -208,7 +211,7 @@ describe('application status emails (styled HTML)', () => {
     );
   });
 
-  it('auto-closed email explains the reason and links to other pets', () => {
+  it('auto-closed email explains the reason and links back to the site', () => {
     const html = applicationAutoRejectedHtml({
       name: 'Maria',
       petName: 'Simba',
@@ -220,25 +223,30 @@ describe('application status emails (styled HTML)', () => {
     assert.match(html, /Closed/);
     assert.match(html, /has been closed automatically/);
     assert.match(html, /background-color:#fff7ed/); // reason callout
-    assert.match(html, new RegExp(`href="${APP_URL}/pets"`));
+    assert.match(html, new RegExp(`href="${APP_URL}"`));
     // Apostrophes in the reason are escaped, not injected.
     assert.match(html, /Another adopter&#39;s application/);
   });
 
-  it('inquiry reply is styled, escapes the message and preserves line breaks', () => {
+  it('inquiry reply is styled, escapes the message and shows the shelter email', () => {
     const html = inquiryReplyHtml({
       name: 'Jane <Doe>',
       petName: 'Bruno',
       shelterName: 'Paws & Homes',
+      shelterEmail: 'pawsnadtails@gmail.com',
       message: 'Hello <script>alert(1)</script>\nSecond line',
-      petId: 'pet-1',
       appUrl: APP_URL,
     });
     assertStyledShell(html);
     assert.match(html, /<h1[^>]*>Reply from Paws &amp; Homes<\/h1>/);
     assert.match(html, /Hi Jane &lt;Doe&gt;,/);
     assert.match(html, /Hello &lt;script&gt;alert\(1\)&lt;\/script&gt;<br \/>Second line/);
-    assert.match(html, /href="http:\/\/localhost:5173\/pets\/pet-1"/);
+    assert.match(html, /Reply to this email to contact the shelter directly at/);
+    assert.match(
+      html,
+      /<a href="mailto:pawsnadtails@gmail\.com"[^>]*>pawsnadtails@gmail\.com<\/a>/,
+    );
+    assert.match(html, new RegExp(`href="${APP_URL}"`));
     assert.match(html, /You are receiving this email because you sent an inquiry/);
     assert.doesNotMatch(html, /<script>/);
   });

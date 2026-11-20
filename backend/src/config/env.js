@@ -58,10 +58,21 @@ const useConfigured =
   !(env.NODE_ENV === 'production' && isLoopbackOrigin(configuredAppUrl));
 
 /**
- * Origin used in emailed links (sign-in buttons, application links).
- * APP_URL wins; otherwise the first deployed origin in ALLOWED_ORIGINS is used
- * so production emails never point at localhost because one env var was missed.
+ * Public origin of the deployed app. Emailed buttons always open this root
+ * (never a deep link like /applications), so a host that does not rewrite SPA
+ * routes — or an adopter who is signed out — can never land on a broken page.
+ * In production it is authoritative, so a stale APP_URL cannot misdirect mail.
  */
-export const appUrl = useConfigured
-  ? configuredAppUrl
-  : deployedOrigin || 'http://localhost:5173';
+export const deployedSiteUrl = 'https://pet-adoption-system-p2cx.onrender.com';
+
+/**
+ * Origin used in emailed links (sign-in buttons, application links).
+ * Production always uses `deployedSiteUrl`; development prefers APP_URL and
+ * falls back to the first deployed origin in ALLOWED_ORIGINS, then localhost.
+ */
+export const appUrl =
+  env.NODE_ENV === 'production'
+    ? deployedSiteUrl
+    : useConfigured
+      ? configuredAppUrl
+      : deployedOrigin || 'http://localhost:5173';

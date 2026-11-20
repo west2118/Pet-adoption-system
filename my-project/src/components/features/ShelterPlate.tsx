@@ -18,9 +18,12 @@ export const ShelterPlate = ({
   return (
     <Link
       to={`/shelters/${shelter.id}`}
-      className={cn('group flex flex-col focus:outline-none focus-visible:ring-2 focus-visible:ring-primary rounded-lg', className)}
+      className={cn(
+        'group flex min-w-0 flex-col rounded-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-primary',
+        className,
+      )}
     >
-      <article className="flex flex-1 flex-col">
+      <article className="flex min-w-0 flex-1 flex-col">
         <div className="relative overflow-hidden rounded-lg bg-muted">
           <img
             src={shelter.imageUrl}
@@ -35,29 +38,31 @@ export const ShelterPlate = ({
 
         <div className="flex flex-1 flex-col pt-6">
           <div className="flex items-start justify-between gap-4">
-            <h3 className="text-lg font-medium leading-snug transition-colors group-hover:text-primary">
+            <h3 className="min-w-0 flex-1 text-lg font-medium leading-snug transition-colors [overflow-wrap:anywhere] group-hover:text-primary">
               {shelter.name}
             </h3>
           </div>
 
-          <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{shelter.description}</p>
+          <p className="mt-2 text-sm leading-relaxed text-muted-foreground [overflow-wrap:anywhere]">
+            {shelter.description}
+          </p>
 
-          <ul className="mt-5 space-y-2 border-t border-border pt-5 text-sm text-muted-foreground">
+          <ul className="mt-5 min-w-0 space-y-2 border-t border-border pt-5 text-sm text-muted-foreground [overflow-wrap:anywhere]">
             <li className="flex items-start gap-2">
               <MapPin className="mt-0.5 size-4 shrink-0" />
-              {shelter.address}
+              <span className="min-w-0 [overflow-wrap:anywhere]">{shelter.address}</span>
             </li>
             <li className="flex items-center gap-2">
               <Phone className="size-4 shrink-0" />
-              {shelter.phone}
+              <span className="min-w-0 [overflow-wrap:anywhere]">{shelter.phone}</span>
             </li>
             <li className="flex items-center gap-2">
               <Mail className="size-4 shrink-0" />
-              {shelter.email}
+              <span className="min-w-0 [overflow-wrap:anywhere]">{shelter.email}</span>
             </li>
             <li className="flex items-center gap-2">
               <Clock className="size-4 shrink-0" />
-              {shelter.operatingHours}
+              <span className="min-w-0 [overflow-wrap:anywhere]">{shelter.operatingHours}</span>
             </li>
           </ul>
 

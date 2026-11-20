@@ -8,13 +8,13 @@
 
 export const SITE = {
   /** Short brand used as the title suffix. */
-  name: 'PawsConnect',
+  name: 'Paws&Homes',
   tagline: 'Pet Adoption & Rescue Management System',
   /** Fallback social card for pages without their own image. */
   defaultImage: '/hero_dog_1.jpg',
   /** Home page falls back to this when a page has nothing more specific. */
   defaultDescription:
-    'PawsConnect connects adopters with verified animal shelters and rescues. Browse adoptable dogs and cats, review health records, apply to adopt online and track every step of the process.',
+    'Paws&Homes connects adopters with verified animal shelters and rescues. Browse adoptable dogs and cats, review health records, apply to adopt online and track every step of the process.',
 } as const;
 
 const FALLBACK_URL = 'https://pawsandhomes-hfkn.onrender.com';

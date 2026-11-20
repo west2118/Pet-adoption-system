@@ -17,22 +17,22 @@ export const createPetSchema = z.object({
   medicalHistory: z.array(z.string()).default([]),
   behavioralNotes: z.string().default(''),
   status: z.enum(['Available', 'In Process', 'Adopted', 'Fostered']).default('Available'),
-  // Staff can upload photos (base64 data URLs) or paste https links — the
-  // public catalogue just renders whatever string is stored.
+  // Photos are uploaded to Supabase Storage through POST /uploads first; the
+  // API stores only the resulting public URL, never a base64 data URL.
   imageUrl: z
     .string()
     .min(1, 'Photo is required')
     .refine(
-      (v) => v.startsWith('data:image/') || /^https?:\/\/.+/.test(v),
-      'Photo must be an image upload or an http(s) URL',
+      (v) => /^https?:\/\/.+/i.test(v),
+      'Photo must be an uploaded image URL',
     ),
   gallery: z
     .array(
       z
         .string()
         .refine(
-          (v) => v.startsWith('data:image/') || /^https?:\/\/.+/.test(v),
-          'Gallery photos must be image uploads or http(s) URLs',
+          (v) => /^https?:\/\/.+/i.test(v),
+          'Gallery photos must be uploaded image URLs',
         ),
     )
     .default([]),

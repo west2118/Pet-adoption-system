@@ -56,7 +56,7 @@ export const publicRoutes: RouteObject = {
         <>
           <Seo
             title="Partner Animal Shelters & Rescues"
-            description="Meet the verified animal shelters and rescues on PawsConnect — locations, visiting hours, contact details and their adoptable pets."
+            description="Meet the verified animal shelters and rescues on Paws&Homes — locations, visiting hours, contact details and their adoptable pets."
             path="/shelters"
           />
           <SheltersPage />
@@ -101,7 +101,7 @@ export const publicRoutes: RouteObject = {
             <>
               <Seo
                 title="Create an Adopter Account"
-                description="Create a free PawsConnect account to save favourite pets, apply to adopt online and track every application."
+                description="Create a free Paws&Homes account to save favourite pets, apply to adopt online and track every application."
                 path="/signup"
               />
               <SignupPage />

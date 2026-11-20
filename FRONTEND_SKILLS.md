@@ -7,7 +7,9 @@ A comprehensive guide to frontend standards, component architecture, state manag
 ## 1. Component Architecture & Reusability
 
 ### 1.1 Atomic Component Structure
+
 Organize components into logical layers based on their responsibilities:
+
 - **UI Primitives (`components/ui/`)**: Low-level, generic components (e.g., `Button`, `Badge`, `Card`, `Modal`). Independent of business domain.
 - **Feature Components (`components/features/`)**: Domain-specific components composed of UI primitives (e.g., `PetCard`, `AdoptionForm`, `ShelterFilter`).
 - **Shared Components (`components/shared/`)**: Cross-portal reusable blocks (e.g., `SummaryStatCard`, `SummaryStatGrid`, `ChartCard`, `TableCard`, `SectionHeader`, `Breadcrumbs`, `SlideOver`, `DetailsModal`). Import from `@/components/shared`, NEVER rebuild these patterns inline.
@@ -15,6 +17,7 @@ Organize components into logical layers based on their responsibilities:
 - **Pages / Views (`pages/`)**: Top-level page views connected to routing.
 
 ### 1.2 Component Composition over Deep Props Drilling
+
 Use children composition instead of passing unnecessary configuration props deep down.
 
 ```tsx
@@ -31,10 +34,12 @@ Use children composition instead of passing unnecessary configuration props deep
 ```
 
 ### 1.3 Single Responsibility Principle
+
 - Each component should do **one thing well**.
 - If a component grows beyond ~150 lines or manages complex business logic alongside UI presentation, split it into smaller components or extract logic into custom hooks.
 
 ### 1.4 Separate Public vs. Shelter vs. Platform-Admin Layouts
+
 - NEVER mix the three shells. Each side gets its own layout and navigation:
 - **Public layout (`components/layout/PublicLayout.tsx`)**: top `Navbar` + `Footer` + `<Outlet />`. Used for `/`, `/pets`, `/pets/:id`, `/shelters`, `/favorites`, `/login`, `/signup`, `/apply/:petId`, `/applications`. The public `Navbar` MUST NOT contain shelter or platform-admin links.
 - **Shelter portal layout (`components/layout/ShelterLayout.tsx` + `ShelterSidebar.tsx`)**: sidebar navigation + content `<Outlet />`, NO top public `Navbar`, NO public `Footer`. Used only under `/shelter/*` (Overview, Listings, Applications, Inquiries, Profile) and guarded by `ProtectedRoute` with `allowedRoles={['shelter_staff']}`. Includes a "View public site" (`/`) link and logout.
@@ -43,6 +48,7 @@ Use children composition instead of passing unnecessary configuration props deep
 - **Fixed viewport shell:** portal layouts are always `h-screen overflow-hidden` — sidebar + topbar stay pinned, ONLY the content `<main>` scrolls (`flex-1 min-h-0 overflow-y-auto`). Portal pages must never create page-level scroll.
 
 ### 1.5 One Shared Sidebar Design, Role-Specific Pages
+
 - Both portals share ONE sidebar design component (`components/layout/PortalSidebar.tsx`): same shape, drawer behavior, user chip, logout, and "View public site" link. `ShelterSidebar` and `AdminSidebar` are thin wrappers passing role-specific config (brand + links).
 - NEVER fork the sidebar markup per role — add a new portal by passing a new `links` array.
 
@@ -63,16 +69,27 @@ interface PortalSidebarProps {
   onClose?: () => void;
 }
 
-export const ShelterSidebar = (props: { mobileOpen?: boolean; onClose?: () => void }) => (
+export const ShelterSidebar = (props: {
+  mobileOpen?: boolean;
+  onClose?: () => void;
+}) => (
   <PortalSidebar
     brandTitle="Shelter Portal"
-    brandSubtitle="PawsConnect"
+    brandSubtitle="Paws&Homes"
     links={[
-      { to: '/shelter', end: true, label: 'Overview', icon: LayoutDashboard },
-      { to: '/shelter/listings', label: 'Listings', icon: PawPrint },
-      { to: '/shelter/applications', label: 'Applications', icon: ClipboardList },
-      { to: '/shelter/inquiries', label: 'Inquiries', icon: MessageCircleQuestion },
-      { to: '/shelter/profile', label: 'Shelter Profile', icon: Building2 },
+      { to: "/shelter", end: true, label: "Overview", icon: LayoutDashboard },
+      { to: "/shelter/listings", label: "Listings", icon: PawPrint },
+      {
+        to: "/shelter/applications",
+        label: "Applications",
+        icon: ClipboardList,
+      },
+      {
+        to: "/shelter/inquiries",
+        label: "Inquiries",
+        icon: MessageCircleQuestion,
+      },
+      { to: "/shelter/profile", label: "Shelter Profile", icon: Building2 },
     ]}
     {...props}
   />
@@ -80,6 +97,7 @@ export const ShelterSidebar = (props: { mobileOpen?: boolean; onClose?: () => vo
 ```
 
 ### 1.6 Portal Routing — Parent Layout + Child Pages
+
 - Portal layouts are PARENT routes rendering the sidebar + `<Outlet />`; every portal screen is a DEDICATED CHILD page component under `pages/shelter/*` (or `pages/admin/*`).
 - NEVER build portal tabs-inside-one-page (`initialTab`/`initialSection` props switching content) — one URL = one page component. Sibling cross-links use `NavLink` to the child route.
 
@@ -95,6 +113,7 @@ export const ShelterSidebar = (props: { mobileOpen?: boolean; onClose?: () => vo
 ```
 
 ### 1.8 Reuse Shared Components (`components/shared/`)
+
 - ALWAYS compose portal pages from shared blocks instead of rebuilding Card/Header/grid markup:
   - `SectionHeader` for the page title + subtitle + actions row.
   - `SummaryStatGrid` + `SummaryStatCard` for KPI rows. All stat cards use ONE color (brand orange icon tile) — NEVER per-card tone colors.
@@ -106,7 +125,7 @@ export const ShelterSidebar = (props: { mobileOpen?: boolean; onClose?: () => vo
 
 ```tsx
 // ✅ Preferred: slider for forms, card modal for details
-import { DetailsModal, SlideOver } from '@/components/shared';
+import { DetailsModal, SlideOver } from "@/components/shared";
 
 export const ShelterListingsPage = () => {
   const [slideOpen, setSlideOpen] = useState(false);
@@ -115,14 +134,19 @@ export const ShelterListingsPage = () => {
 
   return (
     <>
-      <Button onClick={() => { setEditingPet(null); setSlideOpen(true); }}>
+      <Button
+        onClick={() => {
+          setEditingPet(null);
+          setSlideOpen(true);
+        }}
+      >
         Add pet
       </Button>
 
       <SlideOver
         open={slideOpen}
         onClose={() => setSlideOpen(false)}
-        title={editingPet ? `Edit ${editingPet.name}` : 'Add new pet profile'}
+        title={editingPet ? `Edit ${editingPet.name}` : "Add new pet profile"}
         icon={Pencil}
       >
         <PetForm pet={editingPet} />
@@ -131,7 +155,7 @@ export const ShelterListingsPage = () => {
       <DetailsModal
         open={detailsPet !== null}
         onClose={() => setDetailsPet(null)}
-        title={detailsPet?.name ?? 'Pet details'}
+        title={detailsPet?.name ?? "Pet details"}
         icon={PawPrint}
       >
         {detailsPet && <PetDetails pet={detailsPet} />}
@@ -143,7 +167,13 @@ export const ShelterListingsPage = () => {
 
 ```tsx
 // ✅ Preferred: shared blocks, one import
-import { ChartCard, SectionHeader, SummaryStatCard, SummaryStatGrid, TableCard } from '@/components/shared';
+import {
+  ChartCard,
+  SectionHeader,
+  SummaryStatCard,
+  SummaryStatGrid,
+  TableCard,
+} from "@/components/shared";
 
 export const ShelterOverviewPage = () => (
   <Container className="py-8">
@@ -162,6 +192,7 @@ export const ShelterOverviewPage = () => (
 ```
 
 ### 1.9 Pet Visibility — Public vs. Private / Inventory
+
 - Every pet has `visibility: 'public' | 'private'`. `private` = internal shelter inventory, hidden from adopters everywhere.
 - **Adopter UI MUST only query/render public pets**: filter with `pet.visibility === 'public'` in catalogs, featured sections, favorites, and profile pages. A direct visit to a private pet's profile URL MUST render a "not available" empty state, never the record.
 - **Shelter portal shows both**, with a `VisibilityBadge` (`Public` / `Private`) and a public/private filter plus a toggle per listing.
@@ -170,7 +201,7 @@ export const ShelterOverviewPage = () => (
 ```tsx
 // ✅ Preferred: public-only filtering in adopter UI
 export const publicPets = (pets: Pet[]): Pet[] =>
-  pets.filter((pet) => pet.visibility === 'public');
+  pets.filter((pet) => pet.visibility === "public");
 
 // ✅ Preferred: separate shells in App.tsx
 export const App = () => (
@@ -179,13 +210,13 @@ export const App = () => (
       <Route index element={<HomePage />} />
       <Route path="pets" element={<BrowsePetsPage />} />
     </Route>
-    <Route element={<ProtectedRoute allowedRoles={['shelter_staff']} />}>
+    <Route element={<ProtectedRoute allowedRoles={["shelter_staff"]} />}>
       <Route element={<ShelterLayout />}>
         <Route path="shelter" element={<ShelterOverviewPage />} />
         <Route path="shelter/listings" element={<ShelterListingsPage />} />
       </Route>
     </Route>
-    <Route element={<ProtectedRoute allowedRoles={['platform_admin']} />}>
+    <Route element={<ProtectedRoute allowedRoles={["platform_admin"]} />}>
       <Route element={<AdminLayout />}>
         <Route path="admin" element={<PlatformOverviewPage />} />
         <Route path="admin/shelters" element={<PlatformSheltersPage />} />
@@ -202,15 +233,16 @@ export const App = () => (
 ## 2. Props & TypeScript Best Practices
 
 ### 2.1 Explicit Prop Types with TypeScript
+
 Always define strict interfaces or types for component props.
 
 ```tsx
-import React from 'react';
+import React from "react";
 
 interface PetCardProps {
   id: string;
   name: string;
-  species: 'dog' | 'cat' | 'other';
+  species: "dog" | "cat" | "other";
   ageYears: number;
   imageUrl?: string;
   isFavorite?: boolean;
@@ -222,16 +254,22 @@ export const PetCard: React.FC<PetCardProps> = ({
   name,
   species,
   ageYears,
-  imageUrl = '/placeholder-pet.jpg',
+  imageUrl = "/placeholder-pet.jpg",
   isFavorite = false,
   onToggleFavorite,
   children,
 }) => {
   return (
     <div className="rounded-xl border p-4 shadow-sm">
-      <img src={imageUrl} alt={name} className="h-48 w-full object-cover rounded-md" />
+      <img
+        src={imageUrl}
+        alt={name}
+        className="h-48 w-full object-cover rounded-md"
+      />
       <h3 className="mt-2 text-lg font-semibold">{name}</h3>
-      <p className="text-sm text-gray-500">{species} • {ageYears} y/o</p>
+      <p className="text-sm text-gray-500">
+        {species} • {ageYears} y/o
+      </p>
       {children}
     </div>
   );
@@ -239,19 +277,20 @@ export const PetCard: React.FC<PetCardProps> = ({
 ```
 
 ### 2.2 Extending Native HTML Element Props
+
 When building custom UI wrapper components (e.g., custom `Button` or `Input`), extend standard HTML attributes.
 
 ```tsx
-import React from 'react';
-import { cn } from '@/lib/utils'; // Tailwind merge utility
+import React from "react";
+import { cn } from "@/lib/utils"; // Tailwind merge utility
 
 interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
-  variant?: 'primary' | 'secondary' | 'outline';
+  variant?: "primary" | "secondary" | "outline";
   isLoading?: boolean;
 }
 
 export const CustomButton: React.FC<ButtonProps> = ({
-  variant = 'primary',
+  variant = "primary",
   isLoading = false,
   className,
   children,
@@ -262,15 +301,16 @@ export const CustomButton: React.FC<ButtonProps> = ({
     <button
       disabled={disabled || isLoading}
       className={cn(
-        'px-4 py-2 rounded-md font-medium transition-colors focus:outline-none',
-        variant === 'primary' && 'bg-indigo-600 text-white hover:bg-indigo-700',
-        variant === 'secondary' && 'bg-gray-100 text-gray-900 hover:bg-gray-200',
-        variant === 'outline' && 'border border-gray-300 hover:bg-gray-50',
-        className
+        "px-4 py-2 rounded-md font-medium transition-colors focus:outline-none",
+        variant === "primary" && "bg-indigo-600 text-white hover:bg-indigo-700",
+        variant === "secondary" &&
+          "bg-gray-100 text-gray-900 hover:bg-gray-200",
+        variant === "outline" && "border border-gray-300 hover:bg-gray-50",
+        className,
       )}
       {...props}
     >
-      {isLoading ? 'Loading...' : children}
+      {isLoading ? "Loading..." : children}
     </button>
   );
 };
@@ -289,7 +329,7 @@ export function PetCard({ name }: { name: string }) {
   return <h3>{name}</h3>;
 }
 export async function fetchPets() {
-  return fetch('/api/pets');
+  return fetch("/api/pets");
 }
 
 // ✅ Preferred: arrow consts everywhere
@@ -297,14 +337,14 @@ export const PetCard: React.FC<{ name: string }> = ({ name }) => {
   return <h3>{name}</h3>;
 };
 export const fetchPets = async (): Promise<Pet[]> => {
-  const res = await fetch('/api/pets');
+  const res = await fetch("/api/pets");
   return res.json();
 };
 
 // ✅ Service layer: async arrow properties only
 export const petService = {
   list: async (): Promise<Pet[]> => {
-    const res = await fetch('/api/pets');
+    const res = await fetch("/api/pets");
     return res.json();
   },
   getById: async (id: string): Promise<Pet> => {
@@ -333,6 +373,7 @@ useEffect(() => {
 ## 3. State Management & Custom Hooks
 
 ### 3.1 Keep State Local & Avoid Redundant State
+
 - Store state as low in the tree as possible.
 - Avoid creating state for values that can be calculated during render.
 
@@ -343,19 +384,21 @@ const [filteredPets, setFilteredPets] = useState<Pet[]>([]); // Redundant!
 
 // ✅ Preferred: Calculate derived values on the fly
 const [pets, setPets] = useState<Pet[]>([]);
-const [selectedSpecies, setSelectedSpecies] = useState<string>('all');
+const [selectedSpecies, setSelectedSpecies] = useState<string>("all");
 
-const filteredPets = selectedSpecies === 'all'
-  ? pets
-  : pets.filter((pet) => pet.species === selectedSpecies);
+const filteredPets =
+  selectedSpecies === "all"
+    ? pets
+    : pets.filter((pet) => pet.species === selectedSpecies);
 ```
 
 ### 3.2 Custom Hooks for Reusable Business Logic
+
 Extract data fetching, form handling, or complex UI logic into reusable custom hooks.
 
 ```tsx
 // hooks/usePetFilter.ts
-import { useState, useMemo } from 'react';
+import { useState, useMemo } from "react";
 
 export interface Pet {
   id: string;
@@ -365,14 +408,16 @@ export interface Pet {
 }
 
 export const usePetFilter = (pets: Pet[]) => {
-  const [searchQuery, setSearchQuery] = useState('');
-  const [selectedSpecies, setSelectedSpecies] = useState('all');
+  const [searchQuery, setSearchQuery] = useState("");
+  const [selectedSpecies, setSelectedSpecies] = useState("all");
 
   const filteredPets = useMemo(() => {
     return pets.filter((pet) => {
-      const matchesSearch = pet.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                            pet.breed.toLowerCase().includes(searchQuery.toLowerCase());
-      const matchesSpecies = selectedSpecies === 'all' || pet.species === selectedSpecies;
+      const matchesSearch =
+        pet.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        pet.breed.toLowerCase().includes(searchQuery.toLowerCase());
+      const matchesSpecies =
+        selectedSpecies === "all" || pet.species === selectedSpecies;
       return matchesSearch && matchesSpecies;
     });
   }, [pets, searchQuery, selectedSpecies]);
@@ -392,32 +437,38 @@ export const usePetFilter = (pets: Pet[]) => {
 ## 4. UI, Styling & Iconography Guidelines
 
 ### 4.1 Conditional Classes with `cn()` Utility
+
 Use `cn()` (`clsx` + `tailwind-merge`) when conditionally merging Tailwind classes to avoid class specificity collisions.
 
 ```tsx
-import { cn } from '@/lib/utils';
+import { cn } from "@/lib/utils";
 
-export const StatusBadge = ({ status }: { status: 'available' | 'pending' | 'adopted' }) => {
+export const StatusBadge = ({
+  status,
+}: {
+  status: "available" | "pending" | "adopted";
+}) => {
   return (
     <span
-      className={cn('px-2.5 py-1 text-xs font-semibold rounded-full', {
-        'bg-green-100 text-green-800': status === 'available',
-        'bg-yellow-100 text-yellow-800': status === 'pending',
-        'bg-blue-100 text-blue-800': status === 'adopted',
+      className={cn("px-2.5 py-1 text-xs font-semibold rounded-full", {
+        "bg-green-100 text-green-800": status === "available",
+        "bg-yellow-100 text-yellow-800": status === "pending",
+        "bg-blue-100 text-blue-800": status === "adopted",
       })}
     >
       {status.toUpperCase()}
     </span>
   );
-}
+};
 ```
 
 ### 4.2 Standard Iconography with Lucide React
+
 - Always import icons from `lucide-react`.
 - Specify explicit size (`className="w-4 h-4"` or `size={18}`) to ensure uniform layout alignment.
 
 ```tsx
-import { Heart, Search, Filter, ShieldCheck } from 'lucide-react';
+import { Heart, Search, Filter, ShieldCheck } from "lucide-react";
 
 export const IconHeader = () => {
   return (
@@ -426,7 +477,7 @@ export const IconHeader = () => {
       <span className="font-medium">Verified Animal Shelter</span>
     </div>
   );
-}
+};
 ```
 
 ---
@@ -434,26 +485,28 @@ export const IconHeader = () => {
 ## 5. Performance & Quality Control
 
 ### 5.1 Proper List Keys
+
 - Always use a unique, immutable identifier (e.g., `pet.id`) for the `key` prop when mapping arrays.
 - Never use array indices (`key={index}`) if items can be reordered, added, or removed.
 
 ```tsx
 // ✅ Correct
-{pets.map((pet) => (
-  <PetCard key={pet.id} pet={pet} />
-))}
+{
+  pets.map((pet) => <PetCard key={pet.id} pet={pet} />);
+}
 ```
 
 ### 5.2 Clean Effect Handling & Cleanup
+
 - Keep `useEffect` minimal and focused on side-effects (e.g. data fetching, subscription).
 - Always return a cleanup function for timers, event listeners, or subscriptions.
 
 ```tsx
 useEffect(() => {
   const handleResize = () => setWindowWidth(window.innerWidth);
-  window.addEventListener('resize', handleResize);
-  
-  return () => window.removeEventListener('resize', handleResize);
+  window.addEventListener("resize", handleResize);
+
+  return () => window.removeEventListener("resize", handleResize);
 }, []);
 ```
 
@@ -464,6 +517,7 @@ useEffect(() => {
 Portal dashboards summarize operational data. Use **Recharts** (already a project dependency) for all charts — never hand-rolled SVG/canvas or a second charting library.
 
 ### 6.1 Chart Components Live Under `components/features/charts/`
+
 - Keep every chart a small, single-responsibility component: one chart type, one dataset, props typed with an explicit interface.
 - Import only the Recharts primitives you use (`AreaChart`, `Bar`, `Pie`, `Tooltip`, …) so tree-shaking stays effective.
 - Wrap charts in `ResponsiveContainer` so they fill their card instead of using fixed pixel widths.
@@ -473,33 +527,43 @@ interface ApplicationsTrendChartProps {
   data: { month: string; applications: number; approved: number }[];
 }
 
-export const ApplicationsTrendChart = ({ data }: ApplicationsTrendChartProps) => (
+export const ApplicationsTrendChart = ({
+  data,
+}: ApplicationsTrendChartProps) => (
   <ResponsiveContainer width="100%" height={280}>
     <AreaChart data={data}>
       <XAxis dataKey="month" />
       <Tooltip {...chartTooltipProps} />
-      <Area dataKey="applications" stroke="var(--color-chart-1)" fill="url(#applicationsFill)" />
+      <Area
+        dataKey="applications"
+        stroke="var(--color-chart-1)"
+        fill="url(#applicationsFill)"
+      />
     </AreaChart>
   </ResponsiveContainer>
 );
 ```
 
 ### 6.2 Theme Charts With Design Tokens — No Hardcoded Colors
+
 - Use the `--color-chart-1…5` tokens (via a shared `chartTheme.ts` helper) so charts follow light/dark mode automatically.
 - Never hardcode hex/rgb in chart `stroke`/`fill`; use `var(--color-chart-*)`, `var(--color-border)`, `var(--color-popover)`, etc.
 - Keep tooltips, grids, axes, and legends themed through the shared `chartTooltipProps` helper for visual consistency.
 
 ### 6.3 Derive Chart & Table Data in Custom Hooks, Not JSX
+
 - Compute aggregates (totals, groupings by month/status/species) in a custom hook (e.g. `hooks/useShelterOverview.ts`) with `useMemo`.
 - Chart/table components receive already-shaped arrays as props — they render, they don't aggregate.
 - Keep the number of table rows a component shows bounded (e.g. latest 6 applications); dedicated list pages render the full list.
 
 ### 6.4 Data Tables Use the Shared `components/ui/Table.tsx` Primitive
+
 - Compose `Table`/`TableHeader`/`TableBody`/`TableRow`/`TableHead`/`TableCell`; never write raw `<table>` markup ad hoc.
 - Reuse existing badge primitives (`StatusBadge`, `Badge`) inside cells for status/visibility columns.
 - Handle the empty case with `EmptyState` and use stable item IDs (`pet.id`, `application.id`) as `key`.
 
 ### 6.5 Dashboard Page Composition
+
 - Compose the overview as: a KPI stats-card row, then a charts grid, then full-width tables — all inside `Container`.
 - Keep each section its own `Card` with `CardTitle` + `CardDescription` so the dashboard stays scannable.
 

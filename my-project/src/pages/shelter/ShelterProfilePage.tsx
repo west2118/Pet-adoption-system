@@ -1,4 +1,4 @@
-import { Check, Clock, Mail, MapPin, Pencil, Phone, ShieldCheck, X } from 'lucide-react';
+import { Check, Clock, Loader2, Mail, MapPin, Pencil, Phone, ShieldCheck, X } from 'lucide-react';
 import { useState } from 'react';
 import { toast } from 'react-toastify';
 
@@ -168,8 +168,19 @@ export const ShelterProfilePage = () => {
                 <Button type="button" size="sm" variant="outline" onClick={handleCancel} disabled={saving}>
                   <X className="size-4" /> Cancel
                 </Button>
-                <Button type="button" size="sm" onClick={handleSave} disabled={saving}>
-                  <Check className="size-4" /> {saving ? 'Saving…' : 'Save changes'}
+                <Button
+                  type="button"
+                  size="sm"
+                  onClick={handleSave}
+                  disabled={saving || uploadingLogo}
+                  aria-busy={saving}
+                >
+                  {saving ? (
+                    <Loader2 className="size-4 animate-spin" />
+                  ) : (
+                    <Check className="size-4" />
+                  )}
+                  {saving ? 'Saving…' : 'Save changes'}
                 </Button>
               </div>
             ) : (
@@ -252,7 +263,6 @@ export const ShelterProfilePage = () => {
                 onLogoFile={handleLogoFile}
                 uploadingLogo={uploadingLogo}
                 onSubmit={handleSave}
-                onCancel={handleCancel}
               />
             ) : (
               /* ----------------------------- View mode ----------------------------- */

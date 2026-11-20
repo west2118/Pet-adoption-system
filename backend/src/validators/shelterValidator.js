@@ -8,11 +8,12 @@ export const createShelterSchema = z.object({
   email: z.string().email('Invalid email format'),
   operatingHours: z.string().min(1, 'Operating hours are required'),
   description: z.string().min(10, 'Description must be at least 10 characters'),
+  // Logos live in Supabase Storage; only the public URL is persisted.
   imageUrl: z
     .string()
     .refine(
-      (v) => !v || v.startsWith('data:image/') || /^https?:\/\/.+/.test(v),
-      'Photo must be an image upload or an http(s) URL',
+      (v) => !v || /^https?:\/\/.+/i.test(v),
+      'Photo must be an uploaded image URL',
     ),
   // Optional precise coordinates; when omitted the backend derives the city centre.
   latitude: z.coerce.number().min(-90).max(90).nullable().optional(),
