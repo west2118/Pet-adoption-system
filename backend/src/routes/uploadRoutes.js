@@ -6,7 +6,7 @@ import { uploadImage as receiveImageFile } from '../middlewares/upload.js';
 import { AppError } from '../utils/AppError.js';
 
 /**
- * image/* only, max 5MB (see middlewares/upload.js). Multer's own errors are
+ * JPEG/PNG/WebP/GIF only, max 5MB (see middlewares/upload.js). Multer's own errors are
  * translated so clients get a readable 400 instead of a 500.
  */
 const receiveImage = (req, res, next) => {
