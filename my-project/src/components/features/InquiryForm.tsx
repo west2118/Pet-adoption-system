@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { MessageCircleQuestion, Send } from 'lucide-react';
+import { CheckCircle2, MessageCircleQuestion, Send } from 'lucide-react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'react-toastify';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/Card';
 import { Label } from '@/components/ui/Form';
@@ -12,11 +13,28 @@ import {
   isEmail,
 } from '@/components/shared';
 import { ApiError } from '@/lib/apiClient';
-import { submitInquiry } from '@/services/api';
+import { hasMyInquiryForPet, submitInquiry } from '@/services/api';
+import { useAuth } from '@/hooks/useAuth';
+import { Skeleton } from '@/components/ui/Skeleton';
 
 export const InquiryForm = ({ petId, petName }: { petId: string; petName: string }) => {
+  const { user } = useAuth();
+  return <InquiryFormContent key={`${petId}:${user?.id ?? 'guest'}`} petId={petId} petName={petName} />;
+};
+
+const InquiryFormContent = ({ petId, petName }: { petId: string; petName: string }) => {
+  const { user } = useAuth();
+  const isAdopter = user?.role === 'adopter';
+  const queryClient = useQueryClient();
+  const inquiryKey = ['my-inquiry', user?.id, petId];
+  const inquiry = useQuery({
+    queryKey: inquiryKey,
+    queryFn: () => hasMyInquiryForPet(petId),
+    enabled: isAdopter,
+  });
+  const [sent, setSent] = useState(false);
   const [sending, setSending] = useState(false);
-  const [form, setForm] = useState({ name: '', email: '', message: '' });
+  const [form, setForm] = useState({ name: user?.name ?? '', email: isAdopter ? user.email : '', message: '' });
   const [fieldErrors, setFieldErrors] = useState<Partial<Record<keyof typeof form, string>>>({});
 
   const set = (key: keyof typeof form, value: string) => {
@@ -26,6 +44,7 @@ export const InquiryForm = ({ petId, petName }: { petId: string; petName: string
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (sending || sent || (isAdopter && inquiry.data)) return;
     const next: typeof fieldErrors = {};
     if (isBlank(form.name)) next.name = 'Please enter your name.';
     if (!isEmail(form.email)) next.email = 'Enter a valid email address.';
@@ -48,6 +67,8 @@ export const InquiryForm = ({ petId, petName }: { petId: string; petName: string
       });
       setForm({ name: '', email: '', message: '' });
       setFieldErrors({});
+      setSent(true);
+      if (isAdopter) queryClient.setQueryData(inquiryKey, true);
       toast.success(`Inquiry about ${petName} sent! The shelter will reply soon.`);
     } catch (err) {
       toast.error(
@@ -57,6 +78,35 @@ export const InquiryForm = ({ petId, petName }: { petId: string; petName: string
       setSending(false);
     }
   };
+
+  if (sent || (isAdopter && inquiry.data)) {
+    return (
+      <Card>
+        <CardContent className="pt-5 text-sm" role="status">
+          <p className="flex items-center gap-2 font-semibold">
+            <CheckCircle2 className="size-4 text-green-600" /> Already inquired
+          </p>
+          <p className="mt-1 text-muted-foreground">
+            You already sent an inquiry about {petName}. The shelter will reply by email.
+          </p>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (isAdopter && inquiry.isPending) {
+    return <Card><CardContent className="space-y-3 pt-5" role="status" aria-label="Checking your inquiry">
+      <Skeleton className="h-5 w-40" />
+      <Skeleton className="h-4 w-full" />
+    </CardContent></Card>;
+  }
+
+  if (isAdopter && inquiry.isError) {
+    return <Card><CardContent className="pt-5 text-sm">
+      <p>Could not check your inquiry. Please try again.</p>
+      <Button className="mt-3" size="sm" variant="outline" onClick={() => void inquiry.refetch()}>Try again</Button>
+    </CardContent></Card>;
+  }
 
   return (
     <Card>
@@ -84,6 +134,7 @@ export const InquiryForm = ({ petId, petName }: { petId: string; petName: string
             <ValidatedInput
               id="inq-email"
               type="email"
+              readOnly={isAdopter}
               value={form.email}
               onChange={(e) => set('email', e.target.value)}
               placeholder="jane@example.com"

@@ -12,12 +12,22 @@ export interface ApiFieldError {
   message: string;
 }
 
+/** Extra routing hints attached to some errors (e.g. pending shelter account). */
+export interface ApiErrorDetails {
+  requiresOnboarding?: boolean;
+}
+
 export class ApiError extends Error {
   status: number;
   code: string;
-  details?: any;
+  details?: ApiFieldError[] | ApiErrorDetails;
 
-  constructor(message: string, status: number, code = 'ERROR', details?: any) {
+  constructor(
+    message: string,
+    status: number,
+    code = 'ERROR',
+    details?: ApiFieldError[] | ApiErrorDetails,
+  ) {
     super(message);
     this.name = 'ApiError';
     this.status = status;
@@ -45,7 +55,7 @@ interface ApiEnvelope<T> {
   data?: T;
   message?: string;
   meta?: ApiMeta;
-  error?: { code: string; message: string; details?: ApiFieldError[] };
+  error?: { code: string; message: string; details?: ApiFieldError[] | ApiErrorDetails };
 }
 
 type AuthMode = 'none' | 'full' | 'onboarding';
@@ -102,6 +112,52 @@ export const apiRequest = async <T>(
 ): Promise<T> => {
   const { data } = await apiRequestWithMeta<T>(path, { method, body, auth });
   return data;
+};
+
+/**
+ * Multipart POST for file uploads. Let the browser set the Content-Type so the
+ * multipart boundary is correct. Same cookie session and 401 refresh dance as
+ * JSON requests.
+ */
+export const apiUpload = async <T>(
+  path: string,
+  formData: FormData,
+  { auth = 'full', noRefreshRetry = false }: { auth?: AuthMode; noRefreshRetry?: boolean } = {},
+): Promise<T> => {
+  let res: Response;
+  try {
+    res = await fetch(`${BASE_URL}${path}`, {
+      method: 'POST',
+      credentials: 'include',
+      body: formData,
+    });
+  } catch {
+    throw new ApiError(
+      'Cannot reach the server. Is the backend running?',
+      0,
+      'NETWORK_ERROR',
+    );
+  }
+
+  if (res.status === 401 && auth === 'full' && !noRefreshRetry) {
+    if (await tryRefreshSession()) {
+      return apiUpload<T>(path, formData, { auth, noRefreshRetry: true });
+    }
+  }
+
+  const json = (await res.json().catch(() => null)) as ApiEnvelope<T> | null;
+
+  if (!res.ok || !json || json.success === false) {
+    const error = json?.error;
+    throw new ApiError(
+      error?.message ?? `Upload failed (${res.status})`,
+      res.status,
+      error?.code ?? 'ERROR',
+      error?.details,
+    );
+  }
+
+  return json.data as T;
 };
 
 // Share concurrent public catalogue reads, including StrictMode's effect replay.

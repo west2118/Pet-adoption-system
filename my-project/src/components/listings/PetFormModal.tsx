@@ -8,6 +8,15 @@ import { Input, Label, Select, Textarea } from '@/components/ui/Form';
 import { Button } from '@/components/ui/button';
 import { ListEditor } from '@/components/features/ListEditor';
 
+import { apiErrorMessage } from '@/lib/apiClient';
+import {
+  IMAGE_ACCEPT,
+  IMAGE_SIZE_MESSAGE,
+  IMAGE_TYPE_MESSAGE,
+  MAX_IMAGE_BYTES,
+  isAllowedImageFile,
+} from '@/lib/imageFiles';
+import { uploadImage } from '@/services/api/uploadService';
 import { petListingFormSchema, toFieldErrors } from '@/lib/validators';
 import type { FieldErrors } from '@/lib/validators';
 import type { AgeGroup, Gender, Pet, PetSize, PetStatus, PetVisibility, Species } from '@/types';
@@ -185,6 +194,7 @@ export const PetFormModal = ({
   };
 
   const [form, setForm] = useState<PetFormState>(() => getInitialForm(editingPet, myShelterId));
+  const [uploadingPhotos, setUploadingPhotos] = useState(false);
   const [prevEditingPetId, setPrevEditingPetId] = useState(editingPet?.id ?? null);
   const [prevIsOpen, setPrevIsOpen] = useState(isOpen);
 
@@ -220,27 +230,39 @@ export const PetFormModal = ({
     : undefined;
   const todayIso = useMemo(() => toIsoDate(new Date()), []);
 
-  const handlePhotoFiles = (files: FileList | null) => {
+  const handlePhotoFiles = async (files: FileList | null) => {
     if (!files || files.length === 0) return;
-    const images = Array.from(files).filter((f) => f.type.startsWith('image/'));
-    if (images.length === 0) return;
-    const readers = images.map(
-      (file) =>
-        new Promise<string>((resolve, reject) => {
-          const reader = new FileReader();
-          reader.onload = () => resolve(String(reader.result));
-          reader.onerror = () => reject(new Error(`Could not read ${file.name}`));
-          reader.readAsDataURL(file);
-        }),
-    );
-    Promise.all(readers)
-      .then((dataUrls) => {
+    const images = Array.from(files).filter(isAllowedImageFile);
+    if (images.length === 0) {
+      toast.error(IMAGE_TYPE_MESSAGE);
+      return;
+    }
+    const oversized = images.find((f) => f.size > MAX_IMAGE_BYTES);
+    if (oversized) {
+      toast.error(`${oversized.name}: ${IMAGE_SIZE_MESSAGE}`);
+      return;
+    }
+
+    setUploadingPhotos(true);
+    try {
+      // Uploaded one by one so a single failure doesn't discard the others.
+      const uploaded: string[] = [];
+      for (const file of images) {
+        try {
+          uploaded.push(await uploadImage(file, 'pets'));
+        } catch (err) {
+          toast.error(apiErrorMessage(err, `Could not upload ${file.name}.`));
+        }
+      }
+      if (uploaded.length > 0) {
         setForm((prev) => ({
           ...prev,
-          photoUrls: [prev.photoUrls.trim(), ...dataUrls].filter(Boolean).join('\n'),
+          photoUrls: [prev.photoUrls.trim(), ...uploaded].filter(Boolean).join('\n'),
         }));
-      })
-      .catch(() => {});
+      }
+    } finally {
+      setUploadingPhotos(false);
+    }
   };
 
   const removePhoto = (index: number) => {
@@ -265,6 +287,11 @@ export const PetFormModal = ({
 
   const handleFormSubmit = (e: FormEvent) => {
     e.preventDefault();
+
+    if (uploadingPhotos) {
+      toast.info('Photos are still uploading. Please wait a moment.');
+      return;
+    }
 
     const result = petListingFormSchema.safeParse(form);
     if (!result.success) {
@@ -309,7 +336,7 @@ export const PetFormModal = ({
         size: form.size,
         gender: form.gender,
         shelterId,
-        status: form.status,
+        status: editingPet ? form.status : 'Available',
         visibility: form.visibility,
         description: form.description || editingPet?.description || '',
         temperament: temperament.length > 0 ? temperament : (editingPet?.temperament ?? []),
@@ -496,7 +523,7 @@ export const PetFormModal = ({
           error={listingErrors.temperament}
         />
 
-        <div className="grid grid-cols-2 gap-3">
+        <div className={editingPet ? 'grid grid-cols-2 gap-3' : 'grid grid-cols-1 gap-3'}>
           <div>
             <Label>
               Gender
@@ -511,7 +538,7 @@ export const PetFormModal = ({
               options={GENDER_OPTIONS}
             />
           </div>
-          <div>
+          {editingPet && <div>
             <Label>
               Status
               <RequiredMark />
@@ -522,7 +549,7 @@ export const PetFormModal = ({
               required
               options={STATUS_OPTIONS}
             />
-          </div>
+          </div>}
         </div>
 
         <div>
@@ -544,14 +571,18 @@ export const PetFormModal = ({
             <RequiredMark />
           </Label>
           <div className="mt-1.5 flex flex-wrap items-center gap-2">
-            <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border px-3 py-2 text-sm font-medium transition-colors hover:bg-muted">
-              <ImagePlus className="size-4" /> Upload photos
+            <label
+              className={`inline-flex cursor-pointer items-center gap-1.5 rounded-lg border px-3 py-2 text-sm font-medium transition-colors hover:bg-muted ${uploadingPhotos ? 'cursor-wait opacity-60' : ''}`}
+            >
+              <ImagePlus className="size-4" />
+              {uploadingPhotos ? 'Uploading…' : 'Upload photos'}
               <input
                 type="file"
-                accept="image/*"
+                accept={IMAGE_ACCEPT}
                 multiple
                 className="hidden"
                 aria-label="Upload pet photos"
+                disabled={uploadingPhotos}
                 onChange={(e) => {
                   handlePhotoFiles(e.target.files);
                   e.target.value = '';

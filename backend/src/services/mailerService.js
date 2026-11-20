@@ -1,5 +1,5 @@
 import nodemailer from 'nodemailer';
-import { env } from '../config/env.js';
+import { appUrl, env } from '../config/env.js';
 import { logger } from '../utils/logger.js';
 import {
   applicationReceivedHtml,
@@ -128,7 +128,7 @@ export const sendShelterApprovedEmail = async ({ to, name, shelterName, message 
       name,
       shelterName,
       message,
-      loginUrl: `${env.APP_URL}/login`,
+      loginUrl: `${appUrl}/login`,
     }),
   });
 
@@ -157,14 +157,14 @@ export const sendApplicationSubmittedEmail = async ({ to, name, petName }) =>
   send({
     to,
     subject: 'We received your application',
-    html: applicationSubmittedHtml({ name, petName, appUrl: env.APP_URL }),
+    html: applicationSubmittedHtml({ name, petName, appUrl }),
   });
 
 export const sendApplicationUnderReviewEmail = async ({ to, name, petName }) =>
   send({
     to,
     subject: 'Your application is under review',
-    html: applicationUnderReviewHtml({ name, petName, appUrl: env.APP_URL }),
+    html: applicationUnderReviewHtml({ name, petName, appUrl }),
   });
 
 export const sendApplicationDecisionEmail = async ({
@@ -185,7 +185,7 @@ export const sendApplicationDecisionEmail = async ({
       petName,
       status,
       note,
-      appUrl: env.APP_URL,
+      appUrl,
       cancelledByApplicant,
       pickupAt,
       pickupEmail,
@@ -196,7 +196,7 @@ export const sendApplicationAutoRejectedEmail = async ({ to, name, petName, reas
   send({
     to,
     subject: 'Update on your application',
-    html: applicationAutoRejectedHtml({ name, petName, reason, appUrl: env.APP_URL }),
+    html: applicationAutoRejectedHtml({ name, petName, reason, appUrl }),
   });
 
 /* ------------------------------------------------------------------ *
@@ -220,7 +220,7 @@ export const sendVisitStatusEmail = async ({ to, name, petName, status, slot, re
   send({
     to,
     subject: VISIT_STATUS_SUBJECTS[status] ?? 'Update on your visit',
-    html: visitStatusHtml({ name, petName, status, slot, reason, appUrl: env.APP_URL }),
+    html: visitStatusHtml({ name, petName, status, slot, reason, appUrl }),
   });
 
 /* ------------------------------------------------------------------ *
@@ -246,7 +246,7 @@ export const sendInquiryReplyEmail = async ({
       shelterName,
       message,
       petId,
-      appUrl: env.APP_URL,
+      appUrl,
     }),
     replyTo: shelterEmail,
   });

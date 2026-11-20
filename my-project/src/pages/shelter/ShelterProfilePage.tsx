@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { toast } from 'react-toastify';
 
 import { ShelterProfileForm } from '@/components/shelter';
+import { ShelterProfileSkeleton } from '@/components/shelter/ShelterProfileSkeleton';
 import { ErrorState, SectionHeader, focusFirstError } from '@/components/shared';
 import { Badge } from '@/components/ui/Badge';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/Card';
@@ -14,7 +15,15 @@ import {
 } from '@/data/shelterProfile';
 import { useAuth } from '@/hooks/useAuth';
 import { useShelters } from '@/hooks/useData';
+import { apiErrorMessage } from '@/lib/apiClient';
+import {
+  IMAGE_SIZE_MESSAGE,
+  IMAGE_TYPE_MESSAGE,
+  MAX_IMAGE_BYTES,
+  isAllowedImageFile,
+} from '@/lib/imageFiles';
 import { shelterProfileSchema, toFieldErrors } from '@/lib/validators';
+import { shelterService, uploadImage } from '@/services/api';
 import type { Shelter } from '@/types';
 
 /** Maps the shelter record onto the editable form fields. */
@@ -35,7 +44,7 @@ const toProfileForm = (shelter?: Shelter | null): ShelterProfileFormValues =>
 
 export const ShelterProfilePage = () => {
   const { user } = useAuth();
-  const { shelters, loading, error, refresh } = useShelters();
+  const { shelters, setShelters, loading, error, refresh } = useShelters();
 
   // Staff always edit their own shelter's profile — never another shelter's.
   const shelter =
@@ -49,6 +58,8 @@ export const ShelterProfilePage = () => {
   // View mode by default: fields are display-only until "Edit info" is clicked.
   const [editing, setEditing] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [uploadingLogo, setUploadingLogo] = useState(false);
   const [fieldErrors, setFieldErrors] = useState<
     Partial<Record<keyof ShelterProfileFormValues, string>>
   >({});
@@ -75,7 +86,31 @@ export const ShelterProfilePage = () => {
     setEditing(false);
   };
 
-  const handleSave = () => {
+  const handleLogoFile = async (file: File) => {
+    if (!isAllowedImageFile(file)) {
+      toast.error(IMAGE_TYPE_MESSAGE);
+      return;
+    }
+    if (file.size > MAX_IMAGE_BYTES) {
+      toast.error(IMAGE_SIZE_MESSAGE);
+      return;
+    }
+
+    setUploadingLogo(true);
+    try {
+      const url = await uploadImage(file, 'shelters');
+      set('logoUrl', url);
+      toast.success('Logo uploaded. Save the profile to keep it.');
+    } catch (err) {
+      toast.error(apiErrorMessage(err, 'Could not upload the logo. Please try again.'));
+    } finally {
+      setUploadingLogo(false);
+    }
+  };
+
+  const handleSave = async () => {
+    if (!shelter || saving) return;
+
     const parsed = shelterProfileSchema.safeParse(form);
     if (!parsed.success) {
       setFieldErrors(toFieldErrors<keyof ShelterProfileFormValues>(parsed.error.issues));
@@ -83,13 +118,38 @@ export const ShelterProfilePage = () => {
       focusFirstError();
       return;
     }
+    if (uploadingLogo) {
+      toast.info('The logo is still uploading. Please wait a moment.');
+      return;
+    }
+
     setFieldErrors({});
-    // Merge onto the empty form so the draft always matches the full form shape,
-    // even if a validated field comes back optional.
-    setDraft({ ...EMPTY_SHELTER_PROFILE_FORM, ...parsed.data });
-    setSaved(true);
-    setEditing(false);
-    toast.success('Shelter profile saved successfully!');
+    setSaving(true);
+    try {
+      const updated = await shelterService.update(shelter.id, {
+        name: parsed.data.name,
+        location: parsed.data.location,
+        address: parsed.data.address,
+        email: parsed.data.email,
+        phone: parsed.data.phone,
+        operatingHours: parsed.data.operatingHours,
+        description: parsed.data.description,
+        // An empty value keeps the current logo rather than clearing it.
+        ...(parsed.data.logoUrl.trim() ? { imageUrl: parsed.data.logoUrl.trim() } : {}),
+      });
+      setShelters((previous) =>
+        previous.map((s) => (s.id === updated.id ? updated : s)),
+      );
+      // Merge onto the empty form so the draft always matches the full form shape.
+      setDraft({ ...EMPTY_SHELTER_PROFILE_FORM, ...parsed.data });
+      setSaved(true);
+      setEditing(false);
+      toast.success('Shelter profile saved successfully!');
+    } catch (err) {
+      toast.error(apiErrorMessage(err, 'Could not save your profile. Please try again.'));
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -105,11 +165,11 @@ export const ShelterProfilePage = () => {
           shelter ? (
             editing ? (
               <div className="flex items-center gap-2">
-                <Button type="button" size="sm" variant="outline" onClick={handleCancel}>
+                <Button type="button" size="sm" variant="outline" onClick={handleCancel} disabled={saving}>
                   <X className="size-4" /> Cancel
                 </Button>
-                <Button type="button" size="sm" onClick={handleSave}>
-                  <Check className="size-4" /> Save changes
+                <Button type="button" size="sm" onClick={handleSave} disabled={saving}>
+                  <Check className="size-4" /> {saving ? 'Saving…' : 'Save changes'}
                 </Button>
               </div>
             ) : (
@@ -122,7 +182,7 @@ export const ShelterProfilePage = () => {
       />
 
       <div className="mt-6">
-        {loading && <p className="text-sm text-muted-foreground">Loading…</p>}
+        {loading && !shelter && <ShelterProfileSkeleton />}
 
         {!loading && error && !shelter && (
           <ErrorState
@@ -189,6 +249,8 @@ export const ShelterProfilePage = () => {
                 form={form}
                 errors={fieldErrors}
                 onChange={set}
+                onLogoFile={handleLogoFile}
+                uploadingLogo={uploadingLogo}
                 onSubmit={handleSave}
                 onCancel={handleCancel}
               />
@@ -200,7 +262,7 @@ export const ShelterProfilePage = () => {
                   <CardHeader>
                     <CardTitle className="text-base">Organization</CardTitle>
                     <CardDescription>
-                      Name, location, and logo shown across the platform.
+                      Name and location shown across the platform.
                     </CardDescription>
                   </CardHeader>
                   <CardContent className="grid gap-3 sm:grid-cols-2">
@@ -208,7 +270,6 @@ export const ShelterProfilePage = () => {
                       { label: 'Shelter name', value: form.name, full: false },
                       { label: 'City / location', value: form.location, full: false },
                       { label: 'Street address', value: form.address, full: true },
-                      { label: 'Logo / photo URL', value: form.logoUrl, full: true },
                     ].map((field) => (
                       <div
                         key={field.label}

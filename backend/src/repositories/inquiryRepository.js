@@ -1,5 +1,14 @@
 import { pool } from '../config/database.js';
 
+export const hasInquiryForPet = async (petId, email) => {
+  const { rows } = await pool.query(
+    `SELECT EXISTS (SELECT 1 FROM inquiries
+      WHERE pet_id = $1 AND lower(from_email) = lower($2)) AS submitted`,
+    [petId, email],
+  );
+  return rows[0].submitted;
+};
+
 export const createInquiry = async (input) => {
   const { rows } = await pool.query(
     `INSERT INTO inquiries (pet_id, from_name, from_email, message)

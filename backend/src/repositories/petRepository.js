@@ -261,7 +261,7 @@ export const createPet = async (input, shelterId) => {
       input.name, input.species, input.breed, birthdate, input.ageGroup,
       input.size, input.gender, input.temperament ?? [], shelterId,
       input.visibility ?? 'public', input.description, input.medicalHistory ?? [],
-      input.behavioralNotes ?? '', input.status ?? 'Available', input.imageUrl,
+      input.behavioralNotes ?? '', 'Available', input.imageUrl,
       input.gallery ?? [], input.vaccinated ?? false, input.spayedNeutered ?? false,
       input.goodWithKids ?? false, input.goodWithPets ?? false,
     ],
