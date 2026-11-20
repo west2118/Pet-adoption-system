@@ -395,3 +395,56 @@ export const inquiryReplyHtml = ({
     footer:
       'You are receiving this email because you sent an inquiry about a pet on Paws&amp;Homes.',
   });
+
+/** Signup verification OTP email to confirm real existing email address. */
+export const signupOtpEmailHtml = ({ name, code }) =>
+  renderEmail({
+    preheader: `Your Paws&Homes registration code is ${code}`,
+    title: 'Verify your email address',
+    content: [
+      paragraph(`Hi ${escapeHtml(name || 'there')},`),
+      paragraph(
+        'Thank you for signing up for Paws&amp;Homes! To confirm your email address and activate your account, please enter the following 6-digit verification code:',
+      ),
+      `<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:16px 0 20px;">
+        <tr>
+          <td align="center" style="background-color:#fff7ed;border:2px dashed #ea580c;border-radius:12px;padding:16px 36px;">
+            <span style="font-family:monospace,Consolas,sans-serif;font-size:32px;font-weight:bold;letter-spacing:8px;color:#ea580c;">${escapeHtml(code)}</span>
+          </td>
+        </tr>
+      </table>`,
+      paragraph('This code is valid for <strong>10 minutes</strong>. If you did not create an account on Paws&amp;Homes, you can safely ignore this email.'),
+    ].join('\n                '),
+    footer:
+      'Paws&amp;Homes Account Security. Please do not reply directly to this automated email.',
+  });
+
+/** MFA Login verification OTP email for suspicious/new locations. */
+export const loginOtpEmailHtml = ({ name, code, locationDisplay, ipAddress }) =>
+  renderEmail({
+    preheader: `Your verification code is ${code}`,
+    title: 'Verify your login attempt',
+    content: [
+      paragraph(`Hi ${escapeHtml(name || 'there')},`),
+      paragraph(
+        'We noticed a sign-in attempt to your Paws&amp;Homes account from a new or unrecognised location:',
+      ),
+      note(
+        `<strong>Detected Location:</strong> ${escapeHtml(locationDisplay || 'Unknown location')}<br />` +
+        `<strong>IP Address:</strong> ${escapeHtml(ipAddress || 'Not recorded')}<br />` +
+        `<strong>Time:</strong> ${new Date().toUTCString()}`,
+      ),
+      paragraph('Use the following 6-digit one-time code to complete your sign in:'),
+      `<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:16px 0 20px;">
+        <tr>
+          <td align="center" style="background-color:#fff7ed;border:2px dashed #ea580c;border-radius:12px;padding:16px 36px;">
+            <span style="font-family:monospace,Consolas,sans-serif;font-size:32px;font-weight:bold;letter-spacing:8px;color:#ea580c;">${escapeHtml(code)}</span>
+          </td>
+        </tr>
+      </table>`,
+      paragraph('This code is valid for <strong>10 minutes</strong>. If you did not attempt this sign in, please secure your account immediately by changing your password.'),
+    ].join('\n                '),
+    footer:
+      'Security notification from Paws&amp;Homes. Never share your verification code with anyone.',
+  });
+

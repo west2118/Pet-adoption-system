@@ -1,4 +1,15 @@
-import { getMe, login, logoutSession, refreshSession as rotateUserSession, signup, updateProfile } from '../services/authService.js';
+import {
+  getMe,
+  login,
+  logoutSession,
+  refreshSession as rotateUserSession,
+  resendLoginOtp,
+  resendSignupOtp,
+  signup,
+  updateProfile,
+  verifyLoginOtp,
+  verifySignupOtp,
+} from '../services/authService.js';
 import {
   clearAuthCookies,
   clearOnboardingCookie,
@@ -7,10 +18,22 @@ import {
   setAuthCookies,
   setOnboardingCookie,
 } from '../services/sessionService.js';
+import { extractClientIp } from '../utils/locationDetector.js';
 import { sendSuccess } from '../utils/respond.js';
 
 export const signupUser = async (req, res) => {
   const result = await signup(req.body);
+  return sendSuccess(
+    res,
+    result,
+    'A 6-digit verification code has been sent to your email to verify your account.',
+    undefined,
+    200,
+  );
+};
+
+export const verifySignupOtpHandler = async (req, res) => {
+  const result = await verifySignupOtp(req.body);
   const { refreshToken, token, onboardingToken, ...body } = result;
   if (refreshToken) {
     setAuthCookies(res, { accessToken: token, refreshToken });
@@ -19,16 +42,52 @@ export const signupUser = async (req, res) => {
   }
   const message = result.requiresOnboarding
     ? 'Account created. Complete your shelter details to continue.'
-    : 'Account created successfully.';
+    : 'Account verified and created successfully.';
   return sendSuccess(res, body, message, undefined, 201);
 };
 
+export const resendSignupOtpHandler = async (req, res) => {
+  const result = await resendSignupOtp(req.body);
+  return sendSuccess(res, result, result.message);
+};
+
 export const loginUser = async (req, res) => {
-  const result = await login(req.body);
+  const ip = extractClientIp(req);
+  const result = await login(req.body, {
+    ip,
+    clientLocation: req.body.clientLocation || req.headers['x-client-location'],
+  });
+
+  if (result.mfaRequired) {
+    return sendSuccess(
+      res,
+      {
+        mfaRequired: true,
+        challengeId: result.challengeId,
+        email: result.email,
+        location: result.location,
+      },
+      'Suspicious login detected. A 6-digit verification code was sent to your email.',
+    );
+  }
+
   setAuthCookies(res, { accessToken: result.token, refreshToken: result.refreshToken });
   clearOnboardingCookie(res);
   return sendSuccess(res, { user: result.user }, 'Logged in successfully.');
 };
+
+export const verifyOtpHandler = async (req, res) => {
+  const result = await verifyLoginOtp(req.body);
+  setAuthCookies(res, { accessToken: result.token, refreshToken: result.refreshToken });
+  clearOnboardingCookie(res);
+  return sendSuccess(res, { user: result.user }, 'Verification successful. Welcome back!');
+};
+
+export const resendOtpHandler = async (req, res) => {
+  const result = await resendLoginOtp(req.body);
+  return sendSuccess(res, result, result.message);
+};
+
 
 export const getCurrentUser = async (req, res) => {
   const user = await getMe(req.user.id);

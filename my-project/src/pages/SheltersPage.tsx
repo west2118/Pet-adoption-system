@@ -1,7 +1,9 @@
-import { ArrowRight, HeartHandshake } from 'lucide-react';
+import { ArrowRight, HeartHandshake, LayoutGrid, MapPin } from 'lucide-react';
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { BlurText, ErrorState, GridOverlay, Reveal, TablePagination } from '@/components/shared';
 import { ShelterPlate } from '@/components/features/ShelterPlate';
+import { ShelterGeoMap } from '@/components/features/ShelterGeoMap';
 import { EmptyState, LoadingGrid } from '@/components/ui/Feedback';
 import { Button } from '@/components/ui/button';
 import { useShelterStats, useSheltersPage } from '@/hooks/useData';
@@ -14,6 +16,7 @@ export const SheltersPage = () => {
   const { shelters, total, pageSize, page, setPage, loading, error, refresh } =
     useSheltersPage();
   const networkStats = useShelterStats();
+  const [viewMode, setViewMode] = useState<'grid' | 'map'>('grid');
 
   const totalPets = networkStats?.petsInCare ?? 0;
   const cities = networkStats?.cities ?? 0;
@@ -88,14 +91,44 @@ export const SheltersPage = () => {
       {/* -------------------------------------------------------- DIRECTORY */}
       <section id="rescue-directory" className="scroll-mt-24 bg-background py-20 md:py-28">
         <div className={frame}>
-          <Reveal>
-            <h2 className="text-3xl font-medium tracking-tight md:text-4xl">
-              Meet the rescues
-            </h2>
-            <p className="mt-3 max-w-xl text-muted-foreground">
-              Contact details, visiting hours, and the pets currently in their care.
-            </p>
-          </Reveal>
+          <div className="flex flex-wrap items-end justify-between gap-4">
+            <Reveal>
+              <h2 className="text-3xl font-medium tracking-tight md:text-4xl">
+                Meet the rescues
+              </h2>
+              <p className="mt-3 max-w-xl text-muted-foreground">
+                Contact details, visiting hours, and the pets currently in their care.
+              </p>
+            </Reveal>
+
+            {/* View switcher: Grid vs Map */}
+            <div className="flex items-center rounded-full border border-border bg-card p-1 shadow-xs">
+              <button
+                type="button"
+                onClick={() => setViewMode('grid')}
+                className={`inline-flex items-center gap-2 rounded-full px-4 py-1.5 text-xs font-medium transition-all ${
+                  viewMode === 'grid'
+                    ? 'bg-primary text-primary-foreground shadow-xs'
+                    : 'text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                <LayoutGrid className="size-3.5" />
+                <span>List view</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setViewMode('map')}
+                className={`inline-flex items-center gap-2 rounded-full px-4 py-1.5 text-xs font-medium transition-all ${
+                  viewMode === 'map'
+                    ? 'bg-primary text-primary-foreground shadow-xs'
+                    : 'text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                <MapPin className="size-3.5" />
+                <span>Geo Map</span>
+              </button>
+            </div>
+          </div>
 
           <div className="mt-14">
             {loading ? (
@@ -119,7 +152,48 @@ export const SheltersPage = () => {
                   </Link>
                 }
               />
+            ) : viewMode === 'map' ? (
+              /* ----------------- Geo Map Layout for Shelters ----------------- */
+              <div className="grid gap-8 lg:grid-cols-2">
+                {shelters.map((shelter, i) => (
+                  <Reveal key={shelter.id} delay={i * 60} className="h-full">
+                    <div className="flex h-full flex-col overflow-hidden rounded-2xl border border-border bg-card p-6 shadow-sm">
+                      <div className="flex items-start justify-between gap-4">
+                        <div>
+                          <h3 className="text-xl font-medium tracking-tight">
+                            <Link
+                              to={`/shelters/${shelter.id}`}
+                              className="transition-colors hover:text-primary"
+                            >
+                              {shelter.name}
+                            </Link>
+                          </h3>
+                          <p className="mt-1 flex items-center gap-1.5 text-xs text-muted-foreground">
+                            <MapPin className="size-3.5 shrink-0 text-primary" />
+                            {shelter.address || shelter.location}
+                          </p>
+                        </div>
+                        <Link to={`/shelters/${shelter.id}`}>
+                          <Button size="sm" variant="outline" className="h-8 rounded-full text-xs">
+                            View profile
+                          </Button>
+                        </Link>
+                      </div>
+
+                      {/* Interactive Geo Map embed */}
+                      <div className="mt-4 flex-1">
+                        <ShelterGeoMap
+                          shelter={shelter}
+                          height={220}
+                          showCardHeader={false}
+                        />
+                      </div>
+                    </div>
+                  </Reveal>
+                ))}
+              </div>
             ) : (
+              /* ----------------- Standard Grid Layout ----------------- */
               <div className="grid gap-x-8 gap-y-16 md:grid-cols-2 lg:grid-cols-3">
                 {shelters.map((shelter, i) => (
                   <Reveal key={shelter.id} delay={i * 90} className="h-full">

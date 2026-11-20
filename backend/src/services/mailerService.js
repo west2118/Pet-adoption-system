@@ -12,6 +12,8 @@ import {
   visitRequestedHtml,
   visitStatusHtml,
   inquiryReplyHtml,
+  loginOtpEmailHtml,
+  signupOtpEmailHtml,
 } from './emailTemplates.js';
 
 /**
@@ -208,3 +210,27 @@ export const sendInquiryReplyEmail = async ({
     }),
     replyTo: shelterEmail,
   });
+
+/* ------------------------------------------------------------------ *
+ * Login MFA OTP email (sent when suspicious / new location is detected)
+ * ------------------------------------------------------------------ */
+
+export const sendLoginOtpEmail = async ({ to, name, code, locationDisplay, ipAddress }) =>
+  send({
+    to,
+    subject: `Your Paws&Homes verification code: ${code}`,
+    html: loginOtpEmailHtml({ name, code, locationDisplay, ipAddress }),
+  });
+
+/* ------------------------------------------------------------------ *
+ * Signup Email Verification OTP email
+ * ------------------------------------------------------------------ */
+
+export const sendSignupOtpEmail = async ({ to, name, code }) =>
+  send({
+    to,
+    subject: `Verify your email for Paws&Homes: ${code}`,
+    html: signupOtpEmailHtml({ name, code }),
+  });
+
+

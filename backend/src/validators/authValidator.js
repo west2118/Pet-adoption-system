@@ -11,6 +11,25 @@ export const signupSchema = z.object({
 export const loginSchema = z.object({
   email: z.string().email('Invalid email format'),
   password: z.string().min(1, 'Password is required'),
+  clientLocation: z.string().max(255).optional(),
+});
+
+export const verifyOtpSchema = z.object({
+  challengeId: z.string().uuid('Invalid challenge ID'),
+  code: z.string().regex(/^\d{6}$/, 'Verification code must be 6 digits'),
+});
+
+export const resendOtpSchema = z.object({
+  challengeId: z.string().uuid('Invalid challenge ID'),
+});
+
+export const verifySignupOtpSchema = z.object({
+  verificationId: z.string().uuid('Invalid verification ID'),
+  code: z.string().regex(/^\d{6}$/, 'Verification code must be 6 digits'),
+});
+
+export const resendSignupOtpSchema = z.object({
+  verificationId: z.string().uuid('Invalid verification ID'),
 });
 
 export const updateProfileSchema = z.object({

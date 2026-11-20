@@ -2,11 +2,13 @@ import { Clock, Mail, MapPin, Phone } from 'lucide-react';
 import type { Shelter } from '@/types';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
+import { ShelterGeoMap } from '@/components/features/ShelterGeoMap';
 
 interface ShelterContactCardProps {
   shelter: Shelter;
   className?: string;
   showBrowseButton?: boolean;
+  showMap?: boolean;
 }
 
 /**
@@ -18,6 +20,7 @@ export const ShelterContactCard = ({
   shelter,
   className,
   showBrowseButton: _showBrowseButton,
+  showMap = true,
 }: ShelterContactCardProps) => {
   const rows = [
     { icon: MapPin, label: 'Address', value: shelter.address },
@@ -50,6 +53,12 @@ export const ShelterContactCard = ({
           </li>
         ))}
       </ul>
+
+      {showMap && (
+        <div className="mt-6">
+          <ShelterGeoMap shelter={shelter} height={200} />
+        </div>
+      )}
 
       <div className="mt-7 flex flex-wrap gap-3">
         <a href={`mailto:${shelter.email}`}>

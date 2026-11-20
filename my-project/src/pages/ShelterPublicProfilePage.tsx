@@ -6,6 +6,7 @@ import { Reveal, TablePagination } from '@/components/shared';
 import { Seo } from '@/components/seo/Seo';
 import { Container } from '@/components/layout/Container';
 import { ShelterContactCard } from '@/components/features/ShelterContactCard';
+import { ShelterGeoMap } from '@/components/features/ShelterGeoMap';
 import { ShelterProfileHero } from '@/components/features/ShelterProfileHero';
 import { PetCard } from '@/components/features/PetCard';
 import { EmptyState } from '@/components/ui/Feedback';
@@ -221,6 +222,11 @@ export const ShelterPublicProfilePage = () => {
                   {shelter.address}
                 </p>
               </div>
+
+              {/* Interactive Geo Map */}
+              <div className="mt-8">
+                <ShelterGeoMap shelter={shelter} height={320} />
+              </div>
             </Reveal>
 
             <Reveal delay={150} className="lg:col-span-5">
@@ -229,7 +235,7 @@ export const ShelterPublicProfilePage = () => {
                 Visiting hours, phone, and email for {shelter.name}. Walk-ins welcome
                 during opening hours — please call ahead for same-day meet and greets.
               </p>
-              <ShelterContactCard shelter={shelter} showBrowseButton={false} className="mt-8" />
+              <ShelterContactCard shelter={shelter} showBrowseButton={false} showMap={false} className="mt-8" />
             </Reveal>
           </div>
         </div>
