@@ -182,7 +182,7 @@ export const PlatformShelterApplicationsPage = () => {
                   <TableHead>Location</TableHead>
                   <TableHead>Submitted</TableHead>
                   <TableHead>Status</TableHead>
-                  <TableHead className="text-right">Actions</TableHead>
+                  <TableHead className="text-center whitespace-nowrap">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -228,8 +228,8 @@ export const PlatformShelterApplicationsPage = () => {
                           {app.status.charAt(0).toUpperCase() + app.status.slice(1)}
                         </Badge>
                       </TableCell>
-                      <TableCell className="text-right">
-                        <div className="flex items-center justify-end gap-1">
+                      <TableCell className="text-center whitespace-nowrap">
+                        <div className="flex items-center justify-center gap-1">
                           <Button
                             variant="ghost"
                             size="icon-sm"

@@ -1,4 +1,4 @@
-import { Clock, Mail, MapPin, PawPrint, Phone } from 'lucide-react';
+import { Mail, MapPin, PawPrint, Phone } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { GridOverlay } from '@/components/shared';
 import { useAuth } from '@/hooks/useAuth';
@@ -86,19 +86,15 @@ export const Footer = () => {
             <ul className="mt-5 space-y-3 text-sm text-foreground/70">
               <li className="flex items-center gap-2">
                 <MapPin className="size-4 shrink-0 text-muted-foreground" />
-                Quezon City, Manila
+                Paranaque City, Metro Manila
               </li>
               <li className="flex items-center gap-2">
                 <Phone className="size-4 shrink-0 text-muted-foreground" />
-                +63 2 8555 0100
+                09760810110
               </li>
               <li className="flex items-center gap-2">
                 <Mail className="size-4 shrink-0 text-muted-foreground" />
                 hello@pawsandhomes.ph
-              </li>
-              <li className="flex items-center gap-2">
-                <Clock className="size-4 shrink-0 text-muted-foreground" />
-                Mon–Sat, 9AM–6PM
               </li>
             </ul>
           </div>

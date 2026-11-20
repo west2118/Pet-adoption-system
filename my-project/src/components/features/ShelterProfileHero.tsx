@@ -52,7 +52,7 @@ export const ShelterProfileHero = ({
           </Reveal>
 
           {/* Type-led column */}
-          <div className="order-1 lg:order-2 lg:col-span-6">
+          <div className="order-1 min-w-0 lg:order-2 lg:col-span-6">
             <Reveal>
               <span className="inline-flex items-center gap-2 rounded-full border border-[var(--brand)]/30 bg-[var(--brand)]/10 px-3.5 py-1.5 font-mono text-xs font-medium tracking-wide text-primary">
                 <BadgeCheck className="size-4 text-[var(--brand)]" />
@@ -64,7 +64,7 @@ export const ShelterProfileHero = ({
               <p className="mt-6 font-mono text-sm uppercase tracking-[0.24em] text-muted-foreground">
                 {shelter.location}
               </p>
-              <h1 className="mt-4 font-display text-[clamp(2.5rem,7vw,6rem)] leading-[0.92] tracking-tight">
+              <h1 className="mt-4 font-display text-[clamp(2.5rem,7vw,6rem)] leading-[0.92] tracking-tight [overflow-wrap:anywhere]">
                 <span className="block text-primary">{shelter.name}</span>
               </h1>
             </Reveal>
@@ -72,7 +72,7 @@ export const ShelterProfileHero = ({
             <BlurText
               as="p"
               delay={200}
-              className="mt-8 max-w-xl justify-start text-lg leading-relaxed text-muted-foreground"
+              className="mt-8 max-w-xl justify-start text-lg leading-relaxed text-muted-foreground [overflow-wrap:anywhere]"
             >
               {shelter.description}
             </BlurText>

@@ -42,7 +42,7 @@ export const SheltersPage = () => {
         <div className={`relative z-10 ${frame}`}>
           <Reveal>
             <p className="text-center font-mono text-[11px] uppercase tracking-[0.24em] text-muted-foreground">
-              PawsConnect network
+              Paws&amp;Homes network
             </p>
           </Reveal>
 

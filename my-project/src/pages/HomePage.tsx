@@ -384,7 +384,7 @@ export const HomePage = () => {
           <Reveal className="mb-14 max-w-3xl lg:mb-20">
             <span className="mb-6 inline-flex items-center gap-4 font-mono text-sm text-muted-foreground">
               <span className="h-px w-12 bg-[var(--brand)]" />
-              Why PawsConnect
+              Why Paws&amp;Homes
             </span>
             <h2 className="font-display text-6xl leading-[0.9] tracking-tight md:text-7xl lg:text-[112px]">
               <span className="text-primary">Rescue-ready.</span>

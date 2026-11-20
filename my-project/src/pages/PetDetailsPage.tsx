@@ -304,7 +304,7 @@ export const PetDetailsPage = () => {
                 <p className="text-lg leading-relaxed text-muted-foreground">
                   {shelter.name} currently has {shelterPetCount}{' '}
                   {shelterPetCount === 1 ? 'available pet' : 'available pets'} on
-                  PawsConnect.
+                  Paws&amp;Homes.
                 </p>
                 <Link
                   to={`/shelters/${shelter.id}`}

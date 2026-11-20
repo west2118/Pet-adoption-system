@@ -19,7 +19,6 @@ interface ShelterContactCardProps {
 export const ShelterContactCard = ({
   shelter,
   className,
-  showBrowseButton: _showBrowseButton,
   showMap = true,
 }: ShelterContactCardProps) => {
   const rows = [
@@ -35,7 +34,7 @@ export const ShelterContactCard = ({
         {rows.map((row) => (
           <li key={row.label} className="flex items-start gap-3">
             <row.icon className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
-            <span className="min-w-0">
+            <span className="min-w-0 [overflow-wrap:anywhere]">
               <span className="block font-mono text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
                 {row.label}
               </span>

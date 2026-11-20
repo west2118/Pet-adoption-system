@@ -89,38 +89,33 @@ export const ShelterOnboardingPage = () => {
     if (key === 'address') setCoords(null);
   };
 
-  const handleImageFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleImageFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
     if (!isAllowedImageFile(file)) {
       toast.error(IMAGE_TYPE_MESSAGE);
       return;
     }
-    // Limit to 5MB before base64 encoding
     if (file.size > MAX_IMAGE_BYTES) {
       toast.error(IMAGE_SIZE_MESSAGE);
       return;
     }
-    const reader = new FileReader();
-    reader.onload = async () => {
-      // Show the picked image immediately, then swap it for the stored URL.
-      set('imageUrl', String(reader.result));
-      setUploadingImage(true);
-      try {
-        const url = await uploadImage(file, 'shelters');
-        set('imageUrl', url);
-        setFieldErrors((prev) => ({ ...prev, imageUrl: undefined }));
-      } catch (err) {
-        set('imageUrl', '');
-        toast.error(apiErrorMessage(err, 'Could not upload the logo. Please try again.'));
-      } finally {
-        setUploadingImage(false);
-      }
-    };
-    reader.onerror = () => {
-      toast.error('Failed to read image file.');
-    };
-    reader.readAsDataURL(file);
+
+    // Local object URL only for the instant preview — nothing base64 is kept.
+    const previewUrl = URL.createObjectURL(file);
+    set('imageUrl', previewUrl);
+    setUploadingImage(true);
+    try {
+      const url = await uploadImage(file, 'shelters');
+      set('imageUrl', url);
+      setFieldErrors((prev) => ({ ...prev, imageUrl: undefined }));
+    } catch (err) {
+      set('imageUrl', '');
+      toast.error(apiErrorMessage(err, 'Could not upload the logo. Please try again.'));
+    } finally {
+      URL.revokeObjectURL(previewUrl);
+      setUploadingImage(false);
+    }
   };
   const handleUseLocation = async () => {
     if (locating) return;
@@ -459,7 +454,7 @@ export const ShelterOnboardingPage = () => {
                         />
                       </label>
 
-                      {/* Image Preview if base64 or URL present */}
+                      {/* Image preview while uploading, then the stored URL */}
                       {form.imageUrl && (
                         <div className="relative flex items-center gap-3 rounded-lg border border-border bg-card p-2.5">
                           <img
@@ -469,8 +464,8 @@ export const ShelterOnboardingPage = () => {
                           />
                           <div className="min-w-0 flex-1">
                             <p className="truncate text-xs font-mono text-muted-foreground">
-                              {form.imageUrl.startsWith('data:image/')
-                                ? 'Uploaded image'
+                              {form.imageUrl.startsWith('blob:')
+                                ? 'Uploading image…'
                                 : form.imageUrl}
                             </p>
                             <span className="text-xs text-primary font-medium">

@@ -184,8 +184,9 @@ const chipFor = (status) => {
   return chip(status, background, ink);
 };
 
-const applicationsUrl = (appUrl) => `${appUrl}/applications`;
-const visitsUrl = (appUrl) => `${appUrl}/visits`;
+// Every CTA opens the site root on purpose: deep links 404 on hosts that serve
+// the SPA as static files, and signed-out readers would only hit the login wall.
+const siteButton = (appUrl) => button(appUrl, 'Go to Paws&Homes');
 
 /** New visit request received from an adopter (to the shelter contact). */
 export const visitRequestedHtml = ({ name, petName, preferredSlot, reason }) =>
@@ -225,8 +226,8 @@ export const visitStatusHtml = ({ name, petName, status, slot, reason, appUrl })
       ),
       slot ? paragraph(`<strong>When:</strong> ${escapeHtml(slot)}`) : '',
       reason ? note(`<strong>Note from the shelter:</strong> ${escapeHtml(reason)}`) : '',
-      paragraph('You can check the status of this request on your visits page.'),
-      button(visitsUrl(appUrl), 'View your visits'),
+      paragraph('Sign in to Paws&amp;Homes to check the status of this request.'),
+      siteButton(appUrl),
     ]
       .filter(Boolean)
       .join('\n                '),
@@ -243,8 +244,8 @@ export const applicationSubmittedHtml = ({ name, petName, appUrl }) =>
       paragraph(
         `Thanks for applying to adopt <strong>${escapeHtml(petName)}</strong>. The shelter team is reviewing your application and will email you again as soon as its status changes.`,
       ),
-      paragraph('You can follow its progress from your applications page.'),
-      button(applicationsUrl(appUrl), 'Track your application'),
+      paragraph('Sign in to Paws&amp;Homes to follow its progress.'),
+      siteButton(appUrl),
     ].join('\n                '),
   });
 
@@ -260,7 +261,7 @@ export const applicationUnderReviewHtml = ({ name, petName, appUrl }) =>
         `The shelter has started reviewing your application for <strong>${escapeHtml(petName)}</strong>.`,
       ),
       paragraph('We will email you again as soon as there is a decision.'),
-      button(applicationsUrl(appUrl), 'Track your application'),
+      siteButton(appUrl),
     ].join('\n                '),
   });
 
@@ -342,8 +343,8 @@ export const applicationDecisionHtml = ({
       staffNote
         ? note(`<strong>${noteLabel}:</strong> ${escapeHtml(staffNote)}`)
         : '',
-      paragraph('You can review this application any time from your applications page.'),
-      button(applicationsUrl(appUrl), 'View your application'),
+      paragraph('Sign in to Paws&amp;Homes to review this application at any time.'),
+      siteButton(appUrl),
     ]
       .filter(Boolean)
       .join('\n                '),
@@ -365,7 +366,7 @@ export const applicationAutoRejectedHtml = ({ name, petName, reason, appUrl }) =
       paragraph(
         'Plenty of pets are still looking for a home — we would love to see you apply again.',
       ),
-      button(`${appUrl}/pets`, 'Browse other pets'),
+      siteButton(appUrl),
     ]
       .filter(Boolean)
       .join('\n                '),
@@ -377,7 +378,6 @@ export const inquiryReplyHtml = ({
   petName,
   shelterName,
   message,
-  petId,
   appUrl,
 }) =>
   renderEmail({
@@ -390,7 +390,7 @@ export const inquiryReplyHtml = ({
       ),
       note(escapeHtml(message).replace(/\r?\n/g, '<br />')),
       paragraph('Reply to this email to contact the shelter directly.'),
-      button(`${appUrl}/pets/${petId}`, `View ${petName}`),
+      siteButton(appUrl),
     ].join('\n                '),
     footer:
       'You are receiving this email because you sent an inquiry about a pet on Paws&amp;Homes.',

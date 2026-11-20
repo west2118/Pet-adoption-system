@@ -134,7 +134,7 @@ export const ShelterPublicProfilePage = () => {
           title="Shelter not found"
           description={
             error ??
-            'This shelter may no longer be a verified partner on PawsConnect.'
+            'This shelter may no longer be a verified partner on Paws&Homes.'
           }
           action={
             <Link to="/shelters">
@@ -146,12 +146,12 @@ export const ShelterPublicProfilePage = () => {
     );
   }
 
-  // `totalPets` is the shelter's own headline figure; listing counts come
-  // from the scoped facets so they stay correct while the grid is paged.
+  // Public profile counts use this shelter's public listings only.
+  const publicPetCount = facets?.stats.listed ?? 0;
   const stats = [
-    { value: shelter.totalPets || '—', label: 'pets in care' },
-    { value: facets?.stats.listed || '—', label: 'listed publicly' },
-    { value: availableCount || '—', label: 'available now' },
+    { value: publicPetCount, label: 'pets in care' },
+    { value: publicPetCount, label: 'listed publicly' },
+    { value: availableCount, label: 'available now' },
     { value: visitingDays, label: 'visiting days' },
   ];
 
@@ -200,7 +200,7 @@ export const ShelterPublicProfilePage = () => {
       <section className="bg-background py-20 md:py-28">
         <div className={frame}>
           <div className="grid gap-12 lg:grid-cols-12">
-            <Reveal className="lg:col-span-7">
+            <Reveal className="min-w-0 lg:col-span-7">
               <span className="mb-6 inline-flex items-center gap-3 font-mono text-sm text-muted-foreground">
                 <span className="h-px w-12 bg-[var(--brand)]" />
                 About the rescue
@@ -209,7 +209,7 @@ export const ShelterPublicProfilePage = () => {
                 <span className="block text-primary">Why we</span>
                 <span className="block text-primary/45">partner with them.</span>
               </h2>
-              <div className="mt-8 space-y-5 text-lg leading-relaxed text-muted-foreground">
+              <div className="mt-8 space-y-5 text-lg leading-relaxed text-muted-foreground [overflow-wrap:anywhere]">
                 <p>{shelter.description}</p>
                 <p>
                   Every animal published by {shelter.name} carries its medical and
@@ -229,9 +229,9 @@ export const ShelterPublicProfilePage = () => {
               </div>
             </Reveal>
 
-            <Reveal delay={150} className="lg:col-span-5">
+            <Reveal delay={150} className="min-w-0 lg:col-span-5">
               <h3 className="font-display text-3xl tracking-tight">Get in touch</h3>
-              <p className="mt-3 text-sm text-muted-foreground">
+              <p className="mt-3 text-sm text-muted-foreground [overflow-wrap:anywhere]">
                 Visiting hours, phone, and email for {shelter.name}. Walk-ins welcome
                 during opening hours — please call ahead for same-day meet and greets.
               </p>
