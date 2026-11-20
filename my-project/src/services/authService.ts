@@ -39,6 +39,13 @@ export interface VerifyOtpResult {
   user: User;
 }
 
+export interface PasswordResetRequestResult {
+  sent: true;
+  /** null when no active account matched — the UI then stays on a generic notice. */
+  resetId: string | null;
+  email?: string;
+}
+
 export interface ResendOtpResult {
   challengeId: string;
   message: string;
@@ -111,6 +118,38 @@ export const resendOtp = async (challengeId: string): Promise<ResendOtpResult> =
   });
 };
 
+/** Emails a 6-digit reset code; the response never confirms whether the email exists. */
+export const requestPasswordReset = async (
+  email: string,
+): Promise<PasswordResetRequestResult> => {
+  return apiRequest<PasswordResetRequestResult>('/auth/forgot-password', {
+    method: 'POST',
+    body: { email },
+  });
+};
+
+/** Checks the emailed code so the form can advance to the new-password step. */
+export const verifyResetCode = async (input: {
+  resetId: string;
+  code: string;
+}): Promise<{ verified: true }> => {
+  return apiRequest<{ verified: true }>('/auth/verify-reset-code', {
+    method: 'POST',
+    body: input,
+  });
+};
+
+export const resetPassword = async (input: {
+  resetId: string;
+  code: string;
+  password: string;
+}): Promise<{ reset: true }> => {
+  return apiRequest<{ reset: true }>('/auth/reset-password', {
+    method: 'POST',
+    body: input,
+  });
+};
+
 /** The backend session check: identity always comes from the authenticated API. */
 export const me = async (): Promise<User> => {
   const { user } = await apiRequest<{ user: User }>('/auth/me', { auth: 'full' });
@@ -161,6 +200,9 @@ export const authService = {
   login,
   verifyOtp,
   resendOtp,
+  requestPasswordReset,
+  verifyResetCode,
+  resetPassword,
   me,
   logoutSession,
   updateMe,

@@ -4,6 +4,9 @@ import {
   loginUser,
   logoutUser,
   refreshSession,
+  requestPasswordResetHandler,
+  resetPasswordHandler,
+  verifyResetCodeHandler,
   resendOtpHandler,
   resendSignupOtpHandler,
   signupUser,
@@ -15,7 +18,10 @@ import { authenticate } from '../middlewares/authenticate.js';
 import { requirePortalSession } from '../middlewares/authorize.js';
 import { validate } from '../middlewares/validate.js';
 import {
+  forgotPasswordSchema,
   loginSchema,
+  resetPasswordSchema,
+  verifyResetCodeSchema,
   resendOtpSchema,
   resendSignupOtpSchema,
   signupSchema,
@@ -32,6 +38,9 @@ authRoutes.post('/resend-signup-otp', validate(resendSignupOtpSchema), resendSig
 authRoutes.post('/login', validate(loginSchema), loginUser);
 authRoutes.post('/verify-otp', validate(verifyOtpSchema), verifyOtpHandler);
 authRoutes.post('/resend-otp', validate(resendOtpSchema), resendOtpHandler);
+authRoutes.post('/forgot-password', validate(forgotPasswordSchema), requestPasswordResetHandler);
+authRoutes.post('/verify-reset-code', validate(verifyResetCodeSchema), verifyResetCodeHandler);
+authRoutes.post('/reset-password', validate(resetPasswordSchema), resetPasswordHandler);
 authRoutes.post('/refresh', refreshSession);
 authRoutes.post('/logout', logoutUser);
 authRoutes.get('/me', authenticate, requirePortalSession, getCurrentUser);

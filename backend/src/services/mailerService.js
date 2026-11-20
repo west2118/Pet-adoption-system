@@ -14,6 +14,7 @@ import {
   inquiryReplyHtml,
   loginOtpEmailHtml,
   signupOtpEmailHtml,
+  passwordResetEmailHtml,
 } from './emailTemplates.js';
 
 /**
@@ -270,6 +271,17 @@ export const sendSignupOtpEmail = async ({ to, name, code }) =>
     to,
     subject: `Verify your email for Paws&Homes: ${code}`,
     html: signupOtpEmailHtml({ name, code }),
+  });
+
+/* ------------------------------------------------------------------ *
+ * Password reset OTP email
+ * ------------------------------------------------------------------ */
+
+export const sendPasswordResetEmail = async ({ to, name, code }) =>
+  send({
+    to,
+    subject: `Reset your Paws&Homes password: ${code}`,
+    html: passwordResetEmailHtml({ name, code }),
   });
 
 

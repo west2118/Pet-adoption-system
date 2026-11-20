@@ -46,3 +46,31 @@ export const signupSchema = z
 
 /** The validated values handed to `signup()` (confirm is verification only). */
 export type SignupValues = z.infer<typeof signupSchema>;
+
+/** Step 1 of the password reset: the email that receives the 6-digit code. */
+export const forgotPasswordSchema = z.object({
+  email: z
+    .string()
+    .trim()
+    .pipe(z.email('Enter a valid email address.')),
+});
+
+export type ForgotPasswordValues = z.infer<typeof forgotPasswordSchema>;
+
+/** Final step of the reset: the replacement password, entered twice. */
+export const newPasswordSchema = z
+  .object({
+    password: z.string().min(8, 'Password must be at least 8 characters.'),
+    confirm: z.string(),
+  })
+  .superRefine(({ password, confirm }, ctx) => {
+    const message =
+      confirm !== password
+        ? 'Passwords do not match.'
+        : confirm.trim() === ''
+          ? 'Please confirm your new password.'
+          : null;
+    if (message) ctx.addIssue({ code: 'custom', path: ['confirm'], message });
+  });
+
+export type NewPasswordValues = z.infer<typeof newPasswordSchema>;

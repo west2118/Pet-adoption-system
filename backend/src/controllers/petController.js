@@ -11,6 +11,7 @@ const toNumber = (value) => {
 };
 
 export const listPets = async (req, res) => {
+  const started = performance.now();
   const { page, limit, offset } = parsePagination(req.query);
   const latitude = toNumber(req.query.lat);
   const longitude = toNumber(req.query.lng);
@@ -43,13 +44,16 @@ export const listPets = async (req, res) => {
     sortByDistance: hasOrigin && req.query.sort === 'distance',
   };
   const { pets, total } = await getPublicPets(filters, { limit, offset });
+  res.setHeader('Server-Timing', `pets;dur=${(performance.now() - started).toFixed(1)};desc="Pet database read and mapping"`);
   return sendSuccess(res, { pets }, undefined, buildMeta(page, limit, total));
 };
 
 /** Facet options + hero counts (optionally scoped to one shelter, no pagination needed). */
 export const getPetFacets = async (req, res) => {
+  const started = performance.now();
   const shelterId = req.query.shelterId || undefined;
   const facets = await getPublicPetFacets(shelterId);
+  res.setHeader('Server-Timing', `facets;dur=${(performance.now() - started).toFixed(1)};desc="Pet facet database reads"`);
   return sendSuccess(res, facets);
 };
 

@@ -32,6 +32,11 @@ export const findLoginChallengeById = async (challengeId) => {
   return rows[0] ?? null;
 };
 
+/** Drops a challenge so its code can never be used again (e.g. after a resend). */
+export const deleteLoginChallenge = async (challengeId) => {
+  await pool.query('DELETE FROM login_challenges WHERE id = $1', [challengeId]);
+};
+
 export const recordChallengeAttempt = async (challengeId) => {
   const { rows } = await pool.query(
     `UPDATE login_challenges

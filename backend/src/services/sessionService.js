@@ -87,6 +87,14 @@ export const rotateSession = async (presentedToken) => {
   return { user: mapUser(userRow), ...tokens };
 };
 
+/** Revokes every session for an account (used after a password reset). */
+export const revokeAllSessions = async (userId) => {
+  const { rowCount } = await pool.query('DELETE FROM refresh_tokens WHERE user_id = $1', [
+    userId,
+  ]);
+  return rowCount;
+};
+
 /** Revokes the presented session (best-effort — logout must always succeed). */
 export const revokeSession = async (presentedToken) => {
   if (!presentedToken) return 0;

@@ -1,5 +1,15 @@
-export { loginSchema, signupSchema } from './auth';
-export type { LoginValues, SignupValues } from './auth';
+export {
+  forgotPasswordSchema,
+  loginSchema,
+  newPasswordSchema,
+  signupSchema,
+} from './auth';
+export type {
+  ForgotPasswordValues,
+  LoginValues,
+  NewPasswordValues,
+  SignupValues,
+} from './auth';
 export { petListingFormSchema } from './petListing';
 export type { PetListingFormValues } from './petListing';
 export {
