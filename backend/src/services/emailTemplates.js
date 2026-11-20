@@ -377,6 +377,7 @@ export const inquiryReplyHtml = ({
   name,
   petName,
   shelterName,
+  shelterEmail,
   message,
   appUrl,
 }) =>
@@ -389,7 +390,11 @@ export const inquiryReplyHtml = ({
         `You received a message from <strong>${escapeHtml(shelterName)}</strong> about your inquiry for <strong>${escapeHtml(petName)}</strong>:`,
       ),
       note(escapeHtml(message).replace(/\r?\n/g, '<br />')),
-      paragraph('Reply to this email to contact the shelter directly.'),
+      paragraph(
+        shelterEmail
+          ? `Reply to this email to contact the shelter directly at <a href="mailto:${escapeHtml(shelterEmail)}" style="color:${BRAND.accent};font-weight:bold;">${escapeHtml(shelterEmail)}</a>.`
+          : 'Reply to this email to contact the shelter directly.',
+      ),
       siteButton(appUrl),
     ].join('\n                '),
     footer:

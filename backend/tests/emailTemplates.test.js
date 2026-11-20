@@ -228,11 +228,12 @@ describe('application status emails (styled HTML)', () => {
     assert.match(html, /Another adopter&#39;s application/);
   });
 
-  it('inquiry reply is styled, escapes the message and preserves line breaks', () => {
+  it('inquiry reply is styled, escapes the message and shows the shelter email', () => {
     const html = inquiryReplyHtml({
       name: 'Jane <Doe>',
       petName: 'Bruno',
       shelterName: 'Paws & Homes',
+      shelterEmail: 'pawsnadtails@gmail.com',
       message: 'Hello <script>alert(1)</script>\nSecond line',
       appUrl: APP_URL,
     });
@@ -240,8 +241,12 @@ describe('application status emails (styled HTML)', () => {
     assert.match(html, /<h1[^>]*>Reply from Paws &amp; Homes<\/h1>/);
     assert.match(html, /Hi Jane &lt;Doe&gt;,/);
     assert.match(html, /Hello &lt;script&gt;alert\(1\)&lt;\/script&gt;<br \/>Second line/);
+    assert.match(html, /Reply to this email to contact the shelter directly at/);
+    assert.match(
+      html,
+      /<a href="mailto:pawsnadtails@gmail\.com"[^>]*>pawsnadtails@gmail\.com<\/a>/,
+    );
     assert.match(html, new RegExp(`href="${APP_URL}"`));
-    assert.doesNotMatch(html, /href="[^"]*\/pets\/pet-1"/);
     assert.match(html, /You are receiving this email because you sent an inquiry/);
     assert.doesNotMatch(html, /<script>/);
   });

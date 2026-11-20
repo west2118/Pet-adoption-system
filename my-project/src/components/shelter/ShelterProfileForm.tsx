@@ -1,10 +1,9 @@
-import { Check, ImagePlus, X } from 'lucide-react';
+import { ImagePlus } from 'lucide-react';
 import type { ChangeEvent, FormEvent } from 'react';
 
 import { ValidatedInput, ValidatedTextarea } from '@/components/shared';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/Card';
 import { Label, Textarea } from '@/components/ui/Form';
-import { Button } from '@/components/ui/button';
 import type { ShelterProfileFormValues } from '@/data/shelterProfile';
 import { IMAGE_ACCEPT } from '@/lib/imageFiles';
 
@@ -15,7 +14,6 @@ export interface ShelterProfileFormProps {
   onLogoFile: (file: File) => void;
   uploadingLogo: boolean;
   onSubmit: () => void;
-  onCancel: () => void;
 }
 
 /** Editable shelter profile: organization, contact details, and public story. */
@@ -26,7 +24,6 @@ export const ShelterProfileForm = ({
   onLogoFile,
   uploadingLogo,
   onSubmit,
-  onCancel,
 }: ShelterProfileFormProps) => {
   const handleSubmit = (e: FormEvent) => {
     e.preventDefault();
@@ -187,14 +184,6 @@ export const ShelterProfileForm = ({
               onChange={(e) => onChange('adoptionPolicy', e.target.value)}
               placeholder="e.g. Home visit required, adoption fee covers vaccination…"
             />
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <Button type="submit" size="sm">
-              <Check className="size-4" /> Save shelter profile
-            </Button>
-            <Button type="button" size="sm" variant="outline" onClick={onCancel}>
-              <X className="size-4" /> Cancel
-            </Button>
           </div>
         </CardContent>
       </Card>

@@ -10,52 +10,62 @@ import {
   FileCheck2,
   UploadCloud,
   X,
-} from 'lucide-react';
-import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { toast } from 'react-toastify';
-import { GridOverlay, LocationMapPreview, Reveal } from '@/components/shared';
-import { Button } from '@/components/ui/button';
+} from "lucide-react";
+import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { toast } from "react-toastify";
+import { GridOverlay, LocationMapPreview, Reveal } from "@/components/shared";
+import { Button } from "@/components/ui/button";
 import {
   ValidatedInput,
   ValidatedTextarea,
   focusFirstError,
   isBlank,
   isEmail,
-} from '@/components/shared';
-import { ApiError, apiErrorMessage } from '@/lib/apiClient';
+} from "@/components/shared";
+import { ApiError, apiErrorMessage } from "@/lib/apiClient";
 import {
   IMAGE_ACCEPT,
   IMAGE_SIZE_MESSAGE,
   IMAGE_TYPE_MESSAGE,
   MAX_IMAGE_BYTES,
   isAllowedImageFile,
-} from '@/lib/imageFiles';
-import { uploadImage } from '@/services/api/uploadService';
-import { locateAddress, toGeolocationFailure } from '@/lib/geocode';
-import { authService } from '@/services/authService';
+} from "@/lib/imageFiles";
+import { uploadImage } from "@/services/api/uploadService";
+import { locateAddress, toGeolocationFailure } from "@/lib/geocode";
+import { authService } from "@/services/authService";
 
-const frame = 'mx-auto w-full max-w-[1400px] px-6 lg:px-12';
+const frame = "mx-auto w-full max-w-[1400px] px-6 lg:px-12";
 
-const labelClass = 'font-mono text-[11px] uppercase tracking-[0.18em] text-muted-foreground';
-const controlClass = 'h-11 rounded-lg bg-background text-[15px]';
+const labelClass =
+  "font-mono text-[11px] uppercase tracking-[0.18em] text-muted-foreground";
+const controlClass = "h-11 rounded-lg bg-background text-[15px]";
 
 /** Mirrors the review stages the platform applies to a shelter application. */
 const REVIEW_STEPS = [
-  { title: 'Submitted', copy: 'We email you a confirmation as soon as your form lands.' },
-  { title: 'Under review', copy: 'Our team verifies your details and rescue credentials.' },
-  { title: 'Approved', copy: 'Your shelter account is activated and listings open up.' },
+  {
+    title: "Submitted",
+    copy: "We email you a confirmation as soon as your form lands.",
+  },
+  {
+    title: "Under review",
+    copy: "Our team verifies your details and rescue credentials.",
+  },
+  {
+    title: "Approved",
+    copy: "Your shelter account is activated and listings open up.",
+  },
 ];
 
 const EMPTY_FORM = {
-  name: '',
-  location: '',
-  address: '',
-  phone: '',
-  email: '',
-  operatingHours: '',
-  description: '',
-  imageUrl: '',
+  name: "",
+  location: "",
+  address: "",
+  phone: "",
+  email: "",
+  operatingHours: "",
+  description: "",
+  imageUrl: "",
 };
 
 export const ShelterOnboardingPage = () => {
@@ -65,16 +75,25 @@ export const ShelterOnboardingPage = () => {
   const [uploadingImage, setUploadingImage] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [locating, setLocating] = useState(false);
-  const [coords, setCoords] = useState<{ latitude: number; longitude: number } | null>(null);
-  const [fieldErrors, setFieldErrors] = useState<Partial<Record<keyof typeof EMPTY_FORM, string>>>({});
+  const [coords, setCoords] = useState<{
+    latitude: number;
+    longitude: number;
+  } | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<
+    Partial<Record<keyof typeof EMPTY_FORM, string>>
+  >({});
 
   // Only reachable with a valid onboarding cookie (issued at shelter signup).
   // The backend session check decides — there is no client-side token flag.
   useEffect(() => {
     let cancelled = false;
     authService.getMyShelterApplication().catch((err) => {
-      if (!cancelled && err instanceof ApiError && [401, 403].includes(err.status)) {
-        navigate('/signup', { replace: true });
+      if (
+        !cancelled &&
+        err instanceof ApiError &&
+        [401, 403].includes(err.status)
+      ) {
+        navigate("/signup", { replace: true });
       }
     });
     return () => {
@@ -86,7 +105,7 @@ export const ShelterOnboardingPage = () => {
     setForm((prev) => ({ ...prev, [key]: value }));
     setFieldErrors((prev) => ({ ...prev, [key]: undefined }));
     // A hand-typed address no longer matches the pinned coordinates.
-    if (key === 'address') setCoords(null);
+    if (key === "address") setCoords(null);
   };
 
   const handleImageFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -103,15 +122,17 @@ export const ShelterOnboardingPage = () => {
 
     // Local object URL only for the instant preview — nothing base64 is kept.
     const previewUrl = URL.createObjectURL(file);
-    set('imageUrl', previewUrl);
+    set("imageUrl", previewUrl);
     setUploadingImage(true);
     try {
-      const url = await uploadImage(file, 'shelters');
-      set('imageUrl', url);
+      const url = await uploadImage(file, "shelters");
+      set("imageUrl", url);
       setFieldErrors((prev) => ({ ...prev, imageUrl: undefined }));
     } catch (err) {
-      set('imageUrl', '');
-      toast.error(apiErrorMessage(err, 'Could not upload the logo. Please try again.'));
+      set("imageUrl", "");
+      toast.error(
+        apiErrorMessage(err, "Could not upload the logo. Please try again."),
+      );
     } finally {
       URL.revokeObjectURL(previewUrl);
       setUploadingImage(false);
@@ -123,7 +144,7 @@ export const ShelterOnboardingPage = () => {
     try {
       const { address, location, latitude, longitude } = await locateAddress();
       if (!address) {
-        toast.error('Could not determine your address from that location.');
+        toast.error("Could not determine your address from that location.");
         return;
       }
       setForm((prev) => ({
@@ -132,16 +153,23 @@ export const ShelterOnboardingPage = () => {
         location: location || prev.location,
       }));
       setCoords({ latitude, longitude });
-      setFieldErrors((prev) => ({ ...prev, address: undefined, location: undefined }));
-      toast.success('Address filled from your current location.');
+      setFieldErrors((prev) => ({
+        ...prev,
+        address: undefined,
+        location: undefined,
+      }));
+      toast.success("Address filled from your current location.");
     } catch (err) {
       const failure = toGeolocationFailure(err);
       const messages: Record<typeof failure, string> = {
-        unsupported: 'Location is not supported on this device.',
-        denied: 'Location access was denied. Enable it in your browser to continue.',
-        unavailable: 'Your location could not be determined. Please enter it manually.',
-        timeout: 'Getting your location timed out. Please try again.',
-        geocode_failed: 'Could not look up that address. Please enter it manually.',
+        unsupported: "Location is not supported on this device.",
+        denied:
+          "Location access was denied. Enable it in your browser to continue.",
+        unavailable:
+          "Your location could not be determined. Please enter it manually.",
+        timeout: "Getting your location timed out. Please try again.",
+        geocode_failed:
+          "Could not look up that address. Please enter it manually.",
       };
       toast.error(messages[failure]);
     } finally {
@@ -153,22 +181,25 @@ export const ShelterOnboardingPage = () => {
     e.preventDefault();
 
     if (uploadingImage) {
-      toast.info('The logo is still uploading. Please wait a moment.');
+      toast.info("The logo is still uploading. Please wait a moment.");
       return;
     }
     const next: typeof fieldErrors = {};
-    if (isBlank(form.name)) next.name = 'Please enter the shelter name.';
-    if (isBlank(form.location)) next.location = 'Please enter the city / region.';
-    if (isBlank(form.address)) next.address = 'Please enter the full address.';
-    if (isBlank(form.phone)) next.phone = 'Please enter a contact phone.';
-    if (isBlank(form.email)) next.email = 'Please enter the shelter email.';
-    else if (!isEmail(form.email)) next.email = 'Enter a valid shelter email.';
-    if (isBlank(form.operatingHours)) next.operatingHours = 'Please enter operating hours.';
-    if (isBlank(form.description)) next.description = 'Please describe the shelter.';
+    if (isBlank(form.name)) next.name = "Please enter the shelter name.";
+    if (isBlank(form.location))
+      next.location = "Please enter the city / region.";
+    if (isBlank(form.address)) next.address = "Please enter the full address.";
+    if (isBlank(form.phone)) next.phone = "Please enter a contact phone.";
+    if (isBlank(form.email)) next.email = "Please enter the shelter email.";
+    else if (!isEmail(form.email)) next.email = "Enter a valid shelter email.";
+    if (isBlank(form.operatingHours))
+      next.operatingHours = "Please enter operating hours.";
+    if (isBlank(form.description))
+      next.description = "Please describe the shelter.";
     else if (form.description.trim().length < 20)
-      next.description = 'Description must be at least 20 characters.';
+      next.description = "Description must be at least 20 characters.";
     if (isBlank(form.imageUrl)) {
-      next.imageUrl = 'Please upload a shelter logo/photo.';
+      next.imageUrl = "Please upload a shelter logo/photo.";
     }
     setFieldErrors(next);
     if (Object.keys(next).length > 0) {
@@ -182,16 +213,23 @@ export const ShelterOnboardingPage = () => {
         ...form,
         imageUrl: form.imageUrl.trim(),
       });
-      toast.success('Shelter application submitted! We will email you once reviewed.');
-      navigate('/onboarding/shelter/pending', { replace: true });
+      toast.success(
+        "Shelter application submitted! We will email you once reviewed.",
+      );
+      navigate("/onboarding/shelter/pending", { replace: true });
     } catch (err) {
       // Already submitted → go straight to the pending screen.
       if (err instanceof ApiError && err.status === 409) {
-        toast.info('You already submitted an application. Checking its status…');
-        navigate('/onboarding/shelter/pending', { replace: true });
+        toast.info(
+          "You already submitted an application. Checking its status…",
+        );
+        navigate("/onboarding/shelter/pending", { replace: true });
         return;
       }
-      const message = err instanceof ApiError ? err.message : 'Unable to submit. Please try again.';
+      const message =
+        err instanceof ApiError
+          ? err.message
+          : "Unable to submit. Please try again.";
       setError(message);
     } finally {
       setSubmitting(false);
@@ -223,8 +261,8 @@ export const ShelterOnboardingPage = () => {
           </Reveal>
 
           <p className="mx-auto mt-8 max-w-2xl text-center text-muted-foreground">
-            Tell us about your rescue. Once submitted, our team reviews your application and
-            emails you the moment your account is approved.
+            Tell us about your rescue. Once submitted, our team reviews your
+            application and emails you the moment your account is approved.
           </p>
         </div>
       </section>
@@ -253,7 +291,9 @@ export const ShelterOnboardingPage = () => {
                           {i + 1}
                         </span>
                         <span className="min-w-0">
-                          <span className="block font-medium">{step.title}</span>
+                          <span className="block font-medium">
+                            {step.title}
+                          </span>
                           <span className="mt-1 block text-sm leading-relaxed text-muted-foreground">
                             {step.copy}
                           </span>
@@ -275,7 +315,9 @@ export const ShelterOnboardingPage = () => {
               <div className="rounded-lg border border-border bg-card p-6 md:p-10">
                 <div className="flex items-center gap-3">
                   <FileCheck2 className="size-5 text-primary" />
-                  <h2 className="text-xl font-medium tracking-tight">Organization profile</h2>
+                  <h2 className="text-xl font-medium tracking-tight">
+                    Organization profile
+                  </h2>
                 </div>
                 <p className="mt-2 text-sm text-muted-foreground">
                   All fields below are required for verification.
@@ -288,13 +330,16 @@ export const ShelterOnboardingPage = () => {
                 >
                   <div className="space-y-2 sm:col-span-2">
                     <label className={labelClass} htmlFor="ob-name">
-                      Shelter name <span className="text-destructive font-medium ml-0.5">*</span>
+                      Shelter name{" "}
+                      <span className="text-destructive font-medium ml-0.5">
+                        *
+                      </span>
                     </label>
                     <ValidatedInput
                       id="ob-name"
                       required
                       value={form.name}
-                      onChange={(e) => set('name', e.target.value)}
+                      onChange={(e) => set("name", e.target.value)}
                       placeholder="Happy Tails Rescue"
                       error={fieldErrors.name}
                       className={controlClass}
@@ -303,7 +348,10 @@ export const ShelterOnboardingPage = () => {
 
                   <div className="space-y-2">
                     <label className={labelClass} htmlFor="ob-location">
-                      City / region <span className="text-destructive font-medium ml-0.5">*</span>
+                      City / region{" "}
+                      <span className="text-destructive font-medium ml-0.5">
+                        *
+                      </span>
                     </label>
                     <div className="relative">
                       <MapPin className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
@@ -311,7 +359,7 @@ export const ShelterOnboardingPage = () => {
                         id="ob-location"
                         required
                         value={form.location}
-                        onChange={(e) => set('location', e.target.value)}
+                        onChange={(e) => set("location", e.target.value)}
                         placeholder="Quezon City"
                         error={fieldErrors.location}
                         className={`${controlClass} pl-9`}
@@ -321,7 +369,10 @@ export const ShelterOnboardingPage = () => {
 
                   <div className="space-y-2">
                     <label className={labelClass} htmlFor="ob-phone">
-                      Contact phone <span className="text-destructive font-medium ml-0.5">*</span>
+                      Contact phone{" "}
+                      <span className="text-destructive font-medium ml-0.5">
+                        *
+                      </span>
                     </label>
                     <div className="relative">
                       <Phone className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
@@ -329,7 +380,7 @@ export const ShelterOnboardingPage = () => {
                         id="ob-phone"
                         required
                         value={form.phone}
-                        onChange={(e) => set('phone', e.target.value)}
+                        onChange={(e) => set("phone", e.target.value)}
                         placeholder="+63 2 8555 0101"
                         error={fieldErrors.phone}
                         className={`${controlClass} pl-9`}
@@ -340,7 +391,10 @@ export const ShelterOnboardingPage = () => {
                   <div className="space-y-2 sm:col-span-2">
                     <div className="flex flex-wrap items-center justify-between gap-3">
                       <label className={labelClass} htmlFor="ob-address">
-                        Full address <span className="text-destructive font-medium ml-0.5">*</span>
+                        Full address{" "}
+                        <span className="text-destructive font-medium ml-0.5">
+                          *
+                        </span>
                       </label>
                       <button
                         type="button"
@@ -353,14 +407,14 @@ export const ShelterOnboardingPage = () => {
                         ) : (
                           <LocateFixed className="size-3.5" />
                         )}
-                        {locating ? 'Locating…' : 'Use my location'}
+                        {locating ? "Locating…" : "Use my location"}
                       </button>
                     </div>
                     <ValidatedInput
                       id="ob-address"
                       required
                       value={form.address}
-                      onChange={(e) => set('address', e.target.value)}
+                      onChange={(e) => set("address", e.target.value)}
                       placeholder="123 Bayani St, Quezon City"
                       error={fieldErrors.address}
                       className={controlClass}
@@ -377,7 +431,10 @@ export const ShelterOnboardingPage = () => {
 
                   <div className="space-y-2">
                     <label className={labelClass} htmlFor="ob-email">
-                      Shelter email <span className="text-destructive font-medium ml-0.5">*</span>
+                      Shelter email{" "}
+                      <span className="text-destructive font-medium ml-0.5">
+                        *
+                      </span>
                     </label>
                     <div className="relative">
                       <Mail className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
@@ -386,17 +443,23 @@ export const ShelterOnboardingPage = () => {
                         type="email"
                         required
                         value={form.email}
-                        onChange={(e) => set('email', e.target.value)}
+                        onChange={(e) => set("email", e.target.value)}
                         placeholder="hello@happytails.ph"
                         error={fieldErrors.email}
                         className={`${controlClass} pl-9`}
                       />
                     </div>
+                    <p className="text-xs leading-relaxed text-muted-foreground">
+                      Use an email address that exists and you can access
+                    </p>
                   </div>
 
                   <div className="space-y-2">
                     <label className={labelClass} htmlFor="ob-hours">
-                      Operating hours <span className="text-destructive font-medium ml-0.5">*</span>
+                      Operating hours{" "}
+                      <span className="text-destructive font-medium ml-0.5">
+                        *
+                      </span>
                     </label>
                     <div className="relative">
                       <Clock className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
@@ -404,7 +467,7 @@ export const ShelterOnboardingPage = () => {
                         id="ob-hours"
                         required
                         value={form.operatingHours}
-                        onChange={(e) => set('operatingHours', e.target.value)}
+                        onChange={(e) => set("operatingHours", e.target.value)}
                         placeholder="Mon–Sat, 9:00 AM – 6:00 PM"
                         error={fieldErrors.operatingHours}
                         className={`${controlClass} pl-9`}
@@ -414,13 +477,16 @@ export const ShelterOnboardingPage = () => {
 
                   <div className="space-y-2 sm:col-span-2">
                     <label className={labelClass} htmlFor="ob-desc">
-                      About the shelter <span className="text-destructive font-medium ml-0.5">*</span>
+                      About the shelter{" "}
+                      <span className="text-destructive font-medium ml-0.5">
+                        *
+                      </span>
                     </label>
                     <ValidatedTextarea
                       id="ob-desc"
                       required
                       value={form.description}
-                      onChange={(e) => set('description', e.target.value)}
+                      onChange={(e) => set("description", e.target.value)}
                       placeholder="Describe your mission, the animals you rescue, and your adoption process…"
                       error={fieldErrors.description}
                       className="min-h-32 rounded-lg bg-background text-[15px]"
@@ -429,7 +495,10 @@ export const ShelterOnboardingPage = () => {
 
                   <div className="space-y-3 sm:col-span-2">
                     <label className={labelClass} htmlFor="ob-image-file">
-                      Shelter Logo / Photo <span className="text-destructive font-medium ml-0.5">*</span>
+                      Shelter Logo / Photo{" "}
+                      <span className="text-destructive font-medium ml-0.5">
+                        *
+                      </span>
                     </label>
 
                     {/* Upload Drop/Picker Area */}
@@ -464,12 +533,14 @@ export const ShelterOnboardingPage = () => {
                           />
                           <div className="min-w-0 flex-1">
                             <p className="truncate text-xs font-mono text-muted-foreground">
-                              {form.imageUrl.startsWith('blob:')
-                                ? 'Uploading image…'
+                              {form.imageUrl.startsWith("blob:")
+                                ? "Uploading image…"
                                 : form.imageUrl}
                             </p>
                             <span className="text-xs text-primary font-medium">
-                              {uploadingImage ? 'Uploading…' : 'Ready for approval'}
+                              {uploadingImage
+                                ? "Uploading…"
+                                : "Ready for approval"}
                             </span>
                           </div>
                           <Button
@@ -477,7 +548,7 @@ export const ShelterOnboardingPage = () => {
                             variant="ghost"
                             size="sm"
                             className="h-8 w-8 p-0 text-muted-foreground hover:text-destructive"
-                            onClick={() => set('imageUrl', '')}
+                            onClick={() => set("imageUrl", "")}
                             title="Remove image"
                           >
                             <X className="size-4" />
@@ -486,7 +557,10 @@ export const ShelterOnboardingPage = () => {
                       )}
 
                       {fieldErrors.imageUrl && (
-                        <p role="alert" className="text-[13px] text-destructive">
+                        <p
+                          role="alert"
+                          className="text-[13px] text-destructive"
+                        >
                           {fieldErrors.imageUrl}
                         </p>
                       )}
@@ -508,7 +582,7 @@ export const ShelterOnboardingPage = () => {
                       disabled={submitting || uploadingImage}
                       className="h-12 w-full rounded-full text-[15px] sm:w-auto sm:px-10"
                     >
-                      {submitting ? 'Submitting…' : 'Submit for approval'}
+                      {submitting ? "Submitting…" : "Submit for approval"}
                     </Button>
                   </div>
                 </form>

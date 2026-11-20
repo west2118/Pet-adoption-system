@@ -243,6 +243,7 @@ export const sendInquiryReplyEmail = async ({
       name,
       petName,
       shelterName,
+      shelterEmail,
       message,
       appUrl,
     }),
