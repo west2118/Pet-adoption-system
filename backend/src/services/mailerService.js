@@ -17,7 +17,8 @@ import {
 } from './emailTemplates.js';
 
 /**
- * Transactional email. Uses SMTP when SMTP_USER and SMTP_PASS are configured;
+ * Transactional email. Uses Brevo HTTPS when selected or a key is set
+ * in auto mode. Otherwise uses SMTP when SMTP_USER and SMTP_PASS are configured;
  * otherwise logs the message so the approval workflow still works in local
  * development.
  *
@@ -33,9 +34,12 @@ import {
  * MAIL_FROM is optional and defaults to SMTP_USER.
  *
  * Never throws: always resolves to a status object so callers can persist
- * and report the outcome (`sent`, `stubbed`, or `error`).
+ * and report the outcome (`sent`, `stubbed`, or `error`). Verification flows
+ * require successful delivery and turn failures into an actionable API error.
  */
-const transporter = env.SMTP_USER && env.SMTP_PASS
+const useBrevo = env.EMAIL_PROVIDER === 'brevo' ||
+  (env.EMAIL_PROVIDER === 'auto' && Boolean(env.BREVO_API_KEY));
+const transporter = !useBrevo && env.SMTP_USER && env.SMTP_PASS
   ? nodemailer.createTransport({
       host: env.SMTP_HOST,
       port: env.SMTP_PORT,
@@ -50,9 +54,44 @@ const transporter = env.SMTP_USER && env.SMTP_PASS
 
 const mailFrom = env.MAIL_FROM || env.SMTP_USER;
 
-export const isMailerConfigured = () => transporter !== null;
+const brevoSender = () => {
+  const value = env.MAIL_FROM?.trim() || '';
+  const match = value.match(/^([^<>]+)\s*<([^<>]+)>$/);
+  const email = (match ? match[2] : value).trim();
+  if (!/^[^\s<>@]+@[^\s<>@]+\.[^\s<>@]+$/.test(email)) return null;
+  return { email, ...(match ? { name: match[1].trim() } : {}) };
+};
+
+export const isMailerConfigured = () => useBrevo
+  ? Boolean(env.BREVO_API_KEY && !env.BREVO_API_KEY.startsWith('xsmtpsib-') && brevoSender())
+  : transporter !== null;
 
 const send = async ({ to, subject, html, replyTo }) => {
+  if (useBrevo) {
+    try {
+      if (!isMailerConfigured()) {
+        throw new Error('Brevo requires BREVO_API_KEY (not an SMTP key) and a valid MAIL_FROM sender.');
+      }
+      const response = await fetch('https://api.brevo.com/v3/smtp/email', {
+        method: 'POST',
+        headers: { 'api-key': env.BREVO_API_KEY, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          sender: brevoSender(), to: [{ email: to }], subject, htmlContent: html,
+          ...(replyTo ? { replyTo: { email: replyTo } } : {}),
+        }),
+        signal: AbortSignal.timeout(15000),
+      });
+      const data = await response.json();
+      if (!response.ok || !data.messageId) {
+        // Do not log provider response bodies, which can echo request data.
+        throw new Error(`Brevo rejected email (HTTP ${response.status}). Check Brevo transactional logs and sender verification.`);
+      }
+      return { sent: true, stubbed: false, id: data.messageId };
+    } catch (error) {
+      logger.error('Failed to send email via Brevo:', error);
+      return { sent: false, stubbed: false, error };
+    }
+  }
   if (!transporter) {
     logger.info(`[mailer:stub] To: ${to} | Subject: ${subject}`);
     return { sent: false, stubbed: true };

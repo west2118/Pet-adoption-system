@@ -8,6 +8,7 @@ process.env.JWT_SECRET = 'test-secret-at-least-16-chars';
 // `delete` alone is not enough — dotenv re-reads backend/.env when env.js
 // loads, which would build a real SMTP transport inside the tests. An empty
 // string keeps it stubbed (dotenv never overwrites an existing key).
+process.env.EMAIL_PROVIDER = 'smtp';
 process.env.SMTP_USER = '';
 process.env.SMTP_PASS = '';
 

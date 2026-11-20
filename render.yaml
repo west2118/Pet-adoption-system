@@ -8,12 +8,11 @@
 #
 # `npm start` runs the API only, on 0.0.0.0:$PORT, and serves my-project/dist.
 #
-# Database: there is no Render Postgres. DATABASE_URL must be the Supabase
-# "Session pooler" URI (aws-0-<region>.pooler.supabase.com:5432) — Supabase's
-# direct host is IPv6-only, which Render cannot reach. Port 6543 (transaction
-# mode) also works. The API refuses to boot with a local or direct-host URL.
+# Database: set DATABASE_URL to the Supabase session pooler PostgreSQL connection string.
+# Migrations use the corresponding direct endpoint automatically.
+# Set DATABASE_URL in the Render dashboard; local .env files are not deployed.
 #
-# Secrets: DATABASE_URL / ADMIN_PASSWORD / SMTP_* are not in the repo, so they
+# Secrets: DATABASE_URL / ADMIN_PASSWORD / BREVO_API_KEY are not in the repo, so they
 # are marked `sync: false` and must be entered once in the Render dashboard.
 services:
   - type: web
@@ -39,15 +38,10 @@ services:
         sync: false
       - key: ADMIN_PASSWORD
         sync: false
-      - key: SMTP_HOST
-        value: smtp.gmail.com
-      - key: SMTP_PORT
-        value: "587"
-      - key: SMTP_SECURE
-        value: "false"
-      - key: SMTP_USER
-        sync: false
-      - key: SMTP_PASS
+      # HTTPS email delivery works on Render Free (SMTP ports are blocked).
+      - key: EMAIL_PROVIDER
+        value: brevo
+      - key: BREVO_API_KEY
         sync: false
       - key: MAIL_FROM
         sync: false

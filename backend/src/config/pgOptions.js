@@ -111,3 +111,5 @@ export const buildPgConfig = (dbUrl) => {
     keepAlive: true,
   };
 };
+export const assertDatabaseUrl = assertSupabaseDatabaseUrl;
+export const migrationDatabaseUrl = (value) => { assertDatabaseUrl(value); return value; };

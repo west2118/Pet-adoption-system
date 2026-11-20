@@ -4,7 +4,7 @@ import { buildPgConfig } from './pgOptions.js';
 
 const { Pool } = pg;
 
-// Supabase is the only database. TLS, pooler limits and connection timeouts
+// Supabase is the database provider. TLS, pooler limits and connection timeouts
 // come from pgOptions.js so the API, migrations and seeds behave identically.
 export const pool = new Pool(buildPgConfig(env.DATABASE_URL));
 

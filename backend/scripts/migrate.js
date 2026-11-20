@@ -4,9 +4,9 @@ import { fileURLToPath } from 'node:url';
 import pg from 'pg';
 import { loadEnv } from '../src/config/loadEnv.js';
 import {
-  assertSupabaseDatabaseUrl,
+  assertDatabaseUrl,
   buildPgConfig,
-  isSupabaseDatabase,
+  migrationDatabaseUrl,
 } from '../src/config/pgOptions.js';
 
 loadEnv();
@@ -39,10 +39,9 @@ export const runMigrations = async (existingPool) => {
     throw new Error('DATABASE_URL is required to run migrations.');
   }
 
-  assertSupabaseDatabaseUrl(dbUrl);
+  assertDatabaseUrl(dbUrl);
 
-  const pool = existingPool || new pg.Pool(buildPgConfig(dbUrl));
-  const supabase = isSupabaseDatabase(dbUrl);
+  const pool = existingPool || new pg.Pool(buildPgConfig(migrationDatabaseUrl(dbUrl)));
   const files = fs
     .readdirSync(migrationsDir)
     .filter((f) => f.endsWith('.sql'))
@@ -50,7 +49,7 @@ export const runMigrations = async (existingPool) => {
 
   // eslint-disable-next-line no-console
   console.log(
-    `Migrating ${describeDatabase(dbUrl)}${supabase ? ' (Supabase, TLS)' : ''}...`,
+    `Migrating ${describeDatabase(dbUrl)} (Supabase, TLS)...`,
   );
 
   for (const file of files) {
