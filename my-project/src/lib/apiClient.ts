@@ -104,7 +104,30 @@ export const apiRequest = async <T>(
   return data;
 };
 
-export const apiRequestWithMeta = async <T>(
+// Share concurrent public catalogue reads, including StrictMode's effect replay.
+// Entries disappear on completion so later reads still get fresh data.
+const catalogueReads = new Map<string, Promise<{ data: unknown; meta?: ApiMeta }>>();
+
+export const apiRequestWithMeta = <T>(
+  path: string,
+  options: RequestOptions = {},
+): Promise<{ data: T; meta?: ApiMeta }> => {
+  const share = (options.method ?? 'GET') === 'GET'
+    && (options.auth ?? 'none') === 'none'
+    && /^\/(pets|shelters)([/?]|$)/.test(path);
+  if (!share) return performRequestWithMeta<T>(path, options);
+
+  const existing = catalogueReads.get(path);
+  if (existing) return existing as Promise<{ data: T; meta?: ApiMeta }>;
+
+  const request = performRequestWithMeta<T>(path, options).finally(() => {
+    catalogueReads.delete(path);
+  });
+  catalogueReads.set(path, request);
+  return request;
+};
+
+const performRequestWithMeta = async <T>(
   path: string,
   { method = 'GET', body, auth = 'none', noRefreshRetry = false }: RequestOptions = {},
 ): Promise<{ data: T; meta?: ApiMeta }> => {

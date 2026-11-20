@@ -3,11 +3,14 @@ import {
   login,
   logoutSession,
   refreshSession as rotateUserSession,
+  requestPasswordReset,
+  resetPassword,
   resendLoginOtp,
   resendSignupOtp,
   signup,
   updateProfile,
   verifyLoginOtp,
+  verifyPasswordResetCode,
   verifySignupOtp,
 } from '../services/authService.js';
 import {
@@ -88,6 +91,27 @@ export const resendOtpHandler = async (req, res) => {
   return sendSuccess(res, result, result.message);
 };
 
+
+export const requestPasswordResetHandler = async (req, res) => {
+  const result = await requestPasswordReset(req.body);
+  return sendSuccess(
+    res,
+    result,
+    'If an account exists for that email, a 6-digit reset code has been sent.',
+  );
+};
+
+export const verifyResetCodeHandler = async (req, res) => {
+  const result = await verifyPasswordResetCode(req.body);
+  return sendSuccess(res, result, 'Reset code verified. Choose a new password.');
+};
+
+export const resetPasswordHandler = async (req, res) => {
+  const result = await resetPassword(req.body);
+  // Any leftover session cookies belong to the old password.
+  clearAuthCookies(res);
+  return sendSuccess(res, result, 'Your password has been reset. You can now sign in.');
+};
 
 export const getCurrentUser = async (req, res) => {
   const user = await getMe(req.user.id);

@@ -419,6 +419,31 @@ export const signupOtpEmailHtml = ({ name, code }) =>
       'Paws&amp;Homes Account Security. Please do not reply directly to this automated email.',
   });
 
+/** Password reset OTP email (sent only when a reset was requested). */
+export const passwordResetEmailHtml = ({ name, code }) =>
+  renderEmail({
+    preheader: `Your Paws&Homes password reset code is ${code}`,
+    title: 'Reset your password',
+    content: [
+      paragraph(`Hi ${escapeHtml(name || 'there')},`),
+      paragraph(
+        'We received a request to reset the password for your Paws&amp;Homes account. Enter the following 6-digit code on the reset page to choose a new password:',
+      ),
+      `<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:16px 0 20px;">
+        <tr>
+          <td align="center" style="background-color:#fff7ed;border:2px dashed #ea580c;border-radius:12px;padding:16px 36px;">
+            <span style="font-family:monospace,Consolas,sans-serif;font-size:32px;font-weight:bold;letter-spacing:8px;color:#ea580c;">${escapeHtml(code)}</span>
+          </td>
+        </tr>
+      </table>`,
+      paragraph(
+        'This code is valid for <strong>10 minutes</strong> and can only be used once. If you did not request a password reset, you can safely ignore this email — your current password will keep working.',
+      ),
+    ].join('\n                '),
+    footer:
+      'Paws&amp;Homes Account Security. Never share this code with anyone.',
+  });
+
 /** MFA Login verification OTP email for suspicious/new locations. */
 export const loginOtpEmailHtml = ({ name, code, locationDisplay, ipAddress }) =>
   renderEmail({

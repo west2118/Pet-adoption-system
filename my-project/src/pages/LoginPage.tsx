@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/Form';
 import { PasswordInput, ValidatedInput, focusFirstError } from '@/components/shared';
 import { useAuth } from '@/hooks/useAuth';
+import { useResendCooldown } from '@/hooks/useResendCooldown';
 import { ApiError, apiErrorMessage } from '@/lib/apiClient';
 import { loginSchema } from '@/lib/validators';
 import { authService } from '@/services/authService';
@@ -43,6 +44,7 @@ export const LoginPage = () => {
   const [otpError, setOtpError] = useState<string | null>(null);
   const [resending, setResending] = useState(false);
   const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
+  const resendCooldown = useResendCooldown();
 
   const handleDigitChange = (index: number, value: string) => {
     // Only accept numeric digit
@@ -93,6 +95,7 @@ export const LoginPage = () => {
         });
         setOtpDigits(['', '', '', '', '', '']);
         setOtpError(null);
+        resendCooldown.start();
         toast.warn('Suspicious sign-in detected. Please enter the 6-digit code sent to your email.');
         return;
       }
@@ -142,13 +145,14 @@ export const LoginPage = () => {
   });
 
   const handleResendOtp = async () => {
-    if (!mfaChallenge || resending) return;
+    if (!mfaChallenge || resending || resendCooldown.isCoolingDown) return;
     setResending(true);
     setOtpError(null);
     try {
       const res = await authService.resendOtp(mfaChallenge.challengeId);
       setMfaChallenge((prev) => (prev ? { ...prev, challengeId: res.challengeId } : null));
       setOtpDigits(['', '', '', '', '', '']);
+      resendCooldown.start();
       toast.success('A new verification code has been sent to your email.');
     } catch (err) {
       setOtpError(apiErrorMessage(err, 'Failed to resend code. Please try again.'));
@@ -269,12 +273,16 @@ export const LoginPage = () => {
                       <button
                         type="button"
                         onClick={handleResendOtp}
-                        disabled={resending}
+                        disabled={resending || resendCooldown.isCoolingDown}
                         className="inline-flex items-center gap-1.5 font-medium text-foreground underline underline-offset-4 hover:text-primary disabled:opacity-50"
                       >
                         {resending ? (
                           <>
                             <Loader2 className="size-3 animate-spin" /> Sending…
+                          </>
+                        ) : resendCooldown.isCoolingDown ? (
+                          <>
+                            <RefreshCw className="size-3" /> Resend in {resendCooldown.remaining}s
                           </>
                         ) : (
                           <>
@@ -331,13 +339,22 @@ export const LoginPage = () => {
                         className="h-[50px] rounded-xl bg-background text-[15px]"
                         {...register('password')}
                       />
+                      <div className="flex items-center justify-between gap-3">
+                        {submitError ? (
+                          <p role="alert" className="text-[13px] text-destructive">
+                            {submitError}
+                          </p>
+                        ) : (
+                          <span />
+                        )}
+                        <Link
+                          to="/forgot-password"
+                          className="ml-auto shrink-0 text-[13px] font-medium text-muted-foreground underline underline-offset-4 hover:text-foreground"
+                        >
+                          Forgot password?
+                        </Link>
+                      </div>
                     </div>
-
-                    {submitError && (
-                      <p role="alert" className="text-[13px] text-destructive">
-                        {submitError}
-                      </p>
-                    )}
 
                     <Button
                       type="submit"

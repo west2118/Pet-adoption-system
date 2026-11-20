@@ -164,6 +164,18 @@ export const updateUserRole = async (id, role, shelterId = null) => {
   return rows[0] ?? null;
 };
 
+// Used by the self-service password reset flow (the OTP is checked first).
+export const updateUserPasswordHash = async (id, passwordHash) => {
+  const { rows } = await pool.query(
+    `UPDATE users
+        SET password_hash = $2, updated_at = CURRENT_TIMESTAMP
+      WHERE id = $1
+      RETURNING *`,
+    [id, passwordHash],
+  );
+  return rows[0] ?? null;
+};
+
 // Self-service profile edit: only name and avatar are user-editable.
 // Undefined fields keep their current value; null avatarUrl clears the photo.
 export const updateUserProfile = async (id, { name, avatarUrl } = {}) => {

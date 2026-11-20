@@ -7,6 +7,7 @@ import { AdoptionFormPage } from '@/pages/AdoptionFormPage';
 import { ApplicationsPage } from '@/pages/ApplicationsPage';
 import { BrowsePetsPage } from '@/pages/BrowsePetsPage';
 import { FavoritesPage } from '@/pages/FavoritesPage';
+import { ForgotPasswordPage } from '@/pages/ForgotPasswordPage';
 import { HomePage } from '@/pages/HomePage';
 import { LoginPage } from '@/pages/LoginPage';
 import { NotFoundPage } from '@/pages/NotFoundPage';
@@ -82,6 +83,15 @@ export const publicRoutes: RouteObject = {
             <>
               <Seo title="Log In" path="/login" noindex />
               <LoginPage />
+            </>
+          ),
+        },
+        {
+          path: 'forgot-password',
+          element: (
+            <>
+              <Seo title="Reset Password" path="/forgot-password" noindex />
+              <ForgotPasswordPage />
             </>
           ),
         },

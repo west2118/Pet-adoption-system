@@ -8,11 +8,13 @@ import {
   createUser,
   findUserByEmail,
   findUserById,
+  updateUserPasswordHash,
   updateUserProfile,
 } from '../repositories/userRepository.js';
 import { findApplicationByUserId } from '../repositories/shelterApplicationRepository.js';
 import {
   createLoginChallenge,
+  deleteLoginChallenge,
   findLoginChallengeById,
   markChallengeVerified,
   recordChallengeAttempt,
@@ -25,12 +27,27 @@ import {
   recordSignupVerificationAttempt,
 } from '../repositories/signupVerificationRepository.js';
 import {
+  createPasswordReset,
+  deletePasswordReset,
+  findPasswordResetById,
+  recordPasswordResetAttempt,
+} from '../repositories/passwordResetRepository.js';
+import {
   extractClientIp,
   isSuspiciousLocation,
   lookupIpLocation,
 } from '../utils/locationDetector.js';
-import { sendLoginOtpEmail, sendSignupOtpEmail } from './mailerService.js';
-import { issueSession, revokeSession, rotateSession } from './sessionService.js';
+import {
+  sendLoginOtpEmail,
+  sendPasswordResetEmail,
+  sendSignupOtpEmail,
+} from './mailerService.js';
+import {
+  issueSession,
+  revokeAllSessions,
+  revokeSession,
+  rotateSession,
+} from './sessionService.js';
 
 // Short-lived, limited token issued to a pending shelter registrant so they can
 // submit onboarding details and check status. It grants no portal access.
@@ -170,7 +187,16 @@ export const resendSignupOtp = async ({ verificationId }) => {
     name: record.name,
     code: otp,
   });
-  requireOtpDelivery(mailResult, otp);
+  try {
+    requireOtpDelivery(mailResult, otp);
+  } catch (error) {
+    // The new code never reached the inbox — keep the previous one usable.
+    await deleteSignupVerification(verification.id);
+    throw error;
+  }
+
+  // Only the code from the newest email stays valid.
+  await deleteSignupVerification(verificationId);
 
   return {
     verificationId: verification.id,
@@ -241,7 +267,10 @@ export const login = async (input, reqContext = {}) => {
       ? `${ipLocation.city}, ${ipLocation.country}`
       : ipLocation.city || ipLocation.country || 'Unknown location');
 
-  const suspicious = isSuspiciousLocation(row, ipLocation, clientLocation);
+  // Platform admins sign in directly; only adopters and shelter staff get the
+  // emailed code from an unrecognised location.
+  const suspicious =
+    row.role !== 'platform_admin' && isSuspiciousLocation(row, ipLocation, clientLocation);
 
   if (suspicious) {
     const otp = generateOtp();
@@ -382,12 +411,108 @@ export const resendLoginOtp = async ({ challengeId }) => {
     locationDisplay,
     ipAddress: challenge.ip_address,
   });
-  requireOtpDelivery(mailResult, otp);
+  try {
+    requireOtpDelivery(mailResult, otp);
+  } catch (error) {
+    // The new code never reached the inbox — keep the previous one usable.
+    await deleteLoginChallenge(newChallenge.id);
+    throw error;
+  }
+
+  // Only the code from the newest email stays valid.
+  await deleteLoginChallenge(challengeId);
 
   return {
     challengeId: newChallenge.id,
     message: 'A new 6-digit verification code has been sent to your email.',
   };
+};
+
+/**
+ * Starts a password reset. The response never reveals whether the email is
+ * registered: unknown or inactive accounts get the same generic answer, with
+ * no `resetId` to continue the flow.
+ */
+export const requestPasswordReset = async ({ email }) => {
+  const row = await findUserByEmail(email);
+  const inactive =
+    !row || row.account_status === 'rejected' || row.account_status === 'suspended';
+  if (inactive) {
+    return { sent: true, resetId: null };
+  }
+
+  const otp = generateOtp();
+  const reset = await createPasswordReset({
+    userId: row.id,
+    email: row.email,
+    otpHash: hashOtp(otp),
+    expiresAt: new Date(Date.now() + 10 * 60 * 1000), // 10 minutes
+  });
+
+  const mailResult = await sendPasswordResetEmail({
+    to: row.email,
+    name: row.name,
+    code: otp,
+  });
+  requireOtpDelivery(mailResult, otp);
+
+  return { sent: true, resetId: reset.id, email: row.email };
+};
+
+/**
+ * Loads a reset request and checks the presented code against it. The row is
+ * not consumed here so the code can be verified first and then used to set the
+ * new password.
+ */
+const requireValidResetCode = async ({ resetId, code }) => {
+  const record = await findPasswordResetById(resetId);
+  if (!record) {
+    throw new AppError('This reset code is no longer valid. Please request a new one.', 400);
+  }
+
+  if (new Date(record.expires_at) < new Date()) {
+    await deletePasswordReset(resetId);
+    throw new AppError('Your reset code has expired. Please request a new one.', 400);
+  }
+
+  if (record.attempts >= 5) {
+    throw new AppError('Too many incorrect attempts. Please request a new code.', 429);
+  }
+
+  if (record.otp_hash !== hashOtp(code || '')) {
+    await recordPasswordResetAttempt(resetId);
+    throw new AppError('Invalid 6-digit reset code.', 400);
+  }
+
+  return record;
+};
+
+/** Checks the emailed code so the UI can move on to the new-password step. */
+export const verifyPasswordResetCode = async ({ resetId, code }) => {
+  await requireValidResetCode({ resetId, code });
+  return { verified: true };
+};
+
+/**
+ * Completes a reset: the emailed code is checked against the hashed OTP, the
+ * new password is stored, and every existing session is revoked so a stolen
+ * session cannot survive the change.
+ */
+export const resetPassword = async ({ resetId, code, password }) => {
+  const record = await requireValidResetCode({ resetId, code });
+
+  const row = await findUserById(record.user_id);
+  if (!row) {
+    await deletePasswordReset(resetId);
+    throw new AppError('This reset code is no longer valid. Please request a new one.', 400);
+  }
+
+  const passwordHash = await bcrypt.hash(password, 10);
+  await updateUserPasswordHash(row.id, passwordHash);
+  await deletePasswordReset(resetId);
+  await revokeAllSessions(row.id);
+
+  return { reset: true };
 };
 
 export const refreshSession = async (presentedRefreshToken) =>
