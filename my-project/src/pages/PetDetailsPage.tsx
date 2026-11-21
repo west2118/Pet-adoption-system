@@ -228,7 +228,7 @@ export const PetDetailsPage = () => {
       <section className="border-t border-border bg-background py-20 md:py-28">
         <div className={frame}>
           <div className="grid gap-12 lg:grid-cols-12 lg:gap-16">
-            <Reveal className="lg:col-span-5">
+            <Reveal className="min-w-0 lg:col-span-5">
               {shelter ? (
                 <>
                   <span className="mb-6 inline-flex items-center gap-3 font-mono text-sm text-muted-foreground">
@@ -239,7 +239,7 @@ export const PetDetailsPage = () => {
                     <span className="block text-primary">{shelter.name}</span>
                     <span className="block text-primary/45">{shelter.location}</span>
                   </h2>
-                  <p className="mt-6 text-lg leading-relaxed text-muted-foreground">
+                  <p className="mt-6 text-lg leading-relaxed text-muted-foreground break-words [overflow-wrap:anywhere]">
                     {shelter.description}
                   </p>
 
@@ -261,7 +261,7 @@ export const PetDetailsPage = () => {
               )}
             </Reveal>
 
-            <Reveal delay={150} className="lg:col-span-7">
+            <Reveal delay={150} className="min-w-0 lg:col-span-7">
               <span className="mb-6 inline-flex items-center gap-3 font-mono text-sm text-muted-foreground">
                 <span className="h-px w-12 bg-[var(--brand)]" />
                 Ask the shelter

@@ -32,7 +32,7 @@ export const ShelterPlate = ({
             className="aspect-[4/5] w-full object-cover transition-transform duration-700 ease-out group-hover:scale-105"
           />
           <span className="absolute top-4 left-4 rounded-full bg-background/90 px-3 py-1.5 font-mono text-[11px] uppercase tracking-[0.18em] text-foreground backdrop-blur-sm">
-            {shelter.totalPets} pets
+            {shelter.totalPets} {shelter.totalPets === 1 ? 'pet' : 'pets'}
           </span>
         </div>
 
@@ -43,8 +43,10 @@ export const ShelterPlate = ({
             </h3>
           </div>
 
-          <p className="mt-2 text-sm leading-relaxed text-muted-foreground [overflow-wrap:anywhere]">
-            {shelter.description}
+          <p className="mt-2 text-sm leading-relaxed text-muted-foreground break-words [overflow-wrap:anywhere]">
+            {shelter.description?.length > 150
+              ? `${shelter.description.slice(0, 150)}...`
+              : shelter.description}
           </p>
 
           <ul className="mt-5 min-w-0 space-y-2 border-t border-border pt-5 text-sm text-muted-foreground [overflow-wrap:anywhere]">

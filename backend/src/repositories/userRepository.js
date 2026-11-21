@@ -145,6 +145,45 @@ export const updateShelterUser = async (
   return rows[0] ?? null;
 };
 
+export const deleteUserById = async (id) => {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    // 1. Get user details before deleting
+    const userRes = await client.query('SELECT id, email, role, shelter_id FROM users WHERE id = $1', [id]);
+    const user = userRes.rows[0];
+    if (!user) {
+      await client.query('ROLLBACK');
+      return null;
+    }
+
+    // 2. Clean up any pending signup verification records matching this email
+    // so the email can be immediately reused for registration without unique/pending conflicts
+    await client.query('DELETE FROM signup_verifications WHERE LOWER(email) = LOWER($1)', [user.email]);
+
+    // 3. Clean up any password resets
+    await client.query('DELETE FROM password_resets WHERE user_id = $1 OR LOWER(email) = LOWER($2)', [id, user.email]);
+
+    // 4. Clean up any shelter onboarding applications by this user or with this email
+    await client.query('DELETE FROM shelter_applications WHERE user_id = $1 OR LOWER(email) = LOWER($2)', [id, user.email]);
+
+    // 5. Clean up any adoption applications by this applicant
+    await client.query('DELETE FROM adoption_applications WHERE applicant_id = $1 OR LOWER(email) = LOWER($2)', [id, user.email]);
+
+    // 6. Delete the user (cascades to favorites, refresh_tokens, login_challenges, visit_threads)
+    const { rows } = await client.query('DELETE FROM users WHERE id = $1 RETURNING id, email, name', [id]);
+
+    await client.query('COMMIT');
+    return rows[0] ?? null;
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
+};
+
 export const deleteShelterUser = async (id, shelterId) => {
   const { rows } = await pool.query(
     `DELETE FROM users

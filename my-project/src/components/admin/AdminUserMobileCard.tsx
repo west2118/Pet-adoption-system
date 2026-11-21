@@ -1,4 +1,4 @@
-import { Eye, Pencil } from 'lucide-react';
+import { Eye, Pencil, Trash2 } from 'lucide-react';
 
 import { MobileRecordCard } from '@/components/shared';
 import { Button } from '@/components/ui/button';
@@ -11,6 +11,7 @@ export interface AdminUserMobileCardProps {
   shelterName: string;
   onView: (user: User) => void;
   onEdit: (user: User) => void;
+  onDelete?: (user: User) => void;
 }
 
 export const AdminUserMobileCard = ({
@@ -18,6 +19,7 @@ export const AdminUserMobileCard = ({
   shelterName,
   onView,
   onEdit,
+  onDelete,
 }: AdminUserMobileCardProps) => (
   <MobileRecordCard
     media={<UserAvatar name={user.name} size="xl" />}
@@ -45,6 +47,17 @@ export const AdminUserMobileCard = ({
         >
           <Pencil className="size-4" />
         </Button>
+        {onDelete && (
+          <Button
+            variant="ghost"
+            size="icon"
+            className="rounded-full text-destructive hover:bg-destructive/10"
+            aria-label={`Delete ${user.name}`}
+            onClick={() => onDelete(user)}
+          >
+            <Trash2 className="size-4" />
+          </Button>
+        )}
       </>
     }
   />

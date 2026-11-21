@@ -60,8 +60,8 @@ export const updateShelter = async (id, patch, actor) => {  const row = await fi
 };
 
 /**
- * Platform-admin removal. Pets cascade (ON DELETE CASCADE); assigned users
- * are detached (ON DELETE SET NULL) rather than deleted.
+ * Platform-admin removal. Deletes the shelter along with all connected data:
+ * pets, applications, inquiries, visits, waivers, and assigned shelter staff accounts.
  */
 export const deleteShelter = async (id) => {
   const row = await findShelterRowById(id);
