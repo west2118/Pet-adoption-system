@@ -46,7 +46,15 @@ export const updateUserRole = async (
   return user;
 };
 
+export const deleteUserByAdmin = async (id: string): Promise<void> => {
+  await apiRequest<void>(`/admin/users/${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+    auth: 'full',
+  });
+};
+
 export const userService = {
   listPaginated: listUsersPaginated,
   updateRole: updateUserRole,
+  deleteUser: deleteUserByAdmin,
 };

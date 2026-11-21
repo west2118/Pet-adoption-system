@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { changeRole, getAdminShelter, getAdminShelters, getAllPets, getStats, getUsers } from '../controllers/adminController.js';
+import { changeRole, deleteUser, getAdminShelter, getAdminShelters, getAllPets, getStats, getUsers } from '../controllers/adminController.js';
 import {
   approveApplication,
   getShelterApplications,
@@ -24,6 +24,11 @@ adminRoutes.patch(
   validate(uuidParam, 'params'),
   validate(updateUserRoleSchema),
   changeRole,
+);
+adminRoutes.delete(
+  '/users/:id',
+  validate(uuidParam, 'params'),
+  deleteUser,
 );
 adminRoutes.get('/pets', getAllPets);
 adminRoutes.get('/shelters', getAdminShelters);

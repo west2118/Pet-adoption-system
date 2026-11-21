@@ -1,4 +1,4 @@
-import { getSystemStats, getShelterForAdmin, listAllPets, listAllUsers, listSheltersForAdmin, setUserRole } from '../services/adminService.js';
+import { deleteUserByAdmin, getSystemStats, getShelterForAdmin, listAllPets, listAllUsers, listSheltersForAdmin, setUserRole } from '../services/adminService.js';
 import { sendSuccess, buildMeta } from '../utils/respond.js';
 import { parsePagination } from '../validators/commonValidator.js';
 
@@ -22,6 +22,11 @@ export const changeRole = async (req, res) => {
     req.body.shelterId ?? null,
   );
   return sendSuccess(res, { user }, 'User role updated successfully.');
+};
+
+export const deleteUser = async (req, res) => {
+  await deleteUserByAdmin(req.params.id, req.user.id);
+  return sendSuccess(res, null, 'User deleted successfully.');
 };
 
 export const getAllPets = async (req, res) => {

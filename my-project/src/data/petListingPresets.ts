@@ -25,9 +25,6 @@ export const SPECIES_FILTER_OPTIONS = [
   { value: 'all', label: 'All species' },
   { value: 'dog', label: 'Dog' },
   { value: 'cat', label: 'Cat' },
-  { value: 'rabbit', label: 'Rabbit' },
-  { value: 'bird', label: 'Bird' },
-  { value: 'other', label: 'Other' },
 ];
 
 export const STATUS_FILTER_OPTIONS = [
@@ -41,9 +38,6 @@ export const STATUS_FILTER_OPTIONS = [
 export const SPECIES_OPTIONS = [
   { value: 'dog', label: 'Dog' },
   { value: 'cat', label: 'Cat' },
-  { value: 'rabbit', label: 'Rabbit' },
-  { value: 'bird', label: 'Bird' },
-  { value: 'other', label: 'Other' },
 ];
 
 export const SIZE_OPTIONS = [

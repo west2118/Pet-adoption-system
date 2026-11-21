@@ -40,9 +40,6 @@ export const SPECIES_OPTIONS: PetFilterOption[] = [
   { value: ALL_FILTERS, label: 'All' },
   { value: 'dog', label: 'Dogs' },
   { value: 'cat', label: 'Cats' },
-  { value: 'rabbit', label: 'Rabbits' },
-  { value: 'bird', label: 'Birds' },
-  { value: 'other', label: 'Other' },
 ];
 
 export const PET_FILTER_FIELDS: PetFilterField[] = [

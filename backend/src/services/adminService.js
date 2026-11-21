@@ -8,6 +8,7 @@ import {
   listSheltersWithCounts as fetchSheltersWithCounts,
 } from '../repositories/adminRepository.js';
 import {
+  deleteUserById,
   findUserById,
   listUsers,
   updateUserRole as persistUserRole,
@@ -66,6 +67,18 @@ export const setUserRole = async (id, role, shelterId) => {
   }
   const row = await persistUserRole(id, role, role === 'shelter_staff' ? shelterId : null);
   return mapUser(row);
+};
+
+export const deleteUserByAdmin = async (id, actorId) => {
+  if (id === actorId) {
+    throw new AppError('You cannot delete your own admin account.', 400);
+  }
+  const existing = await findUserById(id);
+  if (!existing) {
+    throw new AppError('User not found.', 404);
+  }
+  const deleted = await deleteUserById(id);
+  return deleted;
 };
 
 export const listAllPets = async (pagination) => {

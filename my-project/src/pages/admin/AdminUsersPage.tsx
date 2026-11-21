@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { Eye, Pencil, Users } from 'lucide-react';
+import { Eye, Pencil, Trash2, Users } from 'lucide-react';
 import { useState } from 'react';
 import type { FormEvent } from 'react';
 import {
@@ -9,6 +9,7 @@ import {
   UserRoleBadge,
 } from '@/components/admin';
 import {
+  ConfirmDeleteModal,
   DebouncedSearchInput,
   RefreshButton,
   RecordCardSkeleton,
@@ -48,6 +49,7 @@ export const AdminUsersPage = () => {
   const [userSlideOpen, setUserSlideOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<User | null>(null);
   const [detailsUser, setDetailsUser] = useState<User | null>(null);
+  const [pendingDeleteUser, setPendingDeleteUser] = useState<User | null>(null);
   const [userForm, setUserForm] = useState<AdminUserFormValues>({
     role: 'adopter',
     shelterId: '',
@@ -90,8 +92,13 @@ export const AdminUsersPage = () => {
     setFormErrors({});
   };
 
-  const { updateRoleMutation, isUpdating } = useAdminUserMutations({
+  const handleUserDeleted = () => {
+    setPendingDeleteUser(null);
+  };
+
+  const { updateRoleMutation, deleteUserMutation, isUpdating, isDeleting } = useAdminUserMutations({
     onUpdated: handleUserSaved,
+    onDeleted: handleUserDeleted,
   });
 
   const handleOpenEdit = (user: User) => {
@@ -226,6 +233,15 @@ export const AdminUsersPage = () => {
                           >
                             <Pencil className="size-4" />
                           </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon-sm"
+                            className="text-muted-foreground hover:text-destructive"
+                            aria-label={`Delete ${u.name}`}
+                            onClick={() => setPendingDeleteUser(u)}
+                          >
+                            <Trash2 className="size-4" />
+                          </Button>
                         </div>
                       </TableCell>
                     </TableRow>
@@ -247,6 +263,7 @@ export const AdminUsersPage = () => {
                   shelterName={u.shelterId ? shelterName(u.shelterId) : 'None'}
                   onView={setDetailsUser}
                   onEdit={handleOpenEdit}
+                  onDelete={setPendingDeleteUser}
                 />
               ))
             )}
@@ -288,6 +305,26 @@ export const AdminUsersPage = () => {
           setDetailsUser(null);
           handleOpenEdit(u);
         }}
+      />
+
+      <ConfirmDeleteModal
+        open={pendingDeleteUser !== null}
+        onClose={() => setPendingDeleteUser(null)}
+        onConfirm={() => {
+          if (!pendingDeleteUser) return;
+          deleteUserMutation.mutate({
+            userId: pendingDeleteUser.id,
+            userName: pendingDeleteUser.name,
+          });
+        }}
+        title={`Delete account for ${pendingDeleteUser?.name ?? 'user'}?`}
+        description={
+          pendingDeleteUser
+            ? `This permanently removes ${pendingDeleteUser.name} (${pendingDeleteUser.email}) and all connected sessions, applications, and verification locks. The email address will become available for new registrations immediately.`
+            : ''
+        }
+        confirmLabel="Delete user"
+        isDeleting={isDeleting}
       />
     </div>
   );

@@ -43,8 +43,10 @@ export const ShelterCard = ({
             </div>
           </div>
 
-          <p className="mt-3 text-sm text-muted-foreground [overflow-wrap:anywhere]">
-            {shelter.description}
+          <p className="mt-3 text-sm text-muted-foreground break-words [overflow-wrap:anywhere]">
+            {shelter.description?.length > 150
+              ? `${shelter.description.slice(0, 150)}...`
+              : shelter.description}
           </p>
 
           <ul className="mt-4 space-y-1.5 text-sm text-muted-foreground [overflow-wrap:anywhere]">
